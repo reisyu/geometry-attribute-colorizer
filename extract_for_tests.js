@@ -30,6 +30,9 @@ const FUNCS = [
   "symmetricAngleColor",
   "csvEscape",
   "categoryColorByIndex",
+  "solveFitDistance",
+  "solveFitOrtho",
+  "flipTriangleWinding",
 ];
 
 // 抽出対象の定数

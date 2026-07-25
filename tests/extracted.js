@@ -364,4 +364,47 @@ function categoryColorByIndex(i) {
   return hsvToRgb(hue, alt ? 0.80 : 0.55, alt ? 0.92 : 0.75);
 }
 
-module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex };
+function solveFitDistance(pts, tanH, tanV, radius) {
+  function feasible(d) {
+    let loU = -Infinity, hiU = Infinity, loV = -Infinity, hiV = Infinity;
+    for (const p of pts) {
+      const z = d + p.f;
+      if (z <= 1e-9) return null;  // 頂点がカメラの後ろに来る距離は不可
+      loU = Math.max(loU, p.u - z * tanH); hiU = Math.min(hiU, p.u + z * tanH);
+      loV = Math.max(loV, p.v - z * tanV); hiV = Math.min(hiV, p.v + z * tanV);
+    }
+    if (loU > hiU || loV > hiV) return null;
+    return { su: (loU + hiU) / 2, sv: (loV + hiV) / 2 };  // 区間中央=余白が対称
+  }
+  // 二分探索(上限は外接球フィットの距離。必ず実行可能)
+  let lo = 1e-4;
+  let hi = radius / Math.sin(Math.atan(Math.min(tanV, tanH))) + radius;
+  for (let it = 0; it < 60; it++) {
+    const mid = (lo + hi) / 2;
+    if (feasible(mid)) hi = mid; else lo = mid;
+  }
+  const s = feasible(hi);
+  return { distance: hi, su: s.su, sv: s.sv };
+}
+
+function solveFitOrtho(minU, maxU, minV, maxV, aspect, margin = 0.05) {
+  const halfW = (maxU - minU) / 2 / (1 - 2 * margin);
+  const halfH = (maxV - minV) / 2 / (1 - 2 * margin);
+  return {
+    halfHeight: Math.max(halfH, halfW / aspect, 1e-6),
+    cu: (minU + maxU) / 2,
+    cv: (minV + maxV) / 2,
+  };
+}
+
+function flipTriangleWinding(srcArr) {
+  const out = new srcArr.constructor(srcArr.length);
+  for (let t = 0; t < srcArr.length; t += 3) {
+    out[t] = srcArr[t];
+    out[t + 1] = srcArr[t + 2];
+    out[t + 2] = srcArr[t + 1];
+  }
+  return out;
+}
+
+module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding };

@@ -4,13 +4,25 @@
  *
  * 使い方:  node tests/run_all.js
  *
- * 注意: index.html の計算ロジックを変更した場合は、先に
- *   node extract_for_tests.js
- * を実行して extracted.js を更新すること。
+ * 冒頭で extract_for_tests.js を必ず実行し、index.html から
+ * テスト対象の関数を抽出し直してから走らせる。
+ * 以前は再生成を手動に任せていたため、index.html を壊しても
+ * 古い extracted.js に対してテストが全て成功してしまう状態だった
+ * (normalizeId を常に "BROKEN" を返すよう改変しても94件全て成功した)。
+ * 自動化は必ず維持すること。
  */
 "use strict";
 const { execFileSync } = require("child_process");
 const path = require("path");
+
+// --- テスト対象を index.html から抽出し直す(古いコードを検証しないため) ---
+try {
+  execFileSync("node", [path.join(__dirname, "..", "extract_for_tests.js")], { encoding: "utf8" });
+} catch (e) {
+  console.error("extracted.js の生成に失敗しました。index.html を確認してください。");
+  console.error((e.stdout || "") + (e.stderr || ""));
+  process.exit(1);
+}
 
 const TESTS = [
   ["test_suite.js", "幾何計算・色計算"],

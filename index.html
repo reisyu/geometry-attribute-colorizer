@@ -1208,7 +1208,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.2.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.2.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1474,14 +1474,54 @@ function loadGLBFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
+/* 透視投影フィットの純粋部分(THREE・DOM非依存)。
+   カメラ基底に投影済みの頂点成分 pts=[{u,v,f},...] から、全頂点が画角に収まる
+   最小距離と、余白を左右上下対称にする画面内の平行移動量(su, sv)を求める。
+   距離dを二分探索し、各dで「全頂点を収める平行移動が存在するか」
+   (=実行可能区間が空でないか)を判定する。
+   幾何計算の本体をここに集約してあるため、tests/test_fitview.js が
+   この実装そのものを検証できる(テスト側に写しを置くと乖離に気づけない) */
+function solveFitDistance(pts, tanH, tanV, radius) {
+  function feasible(d) {
+    let loU = -Infinity, hiU = Infinity, loV = -Infinity, hiV = Infinity;
+    for (const p of pts) {
+      const z = d + p.f;
+      if (z <= 1e-9) return null;  // 頂点がカメラの後ろに来る距離は不可
+      loU = Math.max(loU, p.u - z * tanH); hiU = Math.min(hiU, p.u + z * tanH);
+      loV = Math.max(loV, p.v - z * tanV); hiV = Math.min(hiV, p.v + z * tanV);
+    }
+    if (loU > hiU || loV > hiV) return null;
+    return { su: (loU + hiU) / 2, sv: (loV + hiV) / 2 };  // 区間中央=余白が対称
+  }
+  // 二分探索(上限は外接球フィットの距離。必ず実行可能)
+  let lo = 1e-4;
+  let hi = radius / Math.sin(Math.atan(Math.min(tanV, tanH))) + radius;
+  for (let it = 0; it < 60; it++) {
+    const mid = (lo + hi) / 2;
+    if (feasible(mid)) hi = mid; else lo = mid;
+  }
+  const s = feasible(hi);
+  return { distance: hi, su: s.su, sv: s.sv };
+}
+
+/* 平行投影フィットの純粋部分。パースがないため頂点の投影(u,v)は距離に依存せず、
+   u/v範囲を余白付きでフラスタムに収める高さ(縦半分)と、その中心を返すだけでよい */
+function solveFitOrtho(minU, maxU, minV, maxV, aspect, margin = 0.05) {
+  const halfW = (maxU - minU) / 2 / (1 - 2 * margin);
+  const halfH = (maxV - minV) / 2 / (1 - 2 * margin);
+  return {
+    halfHeight: Math.max(halfH, halfW / aspect, 1e-6),
+    cu: (minU + maxU) / 2,
+    cv: (minV + maxV) / 2,
+  };
+}
+
 /* 全体表示のフィット計算(リセンタリング付き)。
    現在の視線方向でバウンディングボックスが余白5%で収まるように、
    カメラ距離に加えて「画面内方向の平行移動量」も求める。
    透視投影では斜め視点で占有範囲が視線軸に対して非対称になるため、
    距離を詰めるだけでは奥側に大きな余白が残る。平行移動で余白を
-   左右・上下均等に再配分する(Blender等のCAD系ビューワーと同じ考え方)。
-   実装: 距離dを二分探索し、各dで「全8頂点を収める平行移動が存在するか」
-   (=実行可能区間が空でないか)を判定する */
+   左右・上下均等に再配分する(Blender等のCAD系ビューワーと同じ考え方) */
 function fitView(box, forward, margin = 0.05) {
   const center = box.getCenter(new THREE.Vector3());
   const worldUp = new THREE.Vector3(0, 1, 0);
@@ -1504,29 +1544,9 @@ function fitView(box, forward, margin = 0.05) {
     rad = Math.max(rad, c.length());
   }
 
-  // 距離dで全頂点を収める平行移動(su, sv)の実行可能区間を求める
-  function feasible(d) {
-    let loU = -Infinity, hiU = Infinity, loV = -Infinity, hiV = Infinity;
-    for (const p of pts) {
-      const z = d + p.f;
-      if (z <= 1e-9) return null;  // 頂点がカメラの後ろに来る距離は不可
-      loU = Math.max(loU, p.u - z * tanH); hiU = Math.min(hiU, p.u + z * tanH);
-      loV = Math.max(loV, p.v - z * tanV); hiV = Math.min(hiV, p.v + z * tanV);
-    }
-    if (loU > hiU || loV > hiV) return null;
-    return { su: (loU + hiU) / 2, sv: (loV + hiV) / 2 };  // 区間中央=余白が対称
-  }
-
-  // 二分探索(上限は外接球フィットの距離。必ず実行可能)
-  let lo = 1e-4;
-  let hi = rad / Math.sin(Math.atan(Math.min(tanV, tanH))) + rad;
-  for (let it = 0; it < 60; it++) {
-    const mid = (lo + hi) / 2;
-    if (feasible(mid)) hi = mid; else lo = mid;
-  }
-  const s = feasible(hi);
+  const s = solveFitDistance(pts, tanH, tanV, rad);
   const target = center.clone().addScaledVector(right, s.su).addScaledVector(camUp, s.sv);
-  return { distance: hi, target };
+  return { distance: s.distance, target };
 }
 
 /* fitViewの平行投影版。パースがないため頂点の投影(u, v)は距離に依存せず、
@@ -1549,13 +1569,11 @@ function fitViewOrtho(box, forward, margin = 0.05) {
     minV = Math.min(minV, v); maxV = Math.max(maxV, v);
   }
   const aspect = (wrap.clientWidth / wrap.clientHeight) || 1;
-  const halfW = (maxU - minU) / 2 / (1 - 2 * margin);
-  const halfH = (maxV - minV) / 2 / (1 - 2 * margin);
-  const halfHeight = Math.max(halfH, halfW / aspect, 1e-6);
+  const s = solveFitOrtho(minU, maxU, minV, maxV, aspect, margin);
   const target = center.clone()
-    .addScaledVector(right, (minU + maxU) / 2)
-    .addScaledVector(camUp, (minV + maxV) / 2);
-  return { target, halfHeight };
+    .addScaledVector(right, s.cu)
+    .addScaledVector(camUp, s.cv);
+  return { target, halfHeight: s.halfHeight };
 }
 
 /* 現在アクティブなカメラの種別に応じて、指定した視線方向でboxをフィットする。
@@ -2099,6 +2117,19 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
+/* 三角形の巻き順を反転する (a,b,c) -> (a,c,b)。法線の向きを揃えるために使う。
+   THREE非依存の純粋関数として切り出してあり、tests/test_winding.js が
+   この実装そのものを検証する(テスト側に写しを置くと実装との乖離に気づけないため) */
+function flipTriangleWinding(srcArr) {
+  const out = new srcArr.constructor(srcArr.length);
+  for (let t = 0; t < srcArr.length; t += 3) {
+    out[t] = srcArr[t];
+    out[t + 1] = srcArr[t + 2];
+    out[t + 2] = srcArr[t + 1];
+  }
+  return out;
+}
+
 /* ---- ID付きGLBエクスポート ----
    表示中の全メッシュを、ノード名(=ID)を保持したGLB(glTF 2.0バイナリ)として書き出す。
    外部ライブラリを使わず、position/indexとノード名だけの最小構成のGLBを自前で組み立てる。 */
@@ -2188,15 +2219,8 @@ function exportGLB() {
     let index = geom.getIndex();
     if (index) {
       let srcArr = index.array;
-      if (flipSet.has(mesh.uuid)) {
-        // 三角形の巻き順を反転して法線の向きを揃える (a,b,c) -> (a,c,b)
-        srcArr = new srcArr.constructor(srcArr.length);
-        for (let t = 0; t < srcArr.length; t += 3) {
-          srcArr[t] = index.array[t];
-          srcArr[t + 1] = index.array[t + 2];
-          srcArr[t + 2] = index.array[t + 1];
-        }
-      }
+      // 巻き順を反転して法線の向きを壁全体で揃える
+      if (flipSet.has(mesh.uuid)) srcArr = flipTriangleWinding(srcArr);
       const arr = index.count > 65535 ? new Uint32Array(srcArr) : new Uint16Array(srcArr);
       const compType = index.count > 65535 ? 5125 : 5123;
       const idxView = pushBufferView(arr, 34963);
@@ -3771,7 +3795,17 @@ let highlightObj = null;
 /* モデルを破棄してGPUメモリを解放する。
    scene.remove()だけではジオメトリ・マテリアルがGPUに残り続け、
    再読み込みのたびにメモリが積み上がる(1万メッシュ規模では致命的) */
+/* 現在のモデルを手放す。GPUリソースの解放に加えて、モデル固有の状態も戻す。
+   全ての読み込み経路(GLB/DXF/サンプル)がここを通るため、状態リセットを
+   各読み込み関数に散らさずに済む(将来経路が増えても漏れない)。
+   早期リターンより前にリセットするのは、モデルが無い状態でも
+   「色分け済み」フラグが残らないようにするため */
 function disposeModel() {
+  // 新しいモデルは未着色。実行ボタンを「色分けを実行」(塗りつぶし)に戻す
+  hasApplied = false;
+  updateApplyBtnProminence();
+  clearTimeout(reapplyTimer);
+
   if (!modelRoot) return;
   modelRoot.traverse((obj) => {
     if (obj.isMesh) {
