@@ -52,7 +52,7 @@
     font-size: 13px;
   }
   #sidebar h1 {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: 0.04em;
     margin-bottom: 2px;
@@ -82,12 +82,15 @@
     padding: 12px;
     margin-bottom: 12px;
   }
+  /* 開閉ヘッダーはタッチでも押しやすいよう、文字高14pxに上下paddingを足して
+     当たり判定を26pxまで広げる(margin-bottomを減らして見た目の余白は据え置き) */
   .step-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--accent);
     letter-spacing: 0.08em;
-    margin-bottom: 10px;
+    padding: 6px 0;
+    margin-bottom: 4px;
     cursor: pointer;
     user-select: none;
     display: flex;
@@ -117,34 +120,52 @@
   .step.collapsed > *:not(.step-label) { display: none !important; }
   .row { margin-bottom: 10px; }
   .row:last-child { margin-bottom: 0; }
+  /* ステップ見出し(12px太字)>サブ見出し(11px太字)>ラベル(11px標準)の順に
+     主張が弱くなる。サブ見出しはラベルと同サイズだが、太字+アクセント色で上位を示す */
   .sub-header {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--accent);
     letter-spacing: 0.05em;
     margin: 14px 0 6px;
   }
   .sub-header:first-child { margin-top: 0; }
+
+  /* 補足文の2種。セクション冒頭の説明(.section-note)と、
+     直前のコントロールに対する補足(.hint)を書き分ける */
+  .section-note, .hint {
+    font-size: 11px;
+    color: var(--ink-dim);
+    line-height: 1.5;
+  }
+  .row.hint { margin-top: -4px; }   /* 直前のコントロールに視覚的に紐づける */
+  #attr-description { margin-top: 4px; }
   details.adv {
     margin: 10px 0;
     border-top: 1px solid var(--panel-edge);
     padding-top: 10px;
   }
+  /* 開閉の見た目はステップ見出しと揃える(矢印は右端・閉じると-90度回転)。
+     同じ「開閉」操作が別物に見えると、詳細設定が開けることに気づきにくいため */
   details.adv summary {
     cursor: pointer;
     font-size: 11px;
     color: var(--ink-dim);
     list-style: none;
     user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
   }
   details.adv summary::-webkit-details-marker { display: none; }
-  details.adv summary::before {
-    content: "▸";
-    display: inline-block;
-    width: 1em;
+  details.adv summary::after {
+    content: "▾";
+    color: var(--ink-dim);
+    font-size: 10px;
     transition: transform .15s;
   }
-  details.adv[open] summary::before { transform: rotate(90deg); }
+  details.adv:not([open]) summary::after { transform: rotate(-90deg); }
   details.adv summary:hover { color: var(--ink); }
   details.adv > .row:first-of-type { margin-top: 10px; }
   label.small {
@@ -167,6 +188,8 @@
     outline: 2px solid var(--accent-dim);
     outline-offset: 1px;
   }
+  /* テキスト入力欄(実線・左寄せ)と見分けやすいよう、破線の枠に加えて
+     アイコンを付ける(::beforeなのでJSのtextContent書き換えの影響を受けない) */
   .filebtn {
     display: block;
     width: 100%;
@@ -181,8 +204,16 @@
     font-size: 12px;
     word-break: break-all;
   }
+  .filebtn::before {
+    content: "⬆";
+    display: inline-block;
+    margin-right: 5px;
+    color: var(--ink-dim);
+  }
   .filebtn:hover { border-color: var(--accent); color: var(--ink); }
+  .filebtn:hover::before { color: var(--accent); }
   .filebtn.loaded { border-style: solid; border-color: var(--accent-dim); color: var(--ink); }
+  .filebtn.loaded::before { content: "✓"; color: var(--accent-dim); }
   input[type="file"] { display: none; }
 
   button.action {
@@ -221,10 +252,12 @@
   }
   button.ghost:active:not(:disabled) { background: rgba(127, 138, 150, 0.24); }
   button.ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* 実行ボタンは行の先頭。action⇄ghostで見た目が変わっても位置がずれないようにする */
+  #apply-btn { margin-top: 0; }
 
-  .color-row { display: flex; gap: 8px; align-items: center; }
+  .color-row { display: flex; gap: 8px; align-items: flex-start; }
   .color-row input[type="color"] {
-    flex: 1;
+    width: 100%;
     height: 30px;
     border: 1px solid var(--panel-edge);
     border-radius: 4px;
@@ -232,6 +265,25 @@
     padding: 2px;
     cursor: pointer;
   }
+  /* 色見本は何の色かをホバーのtitleに頼らず文字で示す
+     (タッチ環境ではホバーが存在せず、titleが一切読めないため) */
+  .swatch {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .swatch span {
+    font-size: 11px;
+    color: var(--ink-dim);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* 行全体がラベル=クリック可能。上下paddingで当たり判定を24px確保する */
   .checkbox-row {
     display: flex;
     align-items: center;
@@ -240,12 +292,18 @@
     color: var(--ink-dim);
     cursor: pointer;
     user-select: none;
+    padding: 4px 0;
   }
-  .checkbox-row input { accent-color: var(--accent); }
+  .checkbox-row input {
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    flex: none;
+  }
   .check-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
     background: var(--bg);
     border: 1px solid var(--panel-edge);
     border-radius: 4px;
@@ -276,10 +334,12 @@
 
   /* ステータスは「通知」のイディオム(左のアクセントバー)で、
      ボタンの「押せる面」と視覚的な文法を分ける */
+  /* アプリの主要なフィードバック手段なので、補足文(11px)より一段上の12pxにする。
+     等幅は日本語で別フォントにフォールバックし字面が乱れるため、本文と同じsansを使う */
   #status {
-    font-size: 11px;
-    font-family: var(--mono);
-    color: var(--ink-dim);
+    font-size: 12px;
+    font-family: var(--sans);
+    color: var(--ink);
     line-height: 1.6;
     padding: 10px 12px;
     background: var(--bg);
@@ -357,6 +417,39 @@
   }
   #view-toolbar button:hover { color: var(--ink); border-color: var(--accent-dim); }
   body.light #view-toolbar button { background: rgba(255, 255, 255, 0.88); }
+
+  /* 右下: 軸ギズモ(常時表示)+投影方式キャプション(平行投影のときだけ文字が見える)。
+     キャプションはvisibility切り替え(display切り替えではない)で常にスペースを確保し、
+     表示/非表示でギズモの位置がずれないようにする。ボタンと誤認されないよう、
+     枠線・背景のピル形状は使わず、ただの文字ラベルにする */
+  #viewport-gizmo {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  #axis-gizmo {
+    width: 64px;
+    height: 64px;
+    background: rgba(33, 36, 42, 0.7);
+    border: 1px solid var(--panel-edge);
+    border-radius: 50%;
+  }
+  body.light #axis-gizmo { background: rgba(255, 255, 255, 0.75); }
+  #proj-indicator {
+    visibility: hidden;
+    font-size: 10px;
+    color: var(--ink-dim);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+  }
+  #proj-indicator.active { visibility: visible; }
+  body.light #proj-indicator { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
 
   /* ---------- プログレス表示 ---------- */
   #progress-overlay {
@@ -527,19 +620,26 @@
   <!-- STEP 1: モデル -->
   <div class="step">
     <div class="step-label">1. モデルを読み込む</div>
+
+    <div class="sub-header">メインモデル</div>
     <div class="row">
       <label class="filebtn" id="glb-btn" for="glb-input">クリックして .glb / .dxf を選択<br>(ビューポートへのドロップも可)</label>
       <input type="file" id="glb-input">
     </div>
-    <div class="row" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
+    <div class="row hint">
       DXF(閉じた3Dポリライン)は、幅・高さ・面積・矩形充填率・傾斜角・矩形回転角を自動計算します
     </div>
     <div class="row">
-      <label class="small" for="dataset-name">データ名(書き出すCSVのDataset列に入ります)</label>
+      <label class="small" for="dataset-name">データ名</label>
       <input type="text" id="dataset-name" placeholder="例: 本丸東面_2026調査">
     </div>
+    <div class="row hint">
+      書き出すCSVのDataset列に入ります
+    </div>
+
+    <div class="sub-header">背景モデル(任意)</div>
     <div class="row">
-      <label class="filebtn" id="obj-btn" for="obj-input">フォトグラメトリモデル(背景)を重ねる<br>(.obj / .mtl / テクスチャ画像をまとめて選択)</label>
+      <label class="filebtn" id="obj-btn" for="obj-input">フォトグラメトリモデルを重ねる<br>(.obj / .mtl / テクスチャ画像をまとめて選択)</label>
       <input type="file" id="obj-input" multiple>
       <label class="filebtn" id="obj-folder-btn" for="obj-folder-input" style="margin-top:6px">またはフォルダごと選択<br>(OBJ/MTL/テクスチャを自動収集)</label>
       <input type="file" id="obj-folder-input" webkitdirectory multiple>
@@ -560,8 +660,8 @@
 
   <!-- STEP 2: 属性データ -->
   <div class="step">
-    <div class="step-label">2. 属性データを読み込む</div>
-    <div class="row" id="attr-source-state" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
+    <div class="step-label">2. 属性データを読み込む(任意)</div>
+    <div class="row section-note" id="attr-source-state">
       DXFを読み込んだ場合は自動計算されるため、CSVの読み込みは不要です
     </div>
     <div class="row">
@@ -588,7 +688,7 @@
     <div class="row">
       <label class="small" for="attribute">色分けする属性</label>
       <select id="attribute" disabled><option>(属性データを読み込んでください)</option></select>
-      <div id="attr-description" style="font-size:11px;color:var(--ink-dim);margin-top:4px;line-height:1.5"></div>
+      <div id="attr-description" class="hint"></div>
     </div>
 
     <div class="sub-header">配色</div>
@@ -607,9 +707,9 @@
     </div>
     <div class="row" id="custom-colors" style="display:none">
       <div class="color-row">
-        <input type="color" id="color-low" value="#e61a1a" title="開始色(最小値)">
-        <input type="color" id="color-mid" value="#ffffff" title="中間色" style="display:none">
-        <input type="color" id="color-high" value="#1a4ce6" title="終了色(最大値)">
+        <label class="swatch"><input type="color" id="color-low" value="#e61a1a"><span>最小値</span></label>
+        <label class="swatch" id="swatch-mid" style="display:none"><input type="color" id="color-mid" value="#ffffff"><span>中間</span></label>
+        <label class="swatch"><input type="color" id="color-high" value="#1a4ce6"><span>最大値</span></label>
       </div>
       <div style="margin-top:8px">
         <label class="checkbox-row"><input type="checkbox" id="use-mid"> 中間色を使う</label>
@@ -647,18 +747,18 @@
 
   <!-- STEP 4: 傾きライン -->
   <div class="step">
-    <div class="step-label">4. 傾きラインを描画する</div>
-    <div class="row" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
+    <div class="step-label">4. 傾きラインを描画する(任意)</div>
+    <div class="row section-note">
       各オブジェクトの外接矩形の水平軸に沿った中心線を、矩形回転角に応じた色で描画します。線が水平に揃っていれば整った積み方、乱れていればランダムな積み方だと読み取れます
     </div>
     <div class="row">
       <label class="checkbox-row"><input type="checkbox" id="show-rect-lines"> 傾きラインを表示</label>
     </div>
     <div class="row">
-      <label class="small">線の色(0° / ±45°)</label>
+      <label class="small">線の色</label>
       <div class="color-row">
-        <input type="color" id="line-color-center" value="#2456e6" title="中央色(回転角0° = 水平)">
-        <input type="color" id="line-color-edge" value="#e62222" title="両端色(回転角±45°)">
+        <label class="swatch"><input type="color" id="line-color-center" value="#2456e6"><span>0°(水平)</span></label>
+        <label class="swatch"><input type="color" id="line-color-edge" value="#e62222"><span>±45°</span></label>
       </div>
     </div>
     <div class="row">
@@ -669,7 +769,7 @@
 
   <!-- STEP 5: フィルタ -->
   <div class="step">
-    <div class="step-label">5. フィルタで絞り込む</div>
+    <div class="step-label">5. フィルタで絞り込む(任意)</div>
     <div class="row">
       <label class="checkbox-row"><input type="checkbox" id="filter-enable"> フィルタを有効にする</label>
     </div>
@@ -689,13 +789,13 @@
           <option value="hide">完全に非表示</option>
         </select>
       </div>
-      <div class="row" id="filter-result" style="font-size:11px;color:var(--ink-dim)"></div>
+      <div class="row hint" id="filter-result"></div>
     </div>
   </div>
 
   <!-- STEP 5: ラベル -->
   <div class="step">
-    <div class="step-label">6. ラベルを表示する</div>
+    <div class="step-label">6. ラベルを表示する(任意)</div>
     <div class="row">
       <label class="checkbox-row"><input type="checkbox" id="show-labels"> オブジェクトの位置に属性を表示</label>
     </div>
@@ -731,7 +831,7 @@
     <div class="row">
       <button class="ghost" id="export-glb-btn" disabled style="margin-top:0">ID付きGLBで保存</button>
     </div>
-    <div class="row" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
+    <div class="row hint">
       オブジェクト名(ID)を保持したまま書き出されます。Blender等で再利用できます
     </div>
 
@@ -739,14 +839,14 @@
     <div class="row">
       <button class="ghost" id="export-svg-btn" disabled style="margin-top:0">立面図をSVGで保存</button>
     </div>
-    <div class="row" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
+    <div class="row hint">
       モデルの正面から見た平行投影です。実寸のスケールバーを入れられます
     </div>
     <div class="row">
       <button class="ghost" id="export-current-view-svg-btn" disabled style="margin-top:0">現在のビューをSVGで保存</button>
     </div>
-    <div class="row" style="font-size:11px;color:var(--ink-dim);line-height:1.5">
-      画面に見えている通りの遠近感(パースあり)で書き出します。スケールバーは非対応です
+    <div class="row hint">
+      画面に見えている通りに書き出します(透視投影ならパースあり、平行投影ならパースなし)。スケールバーは非対応です
     </div>
 
     <details class="adv">
@@ -773,8 +873,15 @@
   <div id="sample-badge">サンプルデータを表示中</div>
   <div id="view-toolbar">
     <button id="view-front" title="モデルの正面(立面図SVGと同じ向き)から見る">正面</button>
+    <button id="view-top" title="モデルの真上から見る">上面</button>
     <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
+    <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
     <button id="theme-toggle" title="背景色の切り替え">☀ ライト</button>
+  </div>
+
+  <div id="viewport-gizmo">
+    <svg id="axis-gizmo" viewBox="-32 -32 64 64"></svg>
+    <div id="proj-indicator">平行投影</div>
   </div>
 
   <div id="progress-overlay">
@@ -816,8 +923,14 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x17191d);
 
-const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e7);
-camera.position.set(5, 5, 5);
+/* 透視投影・平行投影の2台のカメラを用意し、`camera`が現在アクティブな方を指す。
+   `camera`をletにしているのは、レイキャスト・投影・リサイズなど大半のコードが
+   カメラ種別を意識せず`camera.xxx`と書けるようにするため(型を切り替えるだけで済む) */
+const perspCamera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e7);
+perspCamera.position.set(5, 5, 5);
+const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1e7);
+let orthoHalfHeight = 5;  // 平行投影の可視範囲(縦の半分の実寸)。resize時の再計算に使う
+let camera = perspCamera;
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -830,6 +943,36 @@ scene.add(dirLight2);
 let grid = new THREE.GridHelper(20, 20, 0x33373f, 0x24272d);
 scene.add(grid);
 
+/* ---- 軸ギズモ: 元データ(DXF等、Z-up)のX/Y/Z軸が現在の視点でどちらを向いているかを
+   右下に常時表示する。カメラの回転(quaternion)だけを使い、位置・投影方式には依存しない。
+   座標変換の対応: データX→Three.js X、データY→Three.js -Z、データZ(上)→Three.js Y
+   (DXF読み込み時の「Z-up -> Y-up」変換と対にしてあるので、変換ロジックを変えたら要更新) */
+const AXIS_GIZMO_DEFS = [
+  { label: "X", dir: new THREE.Vector3(1, 0, 0), color: "#e0544a" },
+  { label: "Y", dir: new THREE.Vector3(0, 0, -1), color: "#4fae52" },
+  { label: "Z", dir: new THREE.Vector3(0, 1, 0), color: "#4a90e0" },
+];
+const axisGizmoEl = document.getElementById("axis-gizmo");
+const _gizmoQ = new THREE.Quaternion();
+const _gizmoDir = new THREE.Vector3();
+function updateAxisGizmo() {
+  _gizmoQ.copy(camera.quaternion).invert();
+  const R = 22;
+  const projected = AXIS_GIZMO_DEFS.map((a) => {
+    _gizmoDir.copy(a.dir).applyQuaternion(_gizmoQ);
+    return { label: a.label, color: a.color, x: _gizmoDir.x * R, y: -_gizmoDir.y * R, z: _gizmoDir.z };
+  });
+  projected.sort((p, q) => p.z - q.z);  // 奥から手前へ描画(手前の軸が重なりで隠れないように)
+  const parts = [];
+  for (const p of projected) {
+    const x = p.x.toFixed(1), y = p.y.toFixed(1);
+    parts.push(`<line x1="0" y1="0" x2="${x}" y2="${y}" stroke="${p.color}" stroke-width="2"/>`);
+    parts.push(`<circle cx="${x}" cy="${y}" r="8" fill="${p.color}"/>`);
+    parts.push(`<text x="${x}" y="${y}" font-size="9" fill="#ffffff" text-anchor="middle" dominant-baseline="central" font-family="sans-serif">${p.label}</text>`);
+  }
+  axisGizmoEl.innerHTML = parts.join("");
+}
+
 /* ---- 簡易オービットコントロール(回転・ズーム・パン) ---- */
 const orbit = {
   target: new THREE.Vector3(0, 0, 0),
@@ -838,6 +981,7 @@ const orbit = {
     const p = new THREE.Vector3().setFromSpherical(this.spherical).add(this.target);
     camera.position.copy(p);
     camera.lookAt(this.target);
+    updateAxisGizmo();
   },
 };
 orbit.update();
@@ -909,11 +1053,16 @@ canvas.addEventListener("pointermove", (e) => {
     const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
     const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
     if (pinchLastDist > 0 && dist > 0) {
-      orbit.spherical.radius *= pinchLastDist / dist;
-      orbit.spherical.radius = Math.max(0.01, orbit.spherical.radius);
+      if (camera === orthoCamera) {
+        camera.zoom = Math.max(0.0001, camera.zoom * (dist / pinchLastDist));
+        camera.updateProjectionMatrix();
+      } else {
+        orbit.spherical.radius *= pinchLastDist / dist;
+        orbit.spherical.radius = Math.max(0.01, orbit.spherical.radius);
+      }
     }
     if (pinchLastMid) {
-      const panScale = orbit.spherical.radius * 0.0012;
+      const panScale = currentPanScale();
       const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
       const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
       orbit.target.addScaledVector(right, -(mid.x - pinchLastMid.x) * panScale);
@@ -932,7 +1081,7 @@ canvas.addEventListener("pointermove", (e) => {
     orbit.spherical.theta -= dx * 0.006;
     orbit.spherical.phi = Math.min(Math.PI - 0.05, Math.max(0.05, orbit.spherical.phi - dy * 0.006));
   } else {
-    const panScale = orbit.spherical.radius * 0.0012;
+    const panScale = currentPanScale();
     const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
     orbit.target.addScaledVector(right, -dx * panScale);
@@ -997,20 +1146,49 @@ canvas.addEventListener("wheel", (e) => {
   }
   wheelCache.time = now;
 
-  // 相似変換: 回転中心をPへ(1-f)だけ寄せ、半径をf倍する
-  // → カメラも自動的に P + (camera - P) * f の位置になり、Pは画面上で不動
-  const newRadius = Math.max(0.01, orbit.spherical.radius * f);
-  const actualF = newRadius / orbit.spherical.radius;  // 最小半径クランプ時も整合させる
+  // 相似変換: 回転中心をPへ(1-f)だけ寄せる。
+  // 透視投影はカメラ距離(半径)をf倍、平行投影はzoomを1/f倍することで見た目のズームを行う。
+  // → カメラ(または見かけの範囲)も自動的にPを中心に縮小/拡大され、Pは画面上で不動
+  let actualF;
+  if (camera === orthoCamera) {
+    const newZoom = Math.max(0.0001, camera.zoom / f);
+    actualF = camera.zoom / newZoom;  // 最小zoomクランプ時も整合させる
+    camera.zoom = newZoom;
+    camera.updateProjectionMatrix();
+  } else {
+    const newRadius = Math.max(0.01, orbit.spherical.radius * f);
+    actualF = newRadius / orbit.spherical.radius;  // 最小半径クランプ時も整合させる
+    orbit.spherical.radius = newRadius;
+  }
   orbit.target.lerpVectors(P, orbit.target, actualF);
-  orbit.spherical.radius = newRadius;
   orbit.update();
 }, { passive: false });
+
+/* 平行投影カメラのフラスタムを、現在のorthoHalfHeight(縦の可視半分の実寸)と
+   キャンバスのアスペクト比から再計算する。resize時・投影切り替え時に呼ぶ */
+function updateOrthoFrustum() {
+  const aspect = (wrap.clientWidth / wrap.clientHeight) || 1;
+  orthoCamera.left = -orthoHalfHeight * aspect;
+  orthoCamera.right = orthoHalfHeight * aspect;
+  orthoCamera.top = orthoHalfHeight;
+  orthoCamera.bottom = -orthoHalfHeight;
+  orthoCamera.updateProjectionMatrix();
+}
+
+/* パン(平行移動)操作1pxあたりの実寸移動量。透視投影はカメラ距離、
+   平行投影は可視範囲(orthoHalfHeight/zoom)から、同じ体感速度になるよう近似する */
+function currentPanScale() {
+  return camera === orthoCamera
+    ? (orthoHalfHeight / camera.zoom) * 0.0026
+    : orbit.spherical.radius * 0.0012;
+}
 
 function resize() {
   const w = wrap.clientWidth, h = wrap.clientHeight;
   renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  perspCamera.aspect = w / h;
+  perspCamera.updateProjectionMatrix();
+  updateOrthoFrustum();
 }
 window.addEventListener("resize", resize);
 resize();
@@ -1030,7 +1208,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.1.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.2.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1312,8 +1490,8 @@ function fitView(box, forward, margin = 0.05) {
   right.normalize();
   const camUp = new THREE.Vector3().crossVectors(right, forward).normalize();
 
-  const tanV = Math.tan((camera.fov * Math.PI / 180) / 2) * (1 - 2 * margin);
-  const tanH = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.aspect * (1 - 2 * margin);
+  const tanV = Math.tan((perspCamera.fov * Math.PI / 180) / 2) * (1 - 2 * margin);
+  const tanH = Math.tan((perspCamera.fov * Math.PI / 180) / 2) * perspCamera.aspect * (1 - 2 * margin);
 
   // 8頂点のカメラ基底成分
   const pts = [];
@@ -1351,22 +1529,66 @@ function fitView(box, forward, margin = 0.05) {
   return { distance: hi, target };
 }
 
+/* fitViewの平行投影版。パースがないため頂点の投影(u, v)は距離に依存せず、
+   8頂点のu/v範囲をそのまま(余白付きで)フラスタムに収めるだけでよい */
+function fitViewOrtho(box, forward, margin = 0.05) {
+  const center = box.getCenter(new THREE.Vector3());
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  const right = new THREE.Vector3().crossVectors(forward, worldUp);
+  if (right.lengthSq() < 1e-9) right.set(1, 0, 0);
+  right.normalize();
+  const camUp = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  const c = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    c.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+    c.sub(center);
+    const u = c.dot(right), v = c.dot(camUp);
+    minU = Math.min(minU, u); maxU = Math.max(maxU, u);
+    minV = Math.min(minV, v); maxV = Math.max(maxV, v);
+  }
+  const aspect = (wrap.clientWidth / wrap.clientHeight) || 1;
+  const halfW = (maxU - minU) / 2 / (1 - 2 * margin);
+  const halfH = (maxV - minV) / 2 / (1 - 2 * margin);
+  const halfHeight = Math.max(halfH, halfW / aspect, 1e-6);
+  const target = center.clone()
+    .addScaledVector(right, (minU + maxU) / 2)
+    .addScaledVector(camUp, (minV + maxV) / 2);
+  return { target, halfHeight };
+}
+
+/* 現在アクティブなカメラの種別に応じて、指定した視線方向でboxをフィットする。
+   透視投影はfitView(距離+平行移動)、平行投影はfitViewOrtho(フラスタムの高さ+平行移動)を使う */
+function applyFraming(box, forward, margin = 0.05) {
+  const size = box.getSize(new THREE.Vector3()).length();
+  modelSize = size;
+  if (camera === orthoCamera) {
+    const fit = fitViewOrtho(box, forward, margin);
+    orbit.target.copy(fit.target);
+    orthoHalfHeight = fit.halfHeight;
+    orthoCamera.zoom = 1;
+    updateOrthoFrustum();
+    orbit.spherical.radius = Math.max(size, 0.01);  // 見た目には影響しないが、回転の中心距離として使う
+  } else {
+    const fit = fitView(box, forward, margin);
+    orbit.target.copy(fit.target);
+    orbit.spherical.radius = fit.distance;
+  }
+  orbit.update();
+  camera.near = size / 1000;
+  camera.far = size * 100;
+  camera.updateProjectionMatrix();
+}
+
 function frameAll() {
   const box = new THREE.Box3();
   if (modelRoot) box.expandByObject(modelRoot);
   if (backgroundRoot) box.expandByObject(backgroundRoot);
   if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3()).length();
-  modelSize = size;
   // 現在の視線方向(ターゲット→カメラの逆)を保ったままフィットする
   const forward = new THREE.Vector3().setFromSpherical(orbit.spherical).normalize().negate();
-  const fit = fitView(box, forward);
-  orbit.target.copy(fit.target);
-  orbit.spherical.radius = fit.distance;
-  orbit.update();
-  camera.near = size / 1000;
-  camera.far = size * 100;
-  camera.updateProjectionMatrix();
+  applyFraming(box, forward);
   grid.position.y = box.min.y;
 }
 
@@ -2304,10 +2526,13 @@ document.getElementById("export-svg-btn").addEventListener("click", exportElevat
 
 /* ============================================================
    現在のビューをSVGで保存
-   ・立面図SVGと違い、現在のカメラの位置・向き・ズームをそのまま使い、
-     画面に見えている通りの遠近感(パースあり)で書き出す
-   ・距離により見かけの縮尺が変わるため、スケールバーは出力しない。
-     輪郭線・傾きラインの太さは注視点(orbit.target)での見かけの縮尺を基準にする
+   ・立面図SVGと違い、現在のカメラの位置・向き・ズーム・投影方式(透視/平行)を
+     そのまま使う。透視投影ならパースあり、平行投影ならパースなしで書き出される
+     (Vector3.project(camera)がカメラ種別を意識せず使えるため、投影自体は分岐不要)
+   ・平行投影でも距離ごとに縮尺が変わりうる透視投影と混同を避けるため、
+     どちらのモードでもスケールバーは出力しない。
+     輪郭線・傾きラインの太さは、透視投影は注視点(orbit.target)での見かけの縮尺、
+     平行投影はzoom基準の一定縮尺を使う
    ・近クリップ面より手前(カメラの後ろ側)に頂点がある石・ラインは
      投影が破綻するため、クリッピングはせず丸ごと除外する
 ============================================================ */
@@ -2351,16 +2576,22 @@ function exportCurrentViewSVG() {
 
   const contentW = 1600, margin = 50;
   const legendH = incLegend ? 130 : 0;
-  const aspect = camera.aspect || 1;
+  const aspect = (wrap.clientWidth / wrap.clientHeight) || 1;
   const contentH = contentW / aspect;
   const svgW = contentW + margin * 2;
   const svgH = contentH + margin * 2 + legendH;
   const toX = (nx) => margin + (nx + 1) / 2 * contentW;
   const toY = (ny) => margin + (1 - ny) / 2 * contentH;
 
-  // 注視点での見かけの縮尺(px / 実寸1単位)。パースのため距離で変わる近似値
-  const focusDist = Math.max(camera.position.distanceTo(orbit.target), camera.near * 2);
-  const pxPerUnit = contentH / (2 * focusDist * Math.tan((camera.fov * Math.PI / 180) / 2));
+  // 実寸1単位あたりのpx。平行投影は距離によらず一定(zoom基準)、
+  // 透視投影は注視点での見かけの縮尺として近似する(距離で変わる)
+  let pxPerUnit;
+  if (camera === orthoCamera) {
+    pxPerUnit = contentH * camera.zoom / (camera.top - camera.bottom);
+  } else {
+    const focusDist = Math.max(camera.position.distanceTo(orbit.target), camera.near * 2);
+    pxPerUnit = contentH / (2 * focusDist * Math.tan((camera.fov * Math.PI / 180) / 2));
+  }
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const parts = [];
@@ -2998,6 +3229,18 @@ let attributesByMesh = new Map(); // mesh.uuid -> CSV行(インスペクタ用)
 let hasApplied = false;      // 一度でも色分けを実行したか(即時反映のガード)
 let reapplyTimer = null;
 
+/* 実行ボタンの主張の強さを、実際に必要かどうかに合わせる。
+   未実行のうちは唯一の塗りつぶしボタン(=画面で最も強い誘導)にするが、
+   一度実行すると以降の設定変更は自動反映されるためボタンは不要になる。
+   その状態で強い誘導を出し続けると「まだ何か押す必要がある」と誤解させるので、
+   輪郭線のみの副次ボタンに格下げし、文言も「再実行」に変える */
+function updateApplyBtnProminence() {
+  const btn = document.getElementById("apply-btn");
+  btn.classList.toggle("action", !hasApplied);
+  btn.classList.toggle("ghost", hasApplied);
+  btn.textContent = hasApplied ? "色分けを再実行" : "色分けを実行";
+}
+
 /* 設定変更時の即時反映(実行済みの場合のみ、デバウンス付きで再適用する) */
 function scheduleReapply() {
   if (!hasApplied) return;
@@ -3107,6 +3350,7 @@ function applyColorize() {
   if (unmatched.length) msg += `\n未マッチ: ${unmatched.length} 個 (例: ${unmatched.slice(0, 5).join(", ")})`;
   setStatus(msg, unmatched.length > 0);
   hasApplied = true;
+  updateApplyBtnProminence();
   applyFilter();  // 色分け後にフィルタ状態を再適用
 }
 
@@ -3123,6 +3367,7 @@ for (const id of ["color-low", "color-mid", "color-high", "range-min", "range-ma
 /* 色のリセット */
 document.getElementById("reset-btn").addEventListener("click", () => {
   hasApplied = false;  // リセット後は設定を変えても自動で再着色しない
+  updateApplyBtnProminence();
   clearTimeout(reapplyTimer);
   for (const { mesh } of meshes) {
     const orig = originalMaterials.get(mesh.uuid);
@@ -3801,7 +4046,8 @@ document.getElementById("preset").addEventListener("change", (e) => {
     e.target.value === "CUSTOM" ? "block" : "none";
 });
 document.getElementById("use-mid").addEventListener("change", (e) => {
-  document.getElementById("color-mid").style.display = e.target.checked ? "block" : "none";
+  // ラベル付きラッパーごと出し入れする(入力だけ隠すと見出しの文字が残るため)
+  document.getElementById("swatch-mid").style.display = e.target.checked ? "flex" : "none";
 });
 
 /* 手動範囲指定のトグル */
@@ -4076,19 +4322,56 @@ function viewFront() {
   const box = new THREE.Box3();
   if (modelRoot) box.expandByObject(modelRoot);
   if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3()).length();
   // 視線方向を確定してから、その向きでのフィット(距離+リセンタリング)を行う
   orbit.spherical.setFromVector3(N);
-  const fit = fitView(box, N.clone().negate());
-  orbit.target.copy(fit.target);
-  orbit.spherical.radius = fit.distance;
-  orbit.update();
-  camera.near = size / 1000;
-  camera.far = size * 100;
-  camera.updateProjectionMatrix();
+  applyFraming(box, N.clone().negate());
 }
+
+/* モデルの真上から見下ろす(平面図的な視点) */
+function viewTop() {
+  if (meshes.length === 0) return;
+  const box = new THREE.Box3();
+  if (modelRoot) box.expandByObject(modelRoot);
+  if (box.isEmpty()) return;
+  const N = new THREE.Vector3(0, 1, 0);
+  orbit.spherical.setFromVector3(N);
+  applyFraming(box, N.clone().negate());
+}
+
 document.getElementById("view-front").addEventListener("click", viewFront);
+document.getElementById("view-top").addEventListener("click", viewTop);
 document.getElementById("view-fit").addEventListener("click", frameAll);
+
+/* ============================================================
+   透視投影 ⇄ 平行投影の切り替え
+   ・カメラの向き(orbit.spherical)は保ったまま、`camera`が指すカメラだけ差し替える
+   ・切り替え後は現在の視線方向でフィットし直す(距離やzoomの基準が違うため)
+============================================================ */
+let projectionMode = "persp";  // "persp" | "ortho"
+function setProjection(mode) {
+  if (mode === projectionMode) return;
+  projectionMode = mode;
+  camera = (mode === "ortho") ? orthoCamera : perspCamera;
+
+  const box = new THREE.Box3();
+  if (modelRoot) box.expandByObject(modelRoot);
+  if (backgroundRoot) box.expandByObject(backgroundRoot);
+  if (!box.isEmpty()) {
+    const forward = new THREE.Vector3().setFromSpherical(orbit.spherical).normalize().negate();
+    applyFraming(box, forward);
+  } else {
+    orbit.update();
+  }
+
+  // ボタンは他の視点ボタンと同じく「文言=遷移先」のみで色は変えない(現在の状態は
+  // ボタンではなく下のキャプションだけで示す。役割を分けて混同を防ぐ)
+  document.getElementById("proj-toggle").textContent = mode === "ortho" ? "透視投影" : "平行投影";
+  // 透視投影が既定のため、平行投影のときだけ文字を主張する(既定モードでは非表示)
+  document.getElementById("proj-indicator").classList.toggle("active", mode === "ortho");
+}
+document.getElementById("proj-toggle").addEventListener("click", () => {
+  setProjection(projectionMode === "ortho" ? "persp" : "ortho");
+});
 
 /* ============================================================
    サイドパネルのアコーディオン(ステップの開閉)
@@ -4107,7 +4390,9 @@ const stepSummaryEls = [];
     label.appendChild(sum);
     stepSummaryEls.push(sum);
     label.addEventListener("click", () => step.classList.toggle("collapsed"));
-    if (i !== 0 && i !== 2 && i !== 3) step.classList.add("collapsed");  // 1・3・4以外は初期折りたたみ
+    // 必須の「1. モデル」「3. 色分け」だけ開き、任意のステップは畳んでおく
+    // (見出しの「(任意)」表記と初期状態を一致させ、必須の流れを1→3→7と読ませる)
+    if (i !== 0 && i !== 2) step.classList.add("collapsed");
   });
 }
 
