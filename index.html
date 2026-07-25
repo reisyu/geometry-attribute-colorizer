@@ -1208,7 +1208,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.2.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.2.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2342,6 +2342,144 @@ function buildLegendSVGParts(items, contentH, margin) {
 }
 
 /* ============================================================
+   SVG書き出しの共通部分
+
+   立面図SVGと現在のビューSVGは「投影の求め方」だけが異なり、
+   ポリゴン・傾きライン・ラベル・凡例・スケールバーの描画や、
+   設定の読み取り・ファイル保存は全く同じ処理になる。
+   投影の違いを view オブジェクトに閉じ込め、それ以降を共通化する。
+   (かつては2つの関数に同じコードが約150行重複しており、
+    SVG機能に手を入れるたびに二重修正が必要だった)
+============================================================ */
+
+/* 書き出し設定パネルの読み取り */
+function readSVGExportOptions() {
+  return {
+    incLegend: document.getElementById("svg-inc-legend").checked,
+    incScalebar: document.getElementById("svg-inc-scalebar").checked,
+    incLabels: document.getElementById("svg-inc-labels").checked,
+    incLines: document.getElementById("svg-inc-lines").checked,
+    noFill: document.getElementById("svg-no-fill").checked,
+    outlineMM: Number(document.getElementById("svg-outline-width").value),
+    lineWidthMM: Number(document.getElementById("line-width").value),
+  };
+}
+
+/* SVG本体を組み立てて文字列で返す。
+   items: [{mesh, matchName, pts:[[x,y],...]}] を奥→手前の順に並べたもの。
+          pts は「投影後の抽象座標」で、view.toX/toY がSVGのpx座標へ変換する
+   view : {
+     margin, contentW, contentH,  レイアウト(px)
+     pxPerUnit,                   実寸1単位あたりのpx(線の太さのmm実寸指定に使う)
+     toX(x), toY(y),              抽象座標 -> SVGのpx座標
+     projectLine(rl),             傾きラインの端点を抽象座標へ。描けなければ null
+     scalebarSpan,                スケールバーの基準にする横幅(実寸)。null なら描かない
+   } */
+function buildExportSVG(items, view, opt) {
+  const { margin, contentW, contentH, pxPerUnit, toX, toY } = view;
+  const withScalebar = opt.incScalebar && view.scalebarSpan != null;
+  const legendH = (opt.incLegend || withScalebar) ? 130 : 0;
+  const svgW = contentW + margin * 2;
+  const svgH = contentH + margin * 2 + legendH;
+
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const parts = [];
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${Math.ceil(svgH)}" viewBox="0 0 ${svgW} ${Math.ceil(svgH)}" font-family="sans-serif">`);
+  parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
+
+  // --- オブジェクトのポリゴン ---
+  let outlinePx = Number.isFinite(opt.outlineMM) && opt.outlineMM > 0
+    ? Math.max(0.2, (opt.outlineMM / 1000) * pxPerUnit) : 0;
+  // 塗りなしで輪郭線も0だと何も見えないため、線画モードでは既定の太さを使う
+  if (opt.noFill && outlinePx <= 0) outlinePx = Math.max(0.2, (10 / 1000) * pxPerUnit);
+  const strokeAttr = outlinePx > 0
+    ? `stroke="#444444" stroke-width="${outlinePx.toFixed(2)}" stroke-linejoin="round"` : `stroke="none"`;
+  for (const item of items) {
+    const fill = opt.noFill ? "none" : "#" + item.mesh.material.color.getHexString();
+    const ptsStr = item.pts.map(([x, y]) => `${toX(x).toFixed(2)},${toY(y).toFixed(2)}`).join(" ");
+    parts.push(`<polygon points="${ptsStr}" fill="${fill}" ${strokeAttr}/>`);
+  }
+
+  // --- 傾きライン(色・太さはステップ4の設定に従う) ---
+  if (opt.incLines) {
+    const lc = currentLineColors();
+    const swPx = Math.max(1, (opt.lineWidthMM / 1000) * pxPerUnit);
+    for (const item of items) {
+      const rl = item.mesh.userData.rectLine;
+      if (!rl) continue;
+      const seg = view.projectLine(rl);
+      if (!seg) continue;
+      const [r, g, b] = symmetricAngleColor(rl.angle, lc.center, lc.edge);
+      const col = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+      parts.push(`<line x1="${toX(seg.a[0]).toFixed(1)}" y1="${toY(seg.a[1]).toFixed(1)}" x2="${toX(seg.b[0]).toFixed(1)}" y2="${toY(seg.b[1]).toFixed(1)}" stroke="${col}" stroke-width="${swPx.toFixed(1)}" stroke-linecap="round"/>`);
+    }
+  }
+
+  // --- ラベル(内容はステップ6の選択に従う) ---
+  if (opt.incLabels) {
+    const keys = getSelectedLabelKeys();
+    const multi = keys.length > 1;
+    for (const item of items) {
+      const row = attributesByMesh.get(item.mesh.uuid);
+      const linesOut = [];
+      for (const key of keys) {
+        if (key === "__id__") linesOut.push(item.matchName);
+        else if (row && row[key] !== undefined && String(row[key]).trim() !== "") {
+          linesOut.push((multi ? key + ": " : "") + formatValue(row[key]));
+        }
+      }
+      if (linesOut.length === 0) continue;
+      let cx = 0, cy = 0;
+      for (const [x, y] of item.pts) { cx += x; cy += y; }
+      cx /= item.pts.length; cy /= item.pts.length;
+      const fs = 11;
+      const tx = toX(cx).toFixed(1);
+      const ty0 = toY(cy) - (linesOut.length - 1) * fs / 2;
+      const spans = linesOut.map((t, i) =>
+        `<tspan x="${tx}" y="${(ty0 + i * fs * 1.2).toFixed(1)}">${esc(t)}</tspan>`).join("");
+      parts.push(`<text text-anchor="middle" font-size="${fs}" fill="#222222">${spans}</text>`);
+    }
+  }
+
+  // --- 凡例 ---
+  if (opt.incLegend) parts.push(...buildLegendSVGParts(items, contentH, margin));
+
+  // --- スケールバー(右下)。縮尺が一定な投影のときだけ意味を持つ ---
+  if (withScalebar) {
+    // モデル幅の1/6程度に近い「切りの良い長さ」を選ぶ
+    const targetLen = view.scalebarSpan / 6;
+    const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100];
+    let barLen = candidates[0];
+    for (const c of candidates) {
+      if (Math.abs(c - targetLen) < Math.abs(barLen - targetLen)) barLen = c;
+    }
+    const barPx = barLen * pxPerUnit;
+    const bx = svgW - margin - barPx;
+    const by = contentH + margin * 2 + 40;
+    parts.push(`<line x1="${bx}" y1="${by}" x2="${bx + barPx}" y2="${by}" stroke="#222222" stroke-width="2"/>`);
+    parts.push(`<line x1="${bx}" y1="${by - 5}" x2="${bx}" y2="${by + 5}" stroke="#222222" stroke-width="2"/>`);
+    parts.push(`<line x1="${bx + barPx}" y1="${by - 5}" x2="${bx + barPx}" y2="${by + 5}" stroke="#222222" stroke-width="2"/>`);
+    parts.push(`<text x="${bx + barPx / 2}" y="${by - 10}" font-size="12" fill="#222222" text-anchor="middle">${barLen} m</text>`);
+  }
+
+  // 生成情報(どの版で作った図か追跡できるようにする)
+  parts.push(`<text x="${svgW - margin}" y="${Math.ceil(svgH) - 8}" font-size="9" fill="#999999" text-anchor="end">Geometry Attribute Colorizer v${APP_VERSION}</text>`);
+  parts.push(`</svg>`);
+  return parts.join("\n");
+}
+
+/* 組み立てたSVGをファイルとして保存する */
+function downloadSVG(svgText, filename, message) {
+  const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus(message);
+}
+
+/* ============================================================
    立面図SVG書き出し
    ・全石の面法線の平均を水平化した方向から見た正射投影(壁の正面)
    ・輪郭ポリゴンをベクターのまま出力。現在の色分け・フィルタが反映される
@@ -2415,123 +2553,29 @@ function exportElevationSVG() {
   }
   items.sort((a, b) => a.depth - b.depth);  // 奥から手前へ描画
 
-  // 書き出し設定の読み取り
-  const incLegend = document.getElementById("svg-inc-legend").checked;
-  const incScalebar = document.getElementById("svg-inc-scalebar").checked;
-  const incLabels = document.getElementById("svg-inc-labels").checked;
-  const incLines = document.getElementById("svg-inc-lines").checked;
-  const outlineMM = Number(document.getElementById("svg-outline-width").value);
-
   // レイアウト: 幅1600pxに収め、下部に凡例スペースを確保(凡例なしなら詰める)
   const contentW = 1600, margin = 50;
-  const legendH = (incLegend || incScalebar) ? 130 : 0;
   const spanX = Math.max(maxSX - minSX, 1e-9);
   const spanY = Math.max(maxSY - minSY, 1e-9);
-  const scale = contentW / spanX;
-  const contentH = spanY * scale;
-  const svgW = contentW + margin * 2;
-  const svgH = contentH + margin * 2 + legendH;
-  const toX = (sx) => margin + (sx - minSX) * scale;
-  const toY = (sy) => margin + (maxSY - sy) * scale;  // SVGはY下向きなので反転
+  const scale = contentW / spanX;   // 正射投影なので縮尺は全体で一定
 
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const parts = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${Math.ceil(svgH)}" viewBox="0 0 ${svgW} ${Math.ceil(svgH)}" font-family="sans-serif">`);
-  parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
+  const view = {
+    margin, contentW, contentH: spanY * scale,
+    pxPerUnit: scale,
+    toX: (sx) => margin + (sx - minSX) * scale,
+    toY: (sy) => margin + (maxSY - sy) * scale,  // SVGはY下向きなので反転
+    scalebarSpan: spanX,                          // 縮尺一定なのでスケールバーを描ける
+    // 傾きラインの端点を、ポリゴンと同じ抽象座標(右方向・上方向成分)へ落とす
+    projectLine: (rl) => ({
+      a: [rl.a[0] * right.x + rl.a[1] * right.y + rl.a[2] * right.z,
+          rl.a[0] * up.x + rl.a[1] * up.y + rl.a[2] * up.z],
+      b: [rl.b[0] * right.x + rl.b[1] * right.y + rl.b[2] * right.z,
+          rl.b[0] * up.x + rl.b[1] * up.y + rl.b[2] * up.z],
+    }),
+  };
 
-  // --- 石のポリゴン ---
-  const noFill = document.getElementById("svg-no-fill").checked;
-  let outlinePx = Number.isFinite(outlineMM) && outlineMM > 0
-    ? Math.max(0.2, (outlineMM / 1000) * scale) : 0;
-  // 塗りなしで輪郭線も0だと何も見えないため、線画モードでは既定の太さを使う
-  if (noFill && outlinePx <= 0) outlinePx = Math.max(0.2, (10 / 1000) * scale);
-  const strokeAttr = outlinePx > 0
-    ? `stroke="#444444" stroke-width="${outlinePx.toFixed(2)}" stroke-linejoin="round"` : `stroke="none"`;
-  for (const item of items) {
-    const fill = noFill ? "none" : "#" + item.mesh.material.color.getHexString();
-    const ptsStr = item.pts.map(([sx, sy]) => `${toX(sx).toFixed(2)},${toY(sy).toFixed(2)}`).join(" ");
-    parts.push(`<polygon points="${ptsStr}" fill="${fill}" ${strokeAttr}/>`);
-  }
-
-  // --- 傾きライン: 書き出し設定でONのとき ---
-  if (incLines) {
-    for (const item of items) {
-      const rl = item.mesh.userData.rectLine;
-      if (!rl) continue;
-      const ax = rl.a[0] * right.x + rl.a[1] * right.y + rl.a[2] * right.z;
-      const ay = rl.a[0] * up.x + rl.a[1] * up.y + rl.a[2] * up.z;
-      const bx = rl.b[0] * right.x + rl.b[1] * right.y + rl.b[2] * right.z;
-      const by = rl.b[0] * up.x + rl.b[1] * up.y + rl.b[2] * up.z;
-      const lc = currentLineColors();
-      const [r, g, b] = symmetricAngleColor(rl.angle, lc.center, lc.edge);
-      const col = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-      const x1 = toX(ax).toFixed(1), y1 = toY(ay).toFixed(1);
-      const x2 = toX(bx).toFixed(1), y2 = toY(by).toFixed(1);
-      // 太さはアプリの設定(mm)を実寸スケールでpxに変換する
-      const swPx = Math.max(1, (Number(document.getElementById("line-width").value) / 1000) * scale);
-      parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${swPx.toFixed(1)}" stroke-linecap="round"/>`);
-    }
-  }
-
-  // --- ラベル: 書き出し設定でONのとき(内容はステップ6の選択に従う) ---
-  if (incLabels) {
-    const keys = getSelectedLabelKeys();
-    const multi = keys.length > 1;
-    for (const item of items) {
-      const row = attributesByMesh.get(item.mesh.uuid);
-      const linesOut = [];
-      for (const key of keys) {
-        if (key === "__id__") linesOut.push(item.matchName);
-        else if (row && row[key] !== undefined && String(row[key]).trim() !== "") {
-          linesOut.push((multi ? key + ": " : "") + formatValue(row[key]));
-        }
-      }
-      if (linesOut.length === 0) continue;
-      let cx = 0, cy = 0;
-      for (const [sx, sy] of item.pts) { cx += sx; cy += sy; }
-      cx /= item.pts.length; cy /= item.pts.length;
-      const fs = 11;
-      const tx = toX(cx).toFixed(1);
-      const ty0 = toY(cy) - (linesOut.length - 1) * fs / 2;
-      const spans = linesOut.map((t, i) =>
-        `<tspan x="${tx}" y="${(ty0 + i * fs * 1.2).toFixed(1)}">${esc(t)}</tspan>`).join("");
-      parts.push(`<text text-anchor="middle" font-size="${fs}" fill="#222222">${spans}</text>`);
-    }
-  }
-
-  // --- 凡例 ---
-  if (incLegend) parts.push(...buildLegendSVGParts(items, contentH, margin));
-
-  // --- スケールバー(右下) ---
-  if (incScalebar) {
-    // モデル幅の1/6程度に近い「切りの良い長さ」を選ぶ
-    const targetLen = spanX / 6;
-    const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100];
-    let barLen = candidates[0];
-    for (const c of candidates) {
-      if (Math.abs(c - targetLen) < Math.abs(barLen - targetLen)) barLen = c;
-    }
-    const barPx = barLen * scale;
-    const bx = svgW - margin - barPx;
-    const by = contentH + margin * 2 + 40;
-    parts.push(`<line x1="${bx}" y1="${by}" x2="${bx + barPx}" y2="${by}" stroke="#222222" stroke-width="2"/>`);
-    parts.push(`<line x1="${bx}" y1="${by - 5}" x2="${bx}" y2="${by + 5}" stroke="#222222" stroke-width="2"/>`);
-    parts.push(`<line x1="${bx + barPx}" y1="${by - 5}" x2="${bx + barPx}" y2="${by + 5}" stroke="#222222" stroke-width="2"/>`);
-    parts.push(`<text x="${bx + barPx / 2}" y="${by - 10}" font-size="12" fill="#222222" text-anchor="middle">${barLen} m</text>`);
-  }
-
-  // 生成情報(どの版で作った図か追跡できるようにする)
-  parts.push(`<text x="${svgW - margin}" y="${Math.ceil(svgH) - 8}" font-size="9" fill="#999999" text-anchor="end">Geometry Attribute Colorizer v${APP_VERSION}</text>`);
-
-  parts.push(`</svg>`);
-
-  const blob = new Blob([parts.join("\n")], { type: "image/svg+xml;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "elevation.svg";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setStatus(`立面図SVGを書き出しました: ${items.length} オブジェクト`);
+  const svg = buildExportSVG(items, view, readSVGExportOptions());
+  downloadSVG(svg, "elevation.svg", `立面図SVGを書き出しました: ${items.length} オブジェクト`);
 }
 
 /* 塗りつぶしなし(線画)のときは色の凡例が意味を持たないため連動して外す */
@@ -2593,19 +2637,9 @@ function exportCurrentViewSVG() {
 
   items.sort((a, b) => a.depth - b.depth);  // 奥(視点から遠い)から手前へ描画
 
-  const incLegend = document.getElementById("svg-inc-legend").checked;
-  const incLabels = document.getElementById("svg-inc-labels").checked;
-  const incLines = document.getElementById("svg-inc-lines").checked;
-  const outlineMM = Number(document.getElementById("svg-outline-width").value);
-
   const contentW = 1600, margin = 50;
-  const legendH = incLegend ? 130 : 0;
   const aspect = (wrap.clientWidth / wrap.clientHeight) || 1;
   const contentH = contentW / aspect;
-  const svgW = contentW + margin * 2;
-  const svgH = contentH + margin * 2 + legendH;
-  const toX = (nx) => margin + (nx + 1) / 2 * contentW;
-  const toY = (ny) => margin + (1 - ny) / 2 * contentH;
 
   // 実寸1単位あたりのpx。平行投影は距離によらず一定(zoom基準)、
   // 透視投影は注視点での見かけの縮尺として近似する(距離で変わる)
@@ -2617,83 +2651,26 @@ function exportCurrentViewSVG() {
     pxPerUnit = contentH / (2 * focusDist * Math.tan((camera.fov * Math.PI / 180) / 2));
   }
 
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const parts = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${Math.ceil(svgH)}" viewBox="0 0 ${svgW} ${Math.ceil(svgH)}" font-family="sans-serif">`);
-  parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
-
-  // --- 石のポリゴン ---
-  const noFill = document.getElementById("svg-no-fill").checked;
-  let outlinePx = Number.isFinite(outlineMM) && outlineMM > 0
-    ? Math.max(0.2, (outlineMM / 1000) * pxPerUnit) : 0;
-  if (noFill && outlinePx <= 0) outlinePx = Math.max(0.2, (10 / 1000) * pxPerUnit);
-  const strokeAttr = outlinePx > 0
-    ? `stroke="#444444" stroke-width="${outlinePx.toFixed(2)}" stroke-linejoin="round"` : `stroke="none"`;
-  for (const item of items) {
-    const fill = noFill ? "none" : "#" + item.mesh.material.color.getHexString();
-    const ptsStr = item.pts.map(([nx, ny]) => `${toX(nx).toFixed(2)},${toY(ny).toFixed(2)}`).join(" ");
-    parts.push(`<polygon points="${ptsStr}" fill="${fill}" ${strokeAttr}/>`);
-  }
-
-  // --- 傾きライン: 書き出し設定でONのとき ---
-  if (incLines) {
-    const a3 = new THREE.Vector3(), b3 = new THREE.Vector3();
-    for (const item of items) {
-      const rl = item.mesh.userData.rectLine;
-      if (!rl) continue;
+  const a3 = new THREE.Vector3(), b3 = new THREE.Vector3();
+  const view = {
+    margin, contentW, contentH, pxPerUnit,
+    // ptsはNDC(-1〜1)。SVGはY下向きなので反転する
+    toX: (nx) => margin + (nx + 1) / 2 * contentW,
+    toY: (ny) => margin + (1 - ny) / 2 * contentH,
+    // 縮尺が一定とは限らない(透視)ため、どちらの投影でもスケールバーは描かない
+    scalebarSpan: null,
+    projectLine: (rl) => {
       a3.set(rl.a[0], rl.a[1], rl.a[2]);
       b3.set(rl.b[0], rl.b[1], rl.b[2]);
-      if (viewZ(a3) >= -camera.near || viewZ(b3) >= -camera.near) continue;  // 視界外の線は書き出さない
+      // 近クリップ面より手前は投影が破綻するため描かない
+      if (viewZ(a3) >= -camera.near || viewZ(b3) >= -camera.near) return null;
       const na = a3.clone().project(camera), nb = b3.clone().project(camera);
-      const lc = currentLineColors();
-      const [r, g, bch] = symmetricAngleColor(rl.angle, lc.center, lc.edge);
-      const col = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(bch * 255)})`;
-      const x1 = toX(na.x).toFixed(1), y1 = toY(na.y).toFixed(1);
-      const x2 = toX(nb.x).toFixed(1), y2 = toY(nb.y).toFixed(1);
-      const swPx = Math.max(1, (Number(document.getElementById("line-width").value) / 1000) * pxPerUnit);
-      parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${swPx.toFixed(1)}" stroke-linecap="round"/>`);
-    }
-  }
+      return { a: [na.x, na.y], b: [nb.x, nb.y] };
+    },
+  };
 
-  // --- ラベル: 書き出し設定でONのとき(内容はステップ6の選択に従う) ---
-  if (incLabels) {
-    const keys = getSelectedLabelKeys();
-    const multi = keys.length > 1;
-    for (const item of items) {
-      const row = attributesByMesh.get(item.mesh.uuid);
-      const linesOut = [];
-      for (const key of keys) {
-        if (key === "__id__") linesOut.push(item.matchName);
-        else if (row && row[key] !== undefined && String(row[key]).trim() !== "") {
-          linesOut.push((multi ? key + ": " : "") + formatValue(row[key]));
-        }
-      }
-      if (linesOut.length === 0) continue;
-      let cx = 0, cy = 0;
-      for (const [nx, ny] of item.pts) { cx += nx; cy += ny; }
-      cx /= item.pts.length; cy /= item.pts.length;
-      const fs = 11;
-      const tx = toX(cx).toFixed(1);
-      const ty0 = toY(cy) - (linesOut.length - 1) * fs / 2;
-      const spans = linesOut.map((t, i) =>
-        `<tspan x="${tx}" y="${(ty0 + i * fs * 1.2).toFixed(1)}">${esc(t)}</tspan>`).join("");
-      parts.push(`<text text-anchor="middle" font-size="${fs}" fill="#222222">${spans}</text>`);
-    }
-  }
-
-  // --- 凡例(スケールバーはパースでは意味を持たないため出力しない) ---
-  if (incLegend) parts.push(...buildLegendSVGParts(items, contentH, margin));
-
-  parts.push(`<text x="${svgW - margin}" y="${Math.ceil(svgH) - 8}" font-size="9" fill="#999999" text-anchor="end">Geometry Attribute Colorizer v${APP_VERSION}</text>`);
-  parts.push(`</svg>`);
-
-  const blob = new Blob([parts.join("\n")], { type: "image/svg+xml;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "view.svg";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setStatus(`現在のビューをSVGで書き出しました: ${items.length} オブジェクト`);
+  const svg = buildExportSVG(items, view, readSVGExportOptions());
+  downloadSVG(svg, "view.svg", `現在のビューをSVGで書き出しました: ${items.length} オブジェクト`);
 }
 
 document.getElementById("export-current-view-svg-btn").addEventListener("click", exportCurrentViewSVG);
