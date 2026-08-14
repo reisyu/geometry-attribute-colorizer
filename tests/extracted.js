@@ -461,4 +461,30 @@ function flipTriangleWinding(srcArr) {
   return out;
 }
 
-module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding };
+function parseGLB(arrayBuffer) {
+  const dv = new DataView(arrayBuffer);
+  // ヘッダー(12バイト)に満たないファイルをそのまま読むと、DataViewが
+  // 英語の内部エラーを投げて利用者に意味が伝わらないため先に弾く
+  if (dv.byteLength < 12) throw new Error("ファイルが空か、GLBとしては短すぎます");
+  if (dv.getUint32(0, true) !== 0x46546c67) throw new Error("GLB形式ではありません(マジックナンバー不一致)");
+  const version = dv.getUint32(4, true);
+  if (version !== 2) throw new Error(`glTFバージョン${version}は未対応です(2のみ対応)`);
+
+  let offset = 12;
+  let json = null, bin = null;
+  while (offset < dv.byteLength) {
+    const chunkLen = dv.getUint32(offset, true);
+    const chunkType = dv.getUint32(offset + 4, true);
+    const chunkStart = offset + 8;
+    if (chunkType === 0x4e4f534a) { // JSON
+      json = JSON.parse(new TextDecoder().decode(new Uint8Array(arrayBuffer, chunkStart, chunkLen)));
+    } else if (chunkType === 0x004e4942) { // BIN
+      bin = arrayBuffer.slice(chunkStart, chunkStart + chunkLen);
+    }
+    offset = chunkStart + chunkLen;
+  }
+  if (!json) throw new Error("JSONチャンクが見つかりません");
+  return { json, bin };
+}
+
+module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB };

@@ -1208,7 +1208,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.3.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.3.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1307,6 +1307,9 @@ const TYPE_SIZES = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 
 function parseGLB(arrayBuffer) {
   const dv = new DataView(arrayBuffer);
+  // ヘッダー(12バイト)に満たないファイルをそのまま読むと、DataViewが
+  // 英語の内部エラーを投げて利用者に意味が伝わらないため先に弾く
+  if (dv.byteLength < 12) throw new Error("ファイルが空か、GLBとしては短すぎます");
   if (dv.getUint32(0, true) !== 0x46546c67) throw new Error("GLB形式ではありません(マジックナンバー不一致)");
   const version = dv.getUint32(4, true);
   if (version !== 2) throw new Error(`glTFバージョン${version}は未対応です(2のみ対応)`);
@@ -3330,6 +3333,7 @@ function applyColorize() {
 
   const numericMode = isNumericColumn(csvRows, attr);
   let vmin = Infinity, vmax = -Infinity;
+  const ignoredRange = [];   // 手動範囲で数値として読めず無視した入力
   if (numericMode) {
     for (const row of csvRows) {
       const v = (row[attr] ?? "").toString().trim();
@@ -3337,12 +3341,28 @@ function applyColorize() {
       const n = Number(v);
       vmin = Math.min(vmin, n); vmax = Math.max(vmax, n);
     }
-    // 範囲の手動指定が有効なら、入力値で上書きする(空欄の側は自動のまま)
+    // 範囲の手動指定が有効なら、入力値で上書きする(空欄の側は自動のまま)。
+    // 数値として読めない入力は無視するが、黙って無視すると
+    // 「指定したのに効いていない」と誤解されるため、後でまとめて知らせる
     if (document.getElementById("manual-range").checked) {
-      const manMin = Number(document.getElementById("range-min").value);
-      const manMax = Number(document.getElementById("range-max").value);
-      if (document.getElementById("range-min").value.trim() !== "" && Number.isFinite(manMin)) vmin = manMin;
-      if (document.getElementById("range-max").value.trim() !== "" && Number.isFinite(manMax)) vmax = manMax;
+      for (const [id, set] of [["range-min", (n) => vmin = n], ["range-max", (n) => vmax = n]]) {
+        const raw = document.getElementById(id).value.trim();
+        if (raw === "") continue;              // 空欄は「自動」の意味なので警告しない
+        const n = Number(raw);
+        if (Number.isFinite(n)) set(n);
+        else ignoredRange.push(`${id === "range-min" ? "最小値" : "最大値"}「${raw}」`);
+      }
+    }
+
+    // 有効な数値が1つも無い列(全て空欄など)では、範囲が初期値のままになる。
+    // そのまま進めると凡例に「Infinity 〜 -Infinity」と表示されてしまうため、
+    // 着色せずに理由を伝えて止める
+    if (!Number.isFinite(vmin) || !Number.isFinite(vmax)) {
+      setStatus(
+        `「${attrLabel(attr)}」には色分けに使える数値がありません。\n` +
+        `値が全て空欄か、数値として読めない可能性があります。\n` +
+        `別の属性を選ぶか、CSVの内容を確認してください。`, true);
+      return;
     }
   }
 
@@ -3413,7 +3433,9 @@ function applyColorize() {
 
   let msg = `完了: ${matched} 個に反映 (対象属性: ${attr}, ${numericMode ? "数値" : "テキスト"})`;
   if (unmatched.length) msg += `\n未マッチ: ${unmatched.length} 個 (例: ${unmatched.slice(0, 5).join(", ")})`;
-  setStatus(msg, unmatched.length > 0);
+  // 入力を無視した場合は必ず知らせる(指定したのに効いていない、と誤解させない)
+  if (ignoredRange.length) msg += `\n範囲指定の${ignoredRange.join("・")}は数値として読めないため無視しました`;
+  setStatus(msg, unmatched.length > 0 || ignoredRange.length > 0);
   hasApplied = true;
   updateApplyBtnProminence();
   applyFilter();  // 色分け後にフィルタ状態を再適用

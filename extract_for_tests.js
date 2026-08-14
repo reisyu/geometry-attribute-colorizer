@@ -33,6 +33,7 @@ const FUNCS = [
   "solveFitDistance",
   "solveFitOrtho",
   "flipTriangleWinding",
+  "parseGLB",
 ];
 
 // 抽出対象の定数
