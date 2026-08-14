@@ -32,6 +32,7 @@ const TESTS = [
   ["test_winding.js", "GLB法線の巻き順"],
   ["test_adversarial.js", "異常入力への耐性"],
   ["test_rhino_dxf.js", "Rhino形式DXF"],
+  ["test_lwpolyline.js", "LWPOLYLINE形式DXF"],
   ["integration_test.js", "実データ統合"],
 ];
 

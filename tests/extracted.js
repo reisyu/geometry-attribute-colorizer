@@ -44,35 +44,74 @@ function ocsToWcs(verts, n) {
 async function parseDXF(text, onProgress) {
   const lines = text.split(/\r?\n/);
   const polylines = [];
+  const openLw = [];      // 閉じていないLWPOLYLINE(閉じたものが1つも無い場合のみ使う)
   let current = null;
   let inVertex = false;   // VERTEXエンティティの中にいるか
+  let isLw = false;       // 現在の要素がLWPOLYLINEか
   let x = 0, y = 0;
+  let lwX = null;         // LWPOLYLINEの頂点は 10(X) → 20(Y) の順に並ぶ
+  let lwElev = 0;         // LWPOLYLINEの標高(38)。全頂点のZになる
+  let bulges = 0;         // 円弧(バルジ)を直線とみなした数
   const totalPairs = lines.length;
+
+  /* 収集した輪郭を確定して配列へ入れる。
+     押し出し方向が(0,0,1)以外(Rhino等の2Dポリライン、OCS)ならWCSへ変換する */
+  const finalize = (pl, into) => {
+    if (!pl || pl.verts.length < 3) return;
+    const [ex, ey, ez] = pl.ext;
+    if (Math.abs(ex) > 1e-12 || Math.abs(ey) > 1e-12 || Math.abs(ez - 1) > 1e-12) {
+      pl.verts = ocsToWcs(pl.verts, pl.ext);
+    }
+    delete pl.ext;
+    delete pl.closed;
+    into.push(pl);
+  };
+
+  /* LWPOLYLINEはSEQENDを持たず、次の要素の開始(コード0)かファイル末尾で終わる。
+     標高は確定時にまとめて適用する(38は頂点の前後どちらに現れてもよいため) */
+  const finalizeLw = () => {
+    if (!isLw || !current) return;
+    if (lwElev !== 0) for (const v of current.verts) v[2] = lwElev;
+    finalize(current, current.closed ? polylines : openLw);
+    current = null;
+    isLw = false;
+  };
 
   for (let i = 0; i + 1 < lines.length; i += 2) {
     const code = lines[i].trim();
     const value = lines[i + 1].trim();
     if (code === "0") {
-      if (value === "POLYLINE") {
+      finalizeLw();
+      if (value === "LWPOLYLINE") {
+        // AutoCAD R14以降の標準的なポリライン。頂点を10/20の並びで直接持つ
+        current = { layer: "", verts: [], ext: [0, 0, 1], closed: false };
+        isLw = true; inVertex = false; lwX = null; lwElev = 0;
+      } else if (value === "POLYLINE") {
         current = { layer: "", verts: [], ext: [0, 0, 1] };
         inVertex = false;
       } else if (value === "VERTEX") {
         inVertex = true;
       } else if (value === "SEQEND") {
-        if (current && current.verts.length >= 3) {
-          // 押し出し方向が(0,0,1)以外の2Dポリライン(Rhino等)はOCS→WCS変換する
-          const [ex, ey, ez] = current.ext;
-          if (Math.abs(ex) > 1e-12 || Math.abs(ey) > 1e-12 || Math.abs(ez - 1) > 1e-12) {
-            current.verts = ocsToWcs(current.verts, current.ext);
-          }
-          delete current.ext;
-          polylines.push(current);
-        }
+        finalize(current, polylines);
         current = null;
         inVertex = false;
       }
     } else if (current) {
       if (code === "8" && current.layer === "") current.layer = value;
+      else if (isLw) {
+        // LWPOLYLINEはZを頂点ごとに持たず、標高(38)が全頂点に共通で効く
+        if (code === "10") lwX = parseFloat(value);
+        else if (code === "20" && lwX !== null) {
+          current.verts.push([lwX, parseFloat(value), 0]);
+          lwX = null;
+        }
+        else if (code === "38") lwElev = parseFloat(value);
+        else if (code === "70") current.closed = (parseInt(value, 10) & 1) === 1;
+        else if (code === "42" && parseFloat(value) !== 0) bulges++;  // 円弧は直線として扱う
+        else if (code === "210") current.ext[0] = parseFloat(value);
+        else if (code === "220") current.ext[1] = parseFloat(value);
+        else if (code === "230") current.ext[2] = parseFloat(value);
+      }
       else if (inVertex) {
         // 頂点はVERTEXエンティティ内でのみ収集する
         // (POLYLINEヘッダ自体にも10/20/30があるDXF(Rhino等)を誤読しないため)
@@ -92,6 +131,21 @@ async function parseDXF(text, onProgress) {
       await nextFrame();
     }
   }
+  finalizeLw();  // 末尾がLWPOLYLINEで終わるファイルの取りこぼしを防ぐ
+
+  /* 閉じたLWPOLYLINEを優先する。一般的なCADのDXFは断面線などの開いた線を
+     含むことがあり、それらを輪郭として扱うと無意味な属性が生まれるため。
+     ただし閉じフラグを立てないツールもあるので、閉じたものが1つも無い場合に限り
+     開いたものを採用する(0個で行き止まりになるのを避ける) */
+  let openUsed = 0;
+  if (polylines.length === 0 && openLw.length > 0) {
+    openUsed = openLw.length;
+    for (const pl of openLw) polylines.push(pl);
+  }
+  // 呼び出し側への補足情報(配列の要素数は変えずにプロパティで渡す)
+  polylines.bulges = bulges;
+  polylines.openSkipped = openUsed > 0 ? 0 : openLw.length;
+  polylines.openUsed = openUsed;
   return polylines;
 }
 
