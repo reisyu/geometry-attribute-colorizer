@@ -541,8 +541,44 @@ DXFワークフローでは2が不要なため)。
 
 - リポジトリ: `geometry-attribute-colorizer`(GitHub)、MIT License
 - 公開: GitHub Pages(`https://reisyu.github.io/geometry-attribute-colorizer/`)
-- 同梱物: `index.html` / `README.md` / `LICENSE` / `sample_ishigaki.dxf`
+- 同梱物: `index.html` / `help.html` / `README.md` / `LICENSE` /
+  `sample_ishigaki.dxf` / `assets/`(READMEの画像)
 - Blenderアドオン版(`CSV_Colorize_Addon`)は凍結。READMEに移行の旨を記す方針
+
+### 12.1 バージョン管理
+
+セマンティックバージョニング(メジャー.マイナー.パッチ)に従う。判定基準は
+CHANGELOG.md 冒頭に記載。
+
+**バージョン表記は4箇所に重複している。**
+
+| 場所 | 用途 |
+|---|---|
+| `index.html` の `APP_VERSION` | 画面表示、SVG出力への刻印 |
+| `help.html` の `HELP_VERSION` | 操作ガイドの見出し・フッター |
+| `SPECIFICATION.md` の「対象バージョン」 | この文書が対象とする版 |
+| `CHANGELOG.md` の最新見出し | リリース記録 |
+
+1箇所にまとめられないのは、**「index.html 1つで完結」(§2)を守るため**。
+共通のJSファイルに切り出すと単一ファイル配布が崩れ、ビルドで埋め込む方式は
+ビルド不要という前提そのものを壊す。重複を受け入れる代わりに、
+**`tests/test_version.js` が4箇所の一致を機械的に検証する**。
+
+実際にv1.1.0のとき仕様書だけ1.0.0のまま取り残された事故があった。
+このチェックを外さないこと。
+
+### 12.2 リリース手順
+
+1. 変更を実装し、`node tests/run_all.js` が全て通ることを確認する
+2. 4箇所のバージョンを上げ、CHANGELOG.mdに項目を追加する
+   (テストがバージョン一致とCHANGELOGの並び順を検証する)
+3. コミットする
+4. **タグを打つ**: `git tag -a v1.3.0 -m "..."`
+5. `git push origin main --follow-tags`
+
+タグを打つとGitHubのReleasesに並び、外から見て更新が続いていることが分かる。
+また「その版のコードを取り出す」ことができるようになる。
+v1.0.0以降しばらくタグを打っておらず、6件を後から補完した経緯がある。
 
 ---
 

@@ -25,6 +25,7 @@ try {
 }
 
 const TESTS = [
+  ["test_version.js", "バージョン表記の一致"],
   ["test_suite.js", "幾何計算・色計算"],
   ["test_rectline.js", "傾きライン"],
   ["test_palette.js", "カテゴリ色パレット"],
