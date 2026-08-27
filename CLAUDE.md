@@ -3,8 +3,8 @@
 石垣調査（石垣BIM）ワークフローのための、ジオメトリ属性計算・色分け可視化ツール。
 このファイルはClaude Codeがこのリポジトリで作業する際の前提とルールを記述する。
 
-> 注: `CLAUDE_blender_addon_OLD.md` は、このツールの前身である
-> Blenderアドオン版の記録。**現在は凍結されており、参照する必要はない。**
+> 注: 前身のBlenderアドオン版（`CSV_Colorize_Addon`）は別リポジトリで凍結済み。
+> 参照する必要はない。
 
 ## プロジェクトの性質
 
@@ -18,39 +18,48 @@
 
 | ファイル | 役割 |
 |---|---|
-| `index.html` | アプリ本体（唯一の実装ファイル。約4,000行） |
+| `index.html` | アプリ本体（唯一の実装ファイル。約4,900行） |
 | `help.html` | 操作ガイド（アプリと同じデザインの独立した1枚） |
 | `README.md` | 利用者向けの説明 |
 | `SPECIFICATION.md` | 設計意図・判断の記録（なぜそうしたかを残す文書） |
 | `CHANGELOG.md` | バージョンごとの変更履歴 |
-| `sample_ishigaki.dxf` | 同梱サンプルデータ |
+| `sample_ishigaki.dxf` | 同梱サンプルデータ（内蔵サンプルの元データでもある） |
+| `tools/embed_sample.js` | サンプルDXFから内蔵サンプル（座標のみ）を再生成する |
+| `extract_for_tests.js` | index.html から実関数を抽出して tests/extracted.js を作る |
+| `assets/hero-elevation.svg` | READMEの見出し画像。アプリ自身のSVG出力を使う |
 | `tests/` | Node.jsで動くテスト一式 |
 
 ## 開発時の必須ルール
 
-### 1. 計算ロジックを変更したらテストを再抽出して実行する
+### 1. 計算ロジックを変更したらテストを実行する
 
 テストは `index.html` から実関数を抽出した `tests/extracted.js` に対して実行する。
-そのため**コードを変更したら再抽出が必要**。
+**`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node extract_for_tests.js   # index.html から tests/extracted.js を再生成
-node tests/run_all.js       # 全テストを一括実行（95件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（12ファイル・189件）
 ```
 
-個別に実行する場合:
+抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
+古い `extracted.js` に対してテストが全て成功してしまう状態だった
+（`normalizeId` が常に "BROKEN" を返すよう改変しても全件成功した）。
 
-```bash
-cd tests
-node test_suite.js        # 幾何計算・色計算の単体テスト（40件）
-node test_rectline.js     # 傾きラインの計算（11件）
-node test_palette.js      # カテゴリ色パレット（3件）
-node test_fitview.js      # 全体表示のフィット計算（12件）
-node test_winding.js      # GLB法線の巻き順（3件）
-node test_adversarial.js  # 異常入力への耐性（12件）
-node test_rhino_dxf.js    # Rhino形式DXFの読み込み（9件）
-node integration_test.js  # 実データでの統合テスト（5件）
-```
+個別に実行する場合（いずれも `tests/` 内）:
+
+| ファイル | 内容 | 件数 |
+|---|---|---|
+| `test_version.js` | バージョン表記の一致（index/help/仕様書/CHANGELOG） | 8 |
+| `test_suite.js` | 幾何計算・色計算 | 40 |
+| `test_rectline.js` | 傾きラインの計算 | 11 |
+| `test_palette.js` | カテゴリ色パレット | 3 |
+| `test_fitview.js` | 全体表示のフィット計算 | 22 |
+| `test_winding.js` | GLB法線の巻き順 | 7 |
+| `test_adversarial.js` | 異常入力への耐性 | 12 |
+| `test_badinput.js` | 壊れた入力とエラーメッセージ | 36 |
+| `test_rhino_dxf.js` | Rhino形式DXFの読み込み | 9 |
+| `test_lwpolyline.js` | LWPOLYLINE形式DXFの読み込み | 20 |
+| `test_aspect.js` | アスペクト比 | 16 |
+| `integration_test.js` | 実データでの統合テスト | 5 |
 
 **全テストが通ることを確認してからコミットする。**
 
@@ -66,7 +75,16 @@ UI・3D描画・SVG出力を変更したら、必ずブラウザで実際に動�
 - セマンティックバージョニング（メジャー.マイナー.パッチ）
 - バージョンは `index.html` の `APP_VERSION` 定数と `help.html` の
   `HELP_VERSION` 定数の**両方**を更新する
-- リリース時は `CHANGELOG.md` に追記し、`git tag vX.Y.Z` を打つ
+- バージョンは `SPECIFICATION.md` 冒頭の「対象バージョン」も揃える
+  （`test_version.js` が4箇所の一致を検査する）
+- リリース時は `CHANGELOG.md` に追記し、`git tag -a vX.Y.Z` を打つ
+- **pushはブランチとタグを分けて送る**。同時に送るとGitHub Pagesのビルドが
+  起動しない（§12.2・§12.4に実測記録あり）
+
+  ```bash
+  git push origin main
+  git push origin vX.Y.Z
+  ```
 
 ## 設計上の重要な決定（変更しないこと）
 
@@ -78,6 +96,11 @@ UI・3D描画・SVG出力を変更したら、必ずブラウザで実際に動�
   面上に置くと凹凸に埋まって線が途切れる
 - **法線の向きは「壁全体の平均法線」で統一する**。個々の輪郭の巻き方向はバラバラなので、
   平均法線を基準に揃える（傾きライン・SVG立面図・GLB書き出しで共通の考え方）
+- **色分けの範囲は既定で手動指定（オン）**。誰が開いても同じ配色になり、
+  書き出したSVGを並べて比較できるようにするため。利便性を理由に既定を
+  自動へ戻さないこと
+- **利用者の指定した設定を黙って変えない**。範囲が成立しない場合も自動で
+  切り替えず、確認ダイアログで選ばせる（`showRangeDialog`）
 - **全体フィットはリセンタリング方式**。距離の二分探索＋画面内平行移動で余白を
   均等配分する。単純な対称フィットでは斜め視点で奥側に余白が残るため
 
@@ -101,8 +124,17 @@ UI・3D描画・SVG出力を変更したら、必ずブラウザで実際に動�
 
 ## 現在の状況
 
-- v1.0.0 リリース準備完了
-- 次の予定: 実データでの実戦検証（1万輪郭の速度、OBJ+テクスチャの重ね表示、
-  フィルタしきい値の妥当性、iPad操作確認）
-- 検証結果を見て次期機能（統計拡張、PNG書き出し、複数データセット比較など）の
-  優先度を判断する
+- **v1.9.0 を公開中**（https://reisyu.github.io/geometry-attribute-colorizer/）
+- DXFはPOLYLINE/VERTEXとLWPOLYLINEの両形式に対応済み。内蔵サンプルは
+  実際の石垣調査データ（123石）
+- GitHub Releaseは v1.8.0 / v1.9.0 が未作成（タグは存在する）。
+  作成は作者が手動で行う（`gh` CLI・トークンは未設定）
+
+### 検討中の項目
+
+- **設定のlocalStorage保存** — 保留中。作業環境の設定（不透明度・ラベル・
+  SVG書き出しオプションなど）のみを対象とし、**配色の基準は保存しない**方針を
+  推奨している。配色まで保存すると「誰が開いても同じ色」という前提が崩れるため。
+  設定をJSONファイルで受け渡す案も併せて検討中
+- 異常値の検出とフィルタリング
+- SVGのバッチ書き出し（ZIP化の可否が未決。外部ライブラリを増やさない方針との兼ね合い）
