@@ -1212,7 +1212,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.5.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.6.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3968,6 +3968,12 @@ function disposeModel() {
   updateApplyBtnProminence();
   clearTimeout(reapplyTimer);
 
+  // 手動範囲は元データに固有の値なので、別のモデルへ持ち越さない
+  manualRanges.clear();
+  rangeOwnerAttr = null;
+  document.getElementById("range-min").value = "";
+  document.getElementById("range-max").value = "";
+
   if (!modelRoot) return;
   modelRoot.traverse((obj) => {
     if (obj.isMesh) {
@@ -4247,6 +4253,44 @@ document.getElementById("use-mid").addEventListener("change", (e) => {
 });
 
 /* 手動範囲指定のトグル */
+/* ---- 手動範囲は属性ごとに保持する ----
+   範囲は属性に固有の意味を持つ(幅の 0.27〜0.86 を傾斜角に当てても無意味)。
+   1組しか持たないと、属性を切り替えたとき前の範囲が残り、値が範囲外に
+   振り切れて全オブジェクトが同じ色になる。凡例にも前の属性の範囲が出るため
+   原因に気づけない。属性ごとに覚えて切り替え時に入れ替える。
+   モデルを読み直したら破棄する(データが変われば適切な範囲も変わるため) */
+const manualRanges = new Map();   // 属性名 -> { min, max }
+let rangeOwnerAttr = null;        // 今入力欄に出ている範囲がどの属性のものか
+
+/* 入力欄の現在値を、その持ち主の属性に紐づけて覚える */
+function stashManualRange() {
+  if (!rangeOwnerAttr) return;
+  const min = document.getElementById("range-min").value.trim();
+  const max = document.getElementById("range-max").value.trim();
+  if (min === "" && max === "") manualRanges.delete(rangeOwnerAttr);
+  else manualRanges.set(rangeOwnerAttr, { min, max });
+}
+
+/* 指定した属性の範囲を入力欄に出す(未設定なら空欄=自動) */
+function restoreManualRange(attr) {
+  const r = manualRanges.get(attr) || { min: "", max: "" };
+  document.getElementById("range-min").value = r.min;
+  document.getElementById("range-max").value = r.max;
+  rangeOwnerAttr = attr || null;
+}
+
+/* 属性を切り替えるときに、前の属性の値を退避してから新しい値を出す。
+   色分けの再適用より先に走らせる必要があるため、changeの登録順に注意 */
+document.getElementById("attribute").addEventListener("change", () => {
+  stashManualRange();
+  restoreManualRange(document.getElementById("attribute").value);
+});
+
+/* 入力するたびに覚え直す(切り替え前に閉じないと取りこぼすため) */
+for (const id of ["range-min", "range-max"]) {
+  document.getElementById(id).addEventListener("input", stashManualRange);
+}
+
 document.getElementById("manual-range").addEventListener("change", (e) => {
   document.getElementById("manual-range-inputs").style.display = e.target.checked ? "block" : "none";
 });
@@ -4265,6 +4309,8 @@ document.getElementById("autofill-range-btn").addEventListener("click", () => {
   if (Number.isFinite(mn)) {
     document.getElementById("range-min").value = Number(mn.toPrecision(6));
     document.getElementById("range-max").value = Number(mx.toPrecision(6));
+    rangeOwnerAttr = attr;
+    stashManualRange();   // 取得した値もその属性のものとして覚える
   }
 });
 
