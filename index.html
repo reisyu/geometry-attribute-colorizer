@@ -892,6 +892,24 @@
     </div>
 
     <details class="adv">
+      <summary>まとめて書き出す(ZIP)</summary>
+      <div class="row hint">
+        チェックした属性ごとに立面図を書き出し、ZIPファイル1つにまとめて保存します。
+        向きと縮尺が揃うので、並べて見比べられます
+      </div>
+      <div class="row" id="batch-attr-list"></div>
+      <div class="row">
+        <label class="checkbox-row"><input type="checkbox" id="batch-inc-lines" checked> 傾きラインの線画(色分けなし)も含める</label>
+      </div>
+      <div class="row hint">
+        色・線の太さ・含める要素は、下の「SVGの詳細設定」に従います
+      </div>
+      <div class="row">
+        <button class="ghost" id="batch-export-btn" disabled style="margin-top:0">選んだ図をZIPで保存</button>
+      </div>
+    </details>
+
+    <details class="adv">
       <summary>SVGの詳細設定(含める要素・線の太さ)</summary>
       <div class="row">
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-legend" checked> 凡例(ヒストグラム付き)</label>
@@ -1262,7 +1280,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.9.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.10.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2613,14 +2631,111 @@ function exportFileName(base) {
 }
 
 /* 組み立てたSVGをファイルとして保存する */
-function downloadSVG(svgText, filename, message) {
-  const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+function downloadBlob(blob, filename, message) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
   setStatus(message);
+}
+
+function downloadSVG(svgText, filename, message) {
+  downloadBlob(new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }), filename, message);
+}
+
+/* ============================================================
+   ZIP書き出し(外部ライブラリなし)
+   ・複数のSVGを1つにまとめて渡すために使う。ブラウザ標準の
+     CompressionStreamでdeflate圧縮するので依存は増えない
+     (SVGはテキストなので約30%まで縮む)
+   ・CompressionStreamが無い環境では無圧縮(store)で格納する。
+     ZIPとしては正しく開けるため、ファイルが散らばらないという
+     目的は果たせる
+   ・ファイル名にデータ名(日本語を含みうる)が入るため、名前はUTF-8で
+     書き、汎用フラグのbit11を立てて解凍側に伝える
+============================================================ */
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC32_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+async function deflateRaw(bytes) {
+  if (typeof CompressionStream === "undefined") return null;
+  const cs = new CompressionStream("deflate-raw");
+  const writer = cs.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+
+/* entries: [{ name, text }] を1つのZIPのBlobにまとめる */
+async function buildZip(entries) {
+  const enc = new TextEncoder();
+  const body = [], central = [];
+  let offset = 0;
+  // 更新日時はMS-DOS形式(日付と時刻を16bitずつ、秒は2秒単位)
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+  for (const e of entries) {
+    const nameBytes = enc.encode(e.name);
+    const raw = enc.encode(e.text);
+    let data = await deflateRaw(raw);
+    let method = 8;
+    if (!data || data.length >= raw.length) { data = raw; method = 0; }  // 縮まないなら無圧縮
+    const crc = crc32(raw);
+
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);       // 展開に必要なバージョン(2.0)
+    local.setUint16(6, 0x0800, true);   // bit11: ファイル名はUTF-8
+    local.setUint16(8, method, true);
+    local.setUint16(10, dosTime, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, raw.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    body.push(new Uint8Array(local.buffer), nameBytes, data);
+
+    const dir = new DataView(new ArrayBuffer(46));
+    dir.setUint32(0, 0x02014b50, true);
+    dir.setUint16(4, 20, true);         // 作成バージョン
+    dir.setUint16(6, 20, true);         // 展開に必要なバージョン
+    dir.setUint16(8, 0x0800, true);
+    dir.setUint16(10, method, true);
+    dir.setUint16(12, dosTime, true);
+    dir.setUint16(14, dosDate, true);
+    dir.setUint32(16, crc, true);
+    dir.setUint32(20, data.length, true);
+    dir.setUint32(24, raw.length, true);
+    dir.setUint16(28, nameBytes.length, true);
+    dir.setUint32(42, offset, true);    // このファイルのローカルヘッダ位置
+    central.push(new Uint8Array(dir.buffer), nameBytes);
+    offset += 30 + nameBytes.length + data.length;
+  }
+
+  const centralSize = central.reduce((a, b) => a + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true);
+  end.setUint16(10, entries.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);      // 中央ディレクトリの開始位置
+  return new Blob([...body, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
 }
 
 /* ============================================================
@@ -2630,7 +2745,10 @@ function downloadSVG(svgText, filename, message) {
    ・凡例(タイトル・ヒストグラム・グラデーションバー・最小最大)を埋め込む
    ・ラベル表示がONなら、石ごとのテキストも出力する
 ============================================================ */
-function exportElevationSVG() {
+/* 立面図SVGを組み立てて { svg, count } で返す。書けない場合は null。
+   opt を引数で受け取るのは、まとめ書き出しが属性ごと・線画用に
+   違う設定で呼ぶため(画面のチェックを書き換えずに済ませる) */
+function buildElevationSVG(opt) {
   // 対象: 輪郭モデルかつ表示中(フィルタ除外は出力しない)
   const items = [];
   let refNormal = null;
@@ -2669,7 +2787,7 @@ function exportElevationSVG() {
 
   if (items.length === 0) {
     setStatus("SVG書き出しはDXF/サンプルから読み込んだモデルでのみ利用できます。", true);
-    return;
+    return null;
   }
 
   // 視線方向: 平均法線を水平化(立面図なので上下方向の成分を除去)
@@ -2718,8 +2836,14 @@ function exportElevationSVG() {
     }),
   };
 
-  const svg = buildExportSVG(items, view, readSVGExportOptions());
-  downloadSVG(svg, exportFileName("elevation.svg"), `立面図SVGを書き出しました: ${items.length} オブジェクト`);
+  return { svg: buildExportSVG(items, view, opt), count: items.length };
+}
+
+/* 立面図SVGを1枚だけ書き出して保存する */
+function exportElevationSVG() {
+  const r = buildElevationSVG(readSVGExportOptions());
+  if (!r) return;
+  downloadSVG(r.svg, exportFileName("elevation.svg"), `立面図SVGを書き出しました: ${r.count} オブジェクト`);
 }
 
 /* 塗りつぶしなし(線画)のときは色の凡例が意味を持たないため連動して外す */
@@ -2735,6 +2859,130 @@ document.getElementById("svg-no-fill").addEventListener("change", (e) => {
 });
 
 document.getElementById("export-svg-btn").addEventListener("click", exportElevationSVG);
+
+/* ============================================================
+   まとめて書き出す(ZIP)
+   ・チェックした属性ごとに色分けし直して立面図SVGを作り、1つのZIPにまとめる
+   ・見比べるための機能なので、向きと縮尺が揃う立面図に限る
+     (現在のビューは視点次第で縮尺が変わるため対象にしない)
+   ・書き出しの前後で画面の状態を必ず元に戻す。属性・範囲の入力欄・
+     色分け済みかどうかを退避しておき、最後に復元する
+============================================================ */
+const BATCH_DEFAULT_ATTRS = ["Width", "Height", "Area", "FillRate", "Aspect", "Tilt"];
+// RectAngle(矩形回転角)は既定で外す。傾きラインの線画が同じ情報を
+// より読み取りやすい形で示すため、色分け図と二重になる
+
+let batchRunning = false;   // 実行中は範囲のダイアログを出さない(applyColorizeが参照)
+
+function refreshBatchAttrList() {
+  const box = document.getElementById("batch-attr-list");
+  const idCol = document.getElementById("id-column").value;
+  const cols = csvColumns.filter((c) => c !== idCol);
+  box.innerHTML = "";
+  if (!cols.length) {
+    box.className = "row hint";
+    box.textContent = "(属性データを読み込むと、ここに一覧が出ます)";
+    return;
+  }
+  box.className = "row";
+  for (const c of cols) {
+    const label = document.createElement("label");
+    label.className = "checkbox-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = c;
+    cb.checked = BATCH_DEFAULT_ATTRS.includes(c);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + attrLabel(c)));
+    box.appendChild(label);
+  }
+}
+
+async function exportBatchSVG() {
+  const NL = String.fromCharCode(10);
+  const attrs = [...document.querySelectorAll("#batch-attr-list input")]
+    .filter((cb) => cb.checked).map((cb) => cb.value);
+  const withLines = document.getElementById("batch-inc-lines").checked;
+  if (!attrs.length && !withLines) {
+    setStatus("書き出すものが選ばれていません。属性にチェックを入れるか、傾きラインの線画を選んでください。", true);
+    return;
+  }
+
+  // 画面の状態を退避する(最後に必ず戻す)
+  const sel = document.getElementById("attribute");
+  const prevAttr = sel.value;
+  const prevApplied = hasApplied;
+  clearTimeout(reapplyTimer);
+  stashManualRange();   // 入力欄の現在値を持ち主の属性へ預けてから切り替える
+
+  batchRunning = true;
+  const entries = [], skipped = [];
+  const stem = exportFileName("elevation");
+  const total = attrs.length + (withLines ? 1 : 0);
+  try {
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      showProgress(`まとめて書き出し中... ${attrLabel(attr)} (${i + 1}/${total})`, (i + 1) / total);
+      await new Promise((r) => setTimeout(r, 0));   // 進捗表示を描き直す隙を作る
+      stashManualRange();
+      sel.value = attr;
+      restoreManualRange(attr);
+      updateAttrDescription();
+      if (!applyColorize()) { skipped.push(attrLabel(attr)); continue; }
+      const r = buildElevationSVG(readSVGExportOptions());
+      if (r) entries.push({ name: stem + "_" + attr + ".svg", text: r.svg });
+    }
+
+    if (withLines) {
+      showProgress(`まとめて書き出し中... 傾きラインの線画 (${total}/${total})`, 1);
+      await new Promise((r) => setTimeout(r, 0));
+      // 線画は塗りつぶさないので石の色は関係ない。色分けをやり直す必要はなく、
+      // 凡例も色を説明するものなので外す
+      const lineOpt = { ...readSVGExportOptions(), noFill: true, incLines: true, incLegend: false, incLabels: false };
+      const r = buildElevationSVG(lineOpt);
+      if (r) entries.push({ name: stem + "_lines.svg", text: r.svg });
+    }
+  } finally {
+    batchRunning = false;
+    // 退避しておいた状態に戻す
+    stashManualRange();
+    sel.value = prevAttr;
+    restoreManualRange(prevAttr);
+    updateAttrDescription();
+    if (prevApplied) {
+      applyColorize();
+    } else {
+      // 元々は色分けしていなかったので、元のマテリアルに戻す
+      for (const { mesh } of meshes) {
+        const orig = originalMaterials.get(mesh.uuid);
+        if (orig) mesh.material = orig;
+      }
+      document.getElementById("legend").style.display = "none";
+      hasApplied = false;
+      updateApplyBtnProminence();
+    }
+    hideProgress();
+  }
+
+  if (!entries.length) {
+    setStatus("書き出せる図がありませんでした。" + NL + "属性の選択とデータの内容を確認してください。", true);
+    return;
+  }
+  const zip = await buildZip(entries);
+  let msg = `${entries.length} 枚の図をZIPにまとめました (${Math.round(zip.size / 1024)} KB)`;
+  if (skipped.length) {
+    msg += NL + `範囲が成立しないため飛ばした属性: ${skipped.join("・")}` +
+      NL + "(最小値が最大値を上回っています。範囲を見直すか、チェックを外してください)";
+  }
+  downloadBlob(zip, exportFileName("elevation.zip"), msg);
+}
+
+document.getElementById("batch-export-btn").addEventListener("click", () => {
+  exportBatchSVG().catch((e) => {
+    hideProgress();
+    setStatus("まとめ書き出しに失敗しました: " + (e && e.message ? e.message : e), true);
+  });
+});
 
 /* ============================================================
    現在のビューをSVGで保存
@@ -3269,6 +3517,7 @@ function refreshAttributeOptions() {
     attrSel.appendChild(o);
   });
   attrSel.disabled = attrSel.options.length === 0;
+  refreshBatchAttrList();
   updateAttrDescription();
   restoreManualRange(attrSel.value);   // 起動直後に選ばれている属性にも既定値を出す
 }
@@ -3291,6 +3540,7 @@ document.getElementById("id-column").addEventListener("change", refreshAttribute
 function updateApplyEnabled() {
   const ok = meshes.length > 0 && csvRows.length > 0;
   document.getElementById("apply-btn").disabled = !ok;
+  document.getElementById("batch-export-btn").disabled = !ok;
 }
 
 /* ============================================================
@@ -3444,8 +3694,11 @@ function applyColorize() {
         if (Number.isFinite(n)) { dMin = Math.min(dMin, n); dMax = Math.max(dMax, n); }
       }
       if (Number.isFinite(dMin)) {
+        // まとめ書き出し中は属性を次々に切り替えるため、ダイアログを出すと
+        // 手が止まってしまう。この属性だけ飛ばし、後でまとめて知らせる
+        if (batchRunning) return false;
         showRangeDialog(attr, vmin, vmax, dMin, dMax);
-        return;   // 選択が済むまで着色しない
+        return false;   // 選択が済むまで着色しない
       }
     }
 
@@ -3457,7 +3710,7 @@ function applyColorize() {
         `「${attrLabel(attr)}」には色分けに使える数値がありません。\n` +
         `値が全て空欄か、数値として読めない可能性があります。\n` +
         `別の属性を選ぶか、CSVの内容を確認してください。`, true);
-      return;
+      return false;
     }
   }
 
@@ -3534,6 +3787,7 @@ function applyColorize() {
   hasApplied = true;
   updateApplyBtnProminence();
   applyFilter();  // 色分け後にフィルタ状態を再適用
+  return true;
 }
 
 document.getElementById("apply-btn").addEventListener("click", applyColorize);
@@ -4334,8 +4588,8 @@ document.getElementById("use-mid").addEventListener("change", (e) => {
    ここに無い属性は空欄(自動)から始まる。利用者が入力欄を空にした場合は
    その状態を覚えるため、既定値が復活することはない */
 const DEFAULT_RANGES = {
-  Width:     { min: "",     max: "1.5" },  // 極端に大きい石で色が潰れないように上限を置く
-  Height:    { min: "",     max: "1.5" },
+  Width:     { min: "0.1",  max: "1.5" },  // 極端に大きい/小さい石で色が潰れないように上下限を置く
+  Height:    { min: "0.1",  max: "1.5" },
   Area:      { min: "0.1",  max: "1"   },
   FillRate:  { min: "0.5",  max: "0.9" },  // 0〜1の値だが、実データは中央付近に集まる
   Aspect:    { min: "0.25", max: "4"   },  // 1をまたぐ範囲(縦長・横長の両方を含む)

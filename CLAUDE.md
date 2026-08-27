@@ -37,7 +37,7 @@
 **`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node tests/run_all.js       # 抽出 + 全テストを一括実行（12ファイル・189件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（13ファイル・208件）
 ```
 
 抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
@@ -59,6 +59,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（12ファイ
 | `test_rhino_dxf.js` | Rhino形式DXFの読み込み | 9 |
 | `test_lwpolyline.js` | LWPOLYLINE形式DXFの読み込み | 20 |
 | `test_aspect.js` | アスペクト比 | 16 |
+| `test_zip.js` | ZIP書き出し(CRC32・ZIP構造) | 19 |
 | `integration_test.js` | 実データでの統合テスト | 5 |
 
 **全テストが通ることを確認してからコミットする。**

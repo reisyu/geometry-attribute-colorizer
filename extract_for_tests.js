@@ -34,6 +34,9 @@ const FUNCS = [
   "solveFitOrtho",
   "flipTriangleWinding",
   "parseGLB",
+  "crc32",
+  "deflateRaw",
+  "buildZip",
 ];
 
 // 抽出対象の定数
@@ -93,6 +96,13 @@ const parts = [
 // HUE_RANGES は numericToColor が参照する定数
 const hue = src.match(/const HUE_RANGES = [\s\S]*?;/);
 if (hue) parts.push(hue[0]);
+
+// CRC32_TABLE は crc32 が参照する(即時実行で作るため、配列形式の抽出では拾えない)
+const crcStart = src.indexOf("const CRC32_TABLE =");
+if (crcStart >= 0) {
+  const crcEnd = src.indexOf("})();", crcStart);
+  parts.push(src.slice(crcStart, crcEnd + 5));
+}
 
 for (const c of CONSTS) parts.push(extractConst(c));
 for (const f of FUNCS) parts.push(extractFunction(f));

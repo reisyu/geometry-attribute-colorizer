@@ -8,6 +8,16 @@ function nextFrame(){ return Promise.resolve(); }
 
 const HUE_RANGES = { RED_BLUE: [0.0, 0.66], RED_GREEN: [0.0, 0.33], YELLOW_BLUE: [0.16, 0.66] };
 
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
 const PALETTE = [
   [0.90, 0.20, 0.20], [0.20, 0.55, 0.90], [0.25, 0.75, 0.35], [0.95, 0.65, 0.15],
   [0.60, 0.30, 0.80], [0.20, 0.80, 0.80], [0.85, 0.75, 0.15], [0.90, 0.45, 0.65],
@@ -490,4 +500,76 @@ function parseGLB(arrayBuffer) {
   return { json, bin };
 }
 
-module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB };
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC32_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+async function deflateRaw(bytes) {
+  if (typeof CompressionStream === "undefined") return null;
+  const cs = new CompressionStream("deflate-raw");
+  const writer = cs.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+
+async function buildZip(entries) {
+  const enc = new TextEncoder();
+  const body = [], central = [];
+  let offset = 0;
+  // 更新日時はMS-DOS形式(日付と時刻を16bitずつ、秒は2秒単位)
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+  for (const e of entries) {
+    const nameBytes = enc.encode(e.name);
+    const raw = enc.encode(e.text);
+    let data = await deflateRaw(raw);
+    let method = 8;
+    if (!data || data.length >= raw.length) { data = raw; method = 0; }  // 縮まないなら無圧縮
+    const crc = crc32(raw);
+
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);       // 展開に必要なバージョン(2.0)
+    local.setUint16(6, 0x0800, true);   // bit11: ファイル名はUTF-8
+    local.setUint16(8, method, true);
+    local.setUint16(10, dosTime, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, raw.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    body.push(new Uint8Array(local.buffer), nameBytes, data);
+
+    const dir = new DataView(new ArrayBuffer(46));
+    dir.setUint32(0, 0x02014b50, true);
+    dir.setUint16(4, 20, true);         // 作成バージョン
+    dir.setUint16(6, 20, true);         // 展開に必要なバージョン
+    dir.setUint16(8, 0x0800, true);
+    dir.setUint16(10, method, true);
+    dir.setUint16(12, dosTime, true);
+    dir.setUint16(14, dosDate, true);
+    dir.setUint32(16, crc, true);
+    dir.setUint32(20, data.length, true);
+    dir.setUint32(24, raw.length, true);
+    dir.setUint16(28, nameBytes.length, true);
+    dir.setUint32(42, offset, true);    // このファイルのローカルヘッダ位置
+    central.push(new Uint8Array(dir.buffer), nameBytes);
+    offset += 30 + nameBytes.length + data.length;
+  }
+
+  const centralSize = central.reduce((a, b) => a + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true);
+  end.setUint16(10, entries.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);      // 中央ディレクトリの開始位置
+  return new Blob([...body, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+}
+
+module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip };
