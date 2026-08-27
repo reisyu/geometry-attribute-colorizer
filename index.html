@@ -1208,7 +1208,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.3.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.4.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1261,6 +1261,7 @@ const ATTR_INFO = {
   Height:    { jp: "高さ",     desc: "最小外接矩形の2辺のうち、鉛直に近い方の辺の長さ" },
   Area:      { jp: "面積",     desc: "フィット平面に投影した輪郭の面積" },
   FillRate:  { jp: "矩形充填率", desc: "輪郭の面積 ÷ 外接矩形の面積(1に近いほど矩形に近い形)" },
+  Aspect:    { jp: "アスペクト比", desc: "幅 ÷ 高さ。1より大きいほど横長、1より小さいほど縦長。1に近いほど正方形に近い" },
   Tilt:      { jp: "傾斜角",   desc: "面の法線と鉛直(+Z)のなす角。0°=水平な面、90°=垂直な面" },
   RectAngle: { jp: "矩形回転角", desc: "外接矩形の水平辺が面内の水平基準から回転している角度。反時計回り(右上がり)がプラス" },
   Flatness:  { jp: "平面性",   desc: "フィット平面からの最大ズレ距離。大きいほど平面近似の信頼性が低い" },
@@ -1990,7 +1991,10 @@ function computeContourAttributes(verts) {
     }
   }
 
-  return { width, height, area, fillRate, tilt, rectAngle, flatness, selfIntersect, rectLine, pts2d };
+  // アスペクト比: 幅÷高さ。1より大きいほど横長、小さいほど縦長。
+  // 高さが0に潰れた輪郭でInfinityにならないよう保護する(その場合はnull=値なし)
+  const aspect = height > 1e-12 ? width / height : null;
+  return { width, height, area, fillRate, tilt, rectAngle, flatness, selfIntersect, aspect, rectLine, pts2d };
 }
 
 function loadDXFFile(file) {
@@ -2048,7 +2052,7 @@ function loadDXFFile(file) {
       modelRoot = new THREE.Group();
       modelRoot.name = "DXF";
       meshes = [];
-      const csvLines = ["ID,Width,Height,Area,FillRate,Tilt,RectAngle,Flatness,SelfIntersect,X,Y,Z,SrcID"];
+      const csvLines = ["ID,Width,Height,Area,FillRate,Aspect,Tilt,RectAngle,Flatness,SelfIntersect,X,Y,Z,SrcID"];
       let failed = 0;
       const usedIds = new Set();  // IDの一意化用(同一レイヤーのDXF対策)
 
@@ -2116,7 +2120,7 @@ function loadDXFFile(file) {
 
           csvLines.push(
             `${id},${attrs.width.toFixed(4)},${attrs.height.toFixed(4)},` +
-            `${attrs.area.toFixed(6)},${attrs.fillRate.toFixed(4)},${attrs.tilt.toFixed(2)},` +
+            `${attrs.area.toFixed(6)},${attrs.fillRate.toFixed(4)},${attrs.aspect === null ? "" : attrs.aspect.toFixed(4)},${attrs.tilt.toFixed(2)},` +
             `${attrs.rectAngle.toFixed(2)},${attrs.flatness.toFixed(4)},${attrs.selfIntersect},` +
             `${gx.toFixed(4)},${gy.toFixed(4)},${gz.toFixed(4)},${id}`
           );
@@ -2179,7 +2183,7 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
   const blob = new Blob(["\uFEFF" + header + "\n" + body], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "attributes.csv";
+  a.download = exportFileName("attributes.csv");
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -2338,7 +2342,7 @@ function exportGLB() {
   const blob = new Blob([out], { type: "model/gltf-binary" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "model_with_ids.glb";
+  a.download = exportFileName("model_with_ids.glb");
   a.click();
   URL.revokeObjectURL(a.href);
   setStatus(`ID付きGLBを書き出しました: ${meshes.length} オブジェクト`);
@@ -2535,6 +2539,25 @@ function buildExportSVG(items, view, opt) {
   return parts.join("\n");
 }
 
+/* 書き出しファイル名の先頭にデータ名を付ける。
+   複数の壁面を扱うと elevation.svg のような固定名では区別できないため。
+   OSがファイル名に使えない文字は _ に置き換え、制御文字は捨てる。
+   先頭末尾のドット・空白・アンダースコアはWindowsで問題になるので落とす。
+   データ名が空なら従来どおりの名前にする */
+const FILENAME_NG = '/:*?"<>|' + String.fromCharCode(92);  // 92 = バックスラッシュ
+const FILENAME_TRIM = '._ ' + String.fromCharCode(0x3000);  // 全角空白も対象
+function exportFileName(base) {
+  let out = '';
+  for (const ch of String(document.getElementById('dataset-name').value)) {
+    if (ch.charCodeAt(0) < 0x20) continue;                       // 制御文字
+    out += (FILENAME_NG.indexOf(ch) >= 0 || ch === ' ') ? '_' : ch;
+  }
+  while (out.length && FILENAME_TRIM.indexOf(out[0]) >= 0) out = out.slice(1);
+  while (out.length && FILENAME_TRIM.indexOf(out[out.length - 1]) >= 0) out = out.slice(0, -1);
+  out = out.slice(0, 80);
+  return out ? out + '_' + base : base;
+}
+
 /* 組み立てたSVGをファイルとして保存する */
 function downloadSVG(svgText, filename, message) {
   const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
@@ -2642,7 +2665,7 @@ function exportElevationSVG() {
   };
 
   const svg = buildExportSVG(items, view, readSVGExportOptions());
-  downloadSVG(svg, "elevation.svg", `立面図SVGを書き出しました: ${items.length} オブジェクト`);
+  downloadSVG(svg, exportFileName("elevation.svg"), `立面図SVGを書き出しました: ${items.length} オブジェクト`);
 }
 
 /* 塗りつぶしなし(線画)のときは色の凡例が意味を持たないため連動して外す */
@@ -2737,7 +2760,7 @@ function exportCurrentViewSVG() {
   };
 
   const svg = buildExportSVG(items, view, readSVGExportOptions());
-  downloadSVG(svg, "view.svg", `現在のビューをSVGで書き出しました: ${items.length} オブジェクト`);
+  downloadSVG(svg, exportFileName("view.svg"), `現在のビューをSVGで書き出しました: ${items.length} オブジェクト`);
 }
 
 document.getElementById("export-current-view-svg-btn").addEventListener("click", exportCurrentViewSVG);
@@ -3463,8 +3486,19 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   document.getElementById("legend").style.display = "none";
   document.getElementById("inspector").style.display = "none";
   showLabelsCheckbox.checked = false;
+
+  // フィルタも解除する。半透明での除外表示は色分け用マテリアルにしか
+  // 効かないため、色を元に戻したままフィルタを有効にしておくと
+  // 「除外: N個」と出ているのに画面上は1つも除外されない状態になる
+  const filterWasOn = document.getElementById("filter-enable").checked;
+  if (filterWasOn) {
+    document.getElementById("filter-enable").checked = false;
+    document.getElementById("filter-body").style.display = "none";
+    applyFilter();   // 除外フラグ・表示状態・件数表示を戻す
+  }
   rebuildLabels();
-  setStatus("色を元に戻しました。");
+  const note = String.fromCharCode(10) + "フィルタも解除しました(フィルタは色分けと合わせて使います)。";
+  setStatus("色を元に戻しました。" + (filterWasOn ? note : ""));
 });
 
 /* ============================================================
@@ -3733,6 +3767,14 @@ function applyFilter() {
 }
 
 document.getElementById("filter-enable").addEventListener("change", () => {
+  // フィルタは色分け済みであることが前提(属性の紐づけと、除外表示に使う
+  // マテリアルの両方が色分けで用意される)。未実行のまま有効にすると
+  // 除外件数だけ出て画面が変わらないため、その場で戻して理由を伝える
+  if (document.getElementById("filter-enable").checked && !hasApplied) {
+    document.getElementById("filter-enable").checked = false;
+    setStatus("フィルタを使うには先に「色分けを実行」してください。", true);
+    return;
+  }
   const on = document.getElementById("filter-enable").checked;
   document.getElementById("filter-body").style.display = on ? "block" : "none";
   // 初めて有効化したとき、条件行が無ければ1つ用意する
@@ -4295,7 +4337,7 @@ function loadSampleData() {
   }
   const ox = (mnx + mxx) / 2, oy = (mny + mxy) / 2, oz = (mnz + mxz) / 2;
 
-  const csvLines = ["ID,Width,Height,Area,FillRate,Tilt,RectAngle,Flatness,SelfIntersect,X,Y,Z,SrcID"];
+  const csvLines = ["ID,Width,Height,Area,FillRate,Aspect,Tilt,RectAngle,Flatness,SelfIntersect,X,Y,Z,SrcID"];
   for (const contour of contours) {
     const attrs = computeContourAttributes(contour.verts);
     if (!attrs) continue;
@@ -4338,7 +4380,7 @@ function loadSampleData() {
 
     csvLines.push(
       `${contour.id},${attrs.width.toFixed(4)},${attrs.height.toFixed(4)},` +
-      `${attrs.area.toFixed(6)},${attrs.fillRate.toFixed(4)},${attrs.tilt.toFixed(2)},` +
+      `${attrs.area.toFixed(6)},${attrs.fillRate.toFixed(4)},${attrs.aspect === null ? "" : attrs.aspect.toFixed(4)},${attrs.tilt.toFixed(2)},` +
       `${attrs.rectAngle.toFixed(2)},${attrs.flatness.toFixed(4)},${attrs.selfIntersect},` +
       `${gx.toFixed(4)},${gy.toFixed(4)},${gz.toFixed(4)},${contour.id}`
     );

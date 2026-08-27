@@ -35,6 +35,7 @@ const TESTS = [
   ["test_badinput.js", "壊れた入力とメッセージ"],
   ["test_rhino_dxf.js", "Rhino形式DXF"],
   ["test_lwpolyline.js", "LWPOLYLINE形式DXF"],
+  ["test_aspect.js", "アスペクト比"],
   ["integration_test.js", "実データ統合"],
 ];
 

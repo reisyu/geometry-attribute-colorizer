@@ -350,7 +350,10 @@ function computeContourAttributes(verts) {
     }
   }
 
-  return { width, height, area, fillRate, tilt, rectAngle, flatness, selfIntersect, rectLine, pts2d };
+  // アスペクト比: 幅÷高さ。1より大きいほど横長、小さいほど縦長。
+  // 高さが0に潰れた輪郭でInfinityにならないよう保護する(その場合はnull=値なし)
+  const aspect = height > 1e-12 ? width / height : null;
+  return { width, height, area, fillRate, tilt, rectAngle, flatness, selfIntersect, aspect, rectLine, pts2d };
 }
 
 function hsvToRgb(h, s, v) {
