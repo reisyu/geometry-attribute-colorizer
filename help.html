@@ -379,6 +379,21 @@
       <strong>指定した範囲は属性ごとに覚えます</strong>ので、属性を切り替えて戻ってきても
       前の設定がそのまま残ります（別のモデルを読み込むとリセットされます）。
     </p>
+    <p>
+      よく使う属性には<strong>初期値</strong>が入っています。毎回同じ基準で色を描けるので、
+      別の壁面と見比べるときに色の意味が揃います。値は自由に変更でき、
+      欄を空にすればその属性は自動（データの最小・最大）に戻ります。
+    </p>
+    <table>
+      <tr><th>属性</th><th>初期値</th></tr>
+      <tr><td>Width（幅） / Height（高さ）</td><td>上限 1.5</td></tr>
+      <tr><td>Area（面積）</td><td>0.1 〜 1</td></tr>
+      <tr><td>FillRate（矩形充填率）</td><td>0.5 〜 0.9</td></tr>
+      <tr><td>Aspect（アスペクト比）</td><td>0.25 〜 4</td></tr>
+      <tr><td>Tilt（傾斜角）</td><td>30 〜 90</td></tr>
+      <tr><td>RectAngle（矩形回転角）</td><td>-45 〜 45</td></tr>
+      <tr><td>上記以外</td><td>空欄（自動）</td></tr>
+    </table>
     <div class="note">
       <code>Aspect</code>（アスペクト比）は<strong>形そのものではなく向きに依存する値</strong>です。
       幅は「水平に近い辺」、高さは「鉛直に近い辺」と決めているため、
@@ -609,7 +624,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.6.0";
+  const HELP_VERSION = "1.7.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

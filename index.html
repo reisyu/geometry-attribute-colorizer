@@ -1212,7 +1212,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.6.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.7.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3220,6 +3220,7 @@ function refreshAttributeOptions() {
   });
   attrSel.disabled = attrSel.options.length === 0;
   updateAttrDescription();
+  restoreManualRange(attrSel.value);   // 起動直後に選ばれている属性にも既定値を出す
 }
 
 function updateAttrDescription() {
@@ -4259,21 +4260,39 @@ document.getElementById("use-mid").addEventListener("change", (e) => {
    振り切れて全オブジェクトが同じ色になる。凡例にも前の属性の範囲が出るため
    原因に気づけない。属性ごとに覚えて切り替え時に入れ替える。
    モデルを読み直したら破棄する(データが変われば適切な範囲も変わるため) */
+/* 属性ごとの範囲の初期値。色のグラデーションを毎回同じ基準で描くための出発点で、
+   調査で扱う値の常識的な範囲に合わせてある。空欄は「自動(データの最小・最大)」の意味。
+
+   ここに無い属性は空欄(自動)から始まる。利用者が入力欄を空にした場合は
+   その状態を覚えるため、既定値が復活することはない */
+const DEFAULT_RANGES = {
+  Width:     { min: "",     max: "1.5" },  // 極端に大きい石で色が潰れないように上限を置く
+  Height:    { min: "",     max: "1.5" },
+  Area:      { min: "0.1",  max: "1"   },
+  FillRate:  { min: "0.5",  max: "0.9" },  // 0〜1の値だが、実データは中央付近に集まる
+  Aspect:    { min: "0.25", max: "4"   },  // 1をまたぐ範囲(縦長・横長の両方を含む)
+  Tilt:      { min: "30",   max: "90"  },  // 90が定義上の最大(垂直な面)
+  RectAngle: { min: "-45",  max: "45"  },  // 定義上の範囲。中間色を白にすると左右対称に見える
+};
+
 const manualRanges = new Map();   // 属性名 -> { min, max }
 let rangeOwnerAttr = null;        // 今入力欄に出ている範囲がどの属性のものか
 
-/* 入力欄の現在値を、その持ち主の属性に紐づけて覚える */
+/* 入力欄の現在値を、その持ち主の属性に紐づけて覚える。
+   空欄も削除ではなく空欄として記録する。削除にすると、既定値のある属性で
+   「自動に戻したい」と欄を空にしても、戻ってきたときに既定値が復活してしまう */
 function stashManualRange() {
   if (!rangeOwnerAttr) return;
-  const min = document.getElementById("range-min").value.trim();
-  const max = document.getElementById("range-max").value.trim();
-  if (min === "" && max === "") manualRanges.delete(rangeOwnerAttr);
-  else manualRanges.set(rangeOwnerAttr, { min, max });
+  manualRanges.set(rangeOwnerAttr, {
+    min: document.getElementById("range-min").value.trim(),
+    max: document.getElementById("range-max").value.trim(),
+  });
 }
 
-/* 指定した属性の範囲を入力欄に出す(未設定なら空欄=自動) */
+/* 指定した属性の範囲を入力欄に出す。
+   一度も触っていない属性は既定値(DEFAULT_RANGES)、それも無ければ空欄=自動 */
 function restoreManualRange(attr) {
-  const r = manualRanges.get(attr) || { min: "", max: "" };
+  const r = manualRanges.get(attr) || DEFAULT_RANGES[attr] || { min: "", max: "" };
   document.getElementById("range-min").value = r.min;
   document.getElementById("range-max").value = r.max;
   rangeOwnerAttr = attr || null;
