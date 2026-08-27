@@ -400,6 +400,25 @@
       複数組み合わせられます（すべての条件を満たすものが対象）。
     </p>
     <div class="note">
+      入力するのは<strong>「残す範囲」</strong>です。最小値・最大値で挟んだ範囲の<strong>外側</strong>が
+      除外されます。たとえば細長い石を除きたい場合、アスペクト比に
+      <code>0.25</code>〜<code>4</code> と入れると、
+      縦にも横にも極端な形だけが除外されます
+      （<code>0.25</code>〜<code>0.5</code> のように1をまたがない範囲にすると、
+      逆に細長い石<strong>だけ</strong>が残るので注意してください）。
+    </div>
+    <p>
+      <strong>「おすすめ設定を適用」</strong>を押すと、調査でよく使う3条件がまとめて入ります。
+      小さすぎる破片・極端に細長い形・水平に近い面を除く組み合わせです。
+      既にある条件は置き換えられます。
+    </p>
+    <table>
+      <tr><th>属性</th><th>残す範囲</th><th>ねらい</th></tr>
+      <tr><td>Area（面積）</td><td>0.1 以上</td><td>小さすぎる破片を除く</td></tr>
+      <tr><td>Aspect（アスペクト比）</td><td>0.25 〜 4</td><td>極端に細長い形を除く</td></tr>
+      <tr><td>Tilt（傾斜角）</td><td>30 以上</td><td>水平に近い面を除く</td></tr>
+    </table>
+    <div class="note">
       フィルタは<strong>色分けと合わせて使う機能</strong>です。先に「3. 色分けする」を
       実行してから有効にしてください。また<strong>「色をリセット」するとフィルタも解除されます</strong>。
     </div>
@@ -587,7 +606,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.4.0";
+  const HELP_VERSION = "1.5.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

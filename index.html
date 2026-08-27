@@ -775,9 +775,13 @@
     </div>
     <div id="filter-body" style="display:none">
       <div class="row">
-        <label class="small">除外条件(値が範囲外のオブジェクトを除外)</label>
+        <label class="small">残す範囲(この範囲から外れたオブジェクトを除外)</label>
         <div id="filter-rules"></div>
         <button class="ghost" id="add-filter-rule" style="margin-top:4px">＋ 条件を追加</button>
+        <button class="ghost" id="filter-preset-btn" style="margin-top:4px">おすすめ設定を適用</button>
+        <div class="hint" style="margin-top:6px">
+          小さすぎる破片・極端に細長い形・水平に近い面を除きます
+        </div>
       </div>
       <div class="row">
         <label class="checkbox-row"><input type="checkbox" id="filter-self-intersect"> 自己交差しているオブジェクトを除外</label>
@@ -1208,7 +1212,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.4.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.5.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3782,6 +3786,59 @@ document.getElementById("filter-enable").addEventListener("change", () => {
   applyFilter();
 });
 document.getElementById("add-filter-rule").addEventListener("click", () => addFilterRule());
+
+/* ---- おすすめフィルタ設定 ----
+   調査で繰り返し使う絞り込みを1操作で入れられるようにする。
+   値は「残す範囲」であることに注意(範囲から外れたものが除外される)。
+
+   Aspectの範囲が1をまたいでいるのは、細長い形を上下どちらの向きでも
+   除くため。0.25未満は高さが幅の4倍超、4超は幅が高さの4倍超にあたる。
+   片側だけ指定すると、縦に細長い石だけ、または横に平たい石だけしか
+   除けない */
+const FILTER_PRESET = [
+  { attr: "Area",   min: "0.1", max: "",  why: "小さすぎる破片を除く" },
+  { attr: "Aspect", min: "0.25", max: "4", why: "極端に細長い形を除く" },
+  { attr: "Tilt",   min: "30",  max: "",  why: "水平に近い面を除く" },
+];
+
+document.getElementById("filter-preset-btn").addEventListener("click", () => {
+  // フィルタと同じく色分けが前提(属性の紐づけと除外表示の両方に必要)
+  if (!hasApplied) {
+    setStatus("おすすめ設定を使うには先に「色分けを実行」してください。", true);
+    return;
+  }
+  // 読み込んだデータに無い属性は飛ばす(GLB+外部CSVでは揃わないことがある)
+  const available = numericFilterColumns();
+  const use = FILTER_PRESET.filter((r) => available.includes(r.attr));
+  const missing = FILTER_PRESET.filter((r) => !available.includes(r.attr)).map((r) => r.attr);
+  if (use.length === 0) {
+    setStatus("おすすめ設定に使う属性(Area / Aspect / Tilt)がこのデータにありません。", true);
+    return;
+  }
+
+  // 既存の条件を消してから入れ直す(足し込むと意図しない絞り込みになる)
+  for (const rule of filterRules.slice()) rule.row.remove();
+  filterRules.length = 0;
+  for (const r of use) {
+    const rule = addFilterRule(r.attr);
+    rule.attrSel.value = r.attr;
+    rule.minInput.value = r.min;
+    rule.maxInput.value = r.max;
+  }
+
+  const fe = document.getElementById("filter-enable");
+  if (!fe.checked) {
+    fe.checked = true;
+    document.getElementById("filter-body").style.display = "block";
+  }
+  applyFilter();
+
+  // 何をどう絞ったかを必ず伝える(黙って条件を書き換えない)
+  const detail = use.map((r) => attrLabel(r.attr) + " " + (r.min || "下限なし") + "〜" + (r.max || "上限なし")).join(" / ");
+  let msg = "おすすめ設定を適用しました: " + detail;
+  if (missing.length) msg += String.fromCharCode(10) + "このデータに無い属性は飛ばしました: " + missing.join(", ");
+  setStatus(msg, missing.length > 0);
+});
 document.getElementById("filter-mode").addEventListener("change", applyFilter);
 document.getElementById("filter-self-intersect").addEventListener("change", applyFilter);
 
