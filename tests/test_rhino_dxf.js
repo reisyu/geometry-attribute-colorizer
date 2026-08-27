@@ -35,7 +35,7 @@ const ok = (c, n) => { c ? pass++ : fail++; console.log(`  ${c ? "OK" : "NG!!"}:
   ok(attrOk === 5, `全5輪郭で属性計算が成功 (実際 ${attrOk})`);
 
   // === 既存形式(クラスタリングソフトの3Dポリライン)の回帰 ===
-  const legacy = fs.readFileSync(path.join(__dirname, "data", "sample_ishigaki.dxf"), "utf8");
+  const legacy = fs.readFileSync(path.join(__dirname, "..", "sample_ishigaki.dxf"), "utf8");
   const lp = await F.parseDXF(legacy);
   ok(lp.length > 0, `既存形式(3Dポリライン)の回帰: ${lp.length}輪郭を読み込み`);
   // 座標が変わっていないか(1つ目の輪郭の1頂点をスポットチェック)

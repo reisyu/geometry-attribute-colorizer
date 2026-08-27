@@ -58,7 +58,7 @@ const ok = (c, n) => { c ? pass++ : fail++; console.log(`  ${c ? "OK" : "NG!!"}:
   ok(pls2.openUsed === pls2.length, `救済したことを openUsed で通知する (実際: ${pls2.openUsed})`);
 
   // 従来のPOLYLINE/VERTEX形式が壊れていないこと(回帰確認)
-  const legacy = fs.readFileSync(path.join(__dirname, "data", "sample_ishigaki.dxf"), "utf8");
+  const legacy = fs.readFileSync(path.join(__dirname, "..", "sample_ishigaki.dxf"), "utf8");
   const pls3 = await F.parseDXF(legacy);
   ok(pls3.length > 0, `POLYLINE/VERTEX形式も従来どおり読める (実際: ${pls3.length})`);
   ok(pls3.openSkipped === 0, "POLYLINE形式では除外が発生しない");

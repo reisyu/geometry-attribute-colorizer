@@ -7,7 +7,7 @@ const F = require("./extracted.js");
   // リポジトリ同梱のサンプルで検証する。
   // 大規模な実データを持っている場合は、環境変数で差し替えられる:
   //   GAC_TEST_DXF=/path/to/large.dxf node integration_test.js
-  const dxfPath = process.env.GAC_TEST_DXF || path.join(__dirname, "data", "sample_ishigaki.dxf");
+  const dxfPath = process.env.GAC_TEST_DXF || path.join(__dirname, "..", "sample_ishigaki.dxf");
   const text = fs.readFileSync(dxfPath, "utf8");
   const t0 = Date.now();
   const contours = await F.parseDXF(text);
