@@ -462,6 +462,40 @@
     z-index: 10;
   }
   #progress-overlay.active { display: flex; }
+
+  /* 範囲が成立しないときの確認ダイアログ。利用者の設定を黙って変えないため、
+     どうするかを選ばせる */
+  #range-dialog {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(23, 25, 29, 0.75);
+    z-index: 11;
+  }
+  #range-dialog.active { display: flex; }
+  #range-dialog-box {
+    background: var(--panel);
+    border: 1px solid var(--warn);
+    border-radius: 8px;
+    padding: 20px 24px;
+    max-width: 420px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  #range-dialog-box h3 {
+    font-size: 14px;
+    color: var(--warn);
+    margin-bottom: 10px;
+  }
+  #range-dialog-box .rd-detail {
+    color: var(--ink-dim);
+    font-size: 12px;
+    margin: 10px 0 16px;
+  }
+  #range-dialog-box .rd-buttons { display: flex; gap: 8px; }
+  #range-dialog-box .rd-buttons button { margin-top: 0; }
   #progress-box {
     background: var(--panel);
     border: 1px solid var(--panel-edge);
@@ -718,10 +752,14 @@
 
     <details class="adv">
       <summary>詳細設定(範囲の固定・カテゴリ数の調整)</summary>
-      <div class="row">
-        <label class="checkbox-row"><input type="checkbox" id="manual-range"> 範囲を手動で指定</label>
+      <div class="row hint">
+        色分けの範囲は既定で固定しています。誰が開いても同じ配色になるため、
+        書き出した図を並べて比べられます。データに合わせたい場合はチェックを外してください
       </div>
-      <div class="row" id="manual-range-inputs" style="display:none">
+      <div class="row">
+        <label class="checkbox-row"><input type="checkbox" id="manual-range" checked> 範囲を手動で指定</label>
+      </div>
+      <div class="row" id="manual-range-inputs">
         <div style="display:flex; gap:8px">
           <div style="flex:1">
             <label class="small" for="range-min">最小値</label>
@@ -886,6 +924,18 @@
   <div id="viewport-gizmo">
     <svg id="axis-gizmo" viewBox="-32 -32 64 64"></svg>
     <div id="proj-indicator">平行投影</div>
+  </div>
+
+  <div id="range-dialog">
+    <div id="range-dialog-box">
+      <h3>指定した範囲では色分けできません</h3>
+      <div id="rd-message"></div>
+      <div class="rd-detail" id="rd-detail"></div>
+      <div class="rd-buttons">
+        <button class="action" id="rd-use-data">データに合わせる</button>
+        <button class="ghost" id="rd-keep">指定のままにする</button>
+      </div>
+    </div>
   </div>
 
   <div id="progress-overlay">
@@ -1212,7 +1262,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.8.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.9.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3382,6 +3432,23 @@ function applyColorize() {
       }
     }
 
+    // 範囲が逆転している(最小>最大)ときは、そのまま描くと全て同じ色になる。
+    // 利用者の指定を黙って変えないため、どうするかを選ばせてから描き直す
+    if (Number.isFinite(vmin) && Number.isFinite(vmax) && vmin > vmax &&
+        !rangeConflictAccepted.has(attr)) {
+      let dMin = Infinity, dMax = -Infinity;
+      for (const row of csvRows) {
+        const raw = (row[attr] ?? "").toString().trim();
+        if (raw === "") continue;
+        const n = Number(raw);
+        if (Number.isFinite(n)) { dMin = Math.min(dMin, n); dMax = Math.max(dMax, n); }
+      }
+      if (Number.isFinite(dMin)) {
+        showRangeDialog(attr, vmin, vmax, dMin, dMax);
+        return;   // 選択が済むまで着色しない
+      }
+    }
+
     // 有効な数値が1つも無い列(全て空欄など)では、範囲が初期値のままになる。
     // そのまま進めると凡例に「Infinity 〜 -Infinity」と表示されてしまうため、
     // 着色せずに理由を伝えて止める
@@ -3971,6 +4038,7 @@ function disposeModel() {
 
   // 手動範囲は元データに固有の値なので、別のモデルへ持ち越さない
   manualRanges.clear();
+  rangeConflictAccepted.clear();
   rangeOwnerAttr = null;
   document.getElementById("range-min").value = "";
   document.getElementById("range-max").value = "";
@@ -4297,6 +4365,46 @@ function restoreManualRange(attr) {
   document.getElementById("range-max").value = r.max;
   rangeOwnerAttr = attr || null;
 }
+
+/* ---- 範囲が成立しないときの確認 ----
+   最小>最大になると全オブジェクトが同じ色になり、ヒストグラムも山にならないため
+   利用者は原因に気づけない。かといって黙って自動範囲に切り替えると、
+   指定した設定が勝手に変わることになる。どちらにするかを選ばせる。
+   「指定のまま」を選んだ属性は覚えておき、再適用のたびに聞き直さない */
+const rangeConflictAccepted = new Set();
+let pendingRangeFix = null;   // ダイアログで「データに合わせる」を選んだときの適用内容
+
+function showRangeDialog(attr, vmin, vmax, dataMin, dataMax) {
+  const f = (n) => Number(n.toPrecision(6));
+  document.getElementById("rd-message").textContent =
+    `${attrLabel(attr)} の指定範囲は ${f(vmin)} 〜 ${f(vmax)} で、最小値が最大値を上回っています。` +
+    `このまま色分けすると、すべてのオブジェクトが同じ色になります。`;
+  document.getElementById("rd-detail").textContent =
+    `データの実際の値: ${f(dataMin)} 〜 ${f(dataMax)}` +
+    `／「データに合わせる」を選ぶと、入力欄をこの値に書き換えます。`;
+  pendingRangeFix = { attr, dataMin: f(dataMin), dataMax: f(dataMax) };
+  document.getElementById("range-dialog").classList.add("active");
+}
+
+document.getElementById("rd-use-data").addEventListener("click", () => {
+  const fix = pendingRangeFix;
+  document.getElementById("range-dialog").classList.remove("active");
+  if (!fix) return;
+  // 入力欄を実データの範囲に書き換える(何が起きたか画面上で見えるようにする)
+  document.getElementById("range-min").value = String(fix.dataMin);
+  document.getElementById("range-max").value = String(fix.dataMax);
+  rangeOwnerAttr = fix.attr;
+  stashManualRange();
+  pendingRangeFix = null;
+  applyColorize();
+});
+
+document.getElementById("rd-keep").addEventListener("click", () => {
+  document.getElementById("range-dialog").classList.remove("active");
+  if (pendingRangeFix) rangeConflictAccepted.add(pendingRangeFix.attr);
+  pendingRangeFix = null;
+  applyColorize();   // 承知のうえで、指定どおりに描く
+});
 
 /* 属性を切り替えるときに、前の属性の値を退避してから新しい値を出す。
    色分けの再適用より先に走らせる必要があるため、changeの登録順に注意 */

@@ -384,6 +384,17 @@
       別の壁面と見比べるときに色の意味が揃います。値は自由に変更でき、
       欄を空にすればその属性は自動（データの最小・最大）に戻ります。
     </p>
+    <p>
+      この「範囲を手動で指定」は<strong>最初からオンになっています</strong>。
+      誰が開いても同じ配色になるため、書き出した図を並べて比較できます。
+      データに合わせた配色にしたい場合はチェックを外してください。
+    </p>
+    <div class="note">
+      指定した範囲からはみ出す値があるときは、<strong>凡例のヒストグラムの端が高くなります</strong>。
+      範囲外の値はそこに積み上がるためです。
+      なお最小値が最大値を上回るなど範囲が成立しない場合は、
+      どうするかを尋ねるダイアログが出ます（設定が勝手に変わることはありません）。
+    </div>
     <table>
       <tr><th>属性</th><th>初期値</th></tr>
       <tr><td>Width（幅） / Height（高さ）</td><td>上限 1.5</td></tr>
@@ -624,7 +635,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.8.0";
+  const HELP_VERSION = "1.9.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
