@@ -1280,7 +1280,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.12.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.12.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2618,15 +2618,23 @@ function buildExportSVG(items, view, opt) {
    データ名が空なら従来どおりの名前にする */
 const FILENAME_NG = '/:*?"<>|' + String.fromCharCode(92);  // 92 = バックスラッシュ
 const FILENAME_TRIM = '._ ' + String.fromCharCode(0x3000);  // 全角空白も対象
-function exportFileName(base) {
+/* ファイル名に使える形へ整える。データ名だけでなく、CSVの列名から作る
+   部分にも必ず通すこと。列名は利用者のファイル由来で任意の文字を含み、
+   "幅/高さ" のような名前をそのまま使うとZIPの中でフォルダになり、
+   ".." を含む名前は展開先の外へ書き出されうる */
+function safeFileNamePart(text) {
   let out = '';
-  for (const ch of String(document.getElementById('dataset-name').value)) {
+  for (const ch of String(text)) {
     if (ch.charCodeAt(0) < 0x20) continue;                       // 制御文字
     out += (FILENAME_NG.indexOf(ch) >= 0 || ch === ' ') ? '_' : ch;
   }
   while (out.length && FILENAME_TRIM.indexOf(out[0]) >= 0) out = out.slice(1);
   while (out.length && FILENAME_TRIM.indexOf(out[out.length - 1]) >= 0) out = out.slice(0, -1);
-  out = out.slice(0, 80);
+  return out.slice(0, 80);
+}
+
+function exportFileName(base) {
+  const out = safeFileNamePart(document.getElementById('dataset-name').value);
   return out ? out + '_' + base : base;
 }
 
@@ -2786,7 +2794,13 @@ function buildElevationSVG(opt) {
   }
 
   if (items.length === 0) {
-    setStatus("SVG書き出しはDXF/サンプルから読み込んだモデルでのみ利用できます。", true);
+    // 輪郭が無いのか、フィルタで全部消えているのかで原因が違う。
+    // 一律に「DXF/サンプルのみ」と出すと、DXFを読んでいる人を混乱させる
+    const hasContour = meshes.some((m) => m.mesh.userData.isContour);
+    setStatus(hasContour
+      ? "フィルタで全てのオブジェクトが除外されているため、書き出せる図がありません。" +
+        String.fromCharCode(10) + "条件を見直すか、フィルタを解除してください。"
+      : "SVG書き出しはDXF/サンプルから読み込んだモデルでのみ利用できます。", true);
     return null;
   }
 
@@ -2930,7 +2944,10 @@ async function exportBatchSVG() {
       updateAttrDescription();
       if (!applyColorize()) { skipped.push(attrLabel(attr)); continue; }
       const r = buildElevationSVG(readSVGExportOptions());
-      if (r) entries.push({ name: stem + "_" + attr + ".svg", text: r.svg });
+      // 列名は利用者のCSV由来なので、そのままファイル名にしない。
+      // 記号だけの列名で空になることもあるため、その場合は連番で代用する
+      const part = safeFileNamePart(attr) || String(i + 1);
+      if (r) entries.push({ name: stem + "_" + part + ".svg", text: r.svg });
     }
 
     if (withLines) {
@@ -2958,6 +2975,7 @@ async function exportBatchSVG() {
         if (orig) mesh.material = orig;
       }
       document.getElementById("legend").style.display = "none";
+      lastLegendState = null;   // 色分けなしの状態に戻すので凡例も捨てる(§8.2)
       hasApplied = false;
       updateApplyBtnProminence();
     }
@@ -3486,11 +3504,16 @@ function loadCSVText(text, displayName) {
 
       refreshAttributeOptions();
       refreshLabelContentOptions();
-      refreshFilterRuleOptions();
+      const droppedRules = refreshFilterRuleOptions();
       updateStepSummaries();
       document.getElementById("csv-btn").classList.add("loaded");
       document.getElementById("csv-btn").textContent = displayName;
-      setStatus(`CSVを読み込みました: ${csvRows.length} 行 / 列: ${csvColumns.join(", ")}`);
+      let loadMsg = `CSVを読み込みました: ${csvRows.length} 行 / 列: ${csvColumns.join(", ")}`;
+      if (droppedRules.length) {
+        loadMsg += String.fromCharCode(10) +
+          `このデータに無い属性のフィルタ条件を解除しました: ${droppedRules.join("・")}`;
+      }
+      setStatus(loadMsg, droppedRules.length > 0);
       updateApplyEnabled();
     },
     error: (err) => setStatus("CSVの読み込みに失敗しました: " + err.message, true),
@@ -3812,6 +3835,9 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   document.getElementById("legend").style.display = "none";
   document.getElementById("inspector").style.display = "none";
   showLabelsCheckbox.checked = false;
+  // 凡例の内容も捨てる。残しておくと、灰色一色に戻した図をSVGに書き出したとき
+  // 前回の属性のグラデーション凡例だけが付いてしまう(図と説明が食い違う)
+  lastLegendState = null;
 
   // フィルタは解除しない。色分けをしていなくても除外表示ができるようになったため
   // (§6.8)、「形だけを絞り込んで見る」という使い方をそのまま続けられる
@@ -3998,7 +4024,10 @@ function addFilterRule(defaultAttr) {
   filterRules.push(rule);
   populateRuleOptions(rule, defaultAttr);
 
-  attrSel.addEventListener("change", scheduleFilter);
+  attrSel.addEventListener("change", () => {
+    rule.orphaned = false;   // 利用者が選び直したら「属性なし」の状態を抜ける
+    scheduleFilter();
+  });
   minInput.addEventListener("input", scheduleFilter);
   maxInput.addEventListener("input", scheduleFilter);
   removeBtn.addEventListener("click", () => {
@@ -4013,16 +4042,40 @@ function populateRuleOptions(rule, preferred) {
   const cols = numericFilterColumns();
   const current = preferred || rule.attrSel.value;
   rule.attrSel.innerHTML = "";
+  // 選んでいた属性が新しいデータに無くなった条件は「選択なし」で保持する。
+  // これが無いと先頭の属性が自動で選ばれ、前の数値がそのまま
+  // 別の属性の条件として黙って有効になってしまう
+  if (!cols.includes(current) && (current || rule.orphaned)) rule.orphaned = true;
+  if (rule.orphaned) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "(この属性はありません)";
+    rule.attrSel.appendChild(o);
+  }
   for (const c of cols) {
     const o = document.createElement("option");
     o.value = c; o.textContent = attrLabel(c);
     rule.attrSel.appendChild(o);
   }
-  if (cols.includes(current)) rule.attrSel.value = current;
+  // 新しく足した条件は先頭の属性から始める(数値が空なので勝手に絞り込まれない)。
+  // 選択なしにすると、表示は先頭の属性なのに値は空という食い違いが起きる
+  if (cols.includes(current)) { rule.attrSel.value = current; rule.orphaned = false; }
+  else if (rule.orphaned) rule.attrSel.value = "";
+  else rule.attrSel.value = cols[0] || "";
 }
 
+/* 属性一覧が変わったとき(CSVの差し替えなど)に条件を作り直す。
+   選んでいた属性が無くなった条件は**別の属性に付け替えず**、選択なしにする。
+   数値だけ残して属性が入れ替わると、全く違う条件が黙って有効になり、
+   画面上は同じ数字が並んでいるため気づけない。何が外れたかは必ず伝える */
 function refreshFilterRuleOptions() {
-  for (const rule of filterRules) populateRuleOptions(rule);
+  const dropped = [];
+  for (const rule of filterRules) {
+    const before = rule.attrSel.value;
+    populateRuleOptions(rule);
+    if (before && rule.attrSel.value === "") dropped.push(attrLabel(before));
+  }
+  if (dropped.length) applyFilter();   // 件数表示を新しい条件に合わせる
+  return dropped;
 }
 
 /* フィルタには属性値の紐づけが要る。色分けを実行していれば applyColorize が
