@@ -1280,7 +1280,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.12.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.12.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4111,8 +4111,10 @@ function dimmableMaterial(mesh) {
 
 function applyFilter() {
   const enabled = document.getElementById("filter-enable").checked;
-  // 色分けしていない状態では紐づけが無い(または古い)ので作り直す
-  if (enabled && !hasApplied) buildAttributeMap();
+  // 使う直前に紐づけを作り直す。色分けの実行時にも作られるが、それだけに頼ると
+  // CSVを差し替えた後に色分けし直すまで**古いCSVの値で絞り込まれる**
+  // (画面には新しい列名の条件が出ているのに、評価しているのは前のデータ)
+  if (enabled) buildAttributeMap();
   const mode = document.getElementById("filter-mode").value;
   const excludeSelfX = document.getElementById("filter-self-intersect").checked;
 
@@ -4662,7 +4664,7 @@ document.getElementById("use-mid").addEventListener("change", (e) => {
 const DEFAULT_RANGES = {
   Width:     { min: "0.1",  max: "1.5" },  // 極端に大きい/小さい石で色が潰れないように上下限を置く
   Height:    { min: "0.1",  max: "1.5" },
-  Area:      { min: "0.1",  max: "1"   },
+  Area:      { min: "0.05", max: "1"   },  // おすすめフィルタの下限と揃える
   FillRate:  { min: "0.5",  max: "0.9" },  // 0〜1の値だが、実データは中央付近に集まる
   Aspect:    { min: "0.25", max: "4"   },  // 1をまたぐ範囲(縦長・横長の両方を含む)
   Tilt:      { min: "30",   max: "90"  },  // 90が定義上の最大(垂直な面)

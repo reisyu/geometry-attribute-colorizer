@@ -399,7 +399,7 @@
     <table>
       <tr><th>属性</th><th>初期値</th></tr>
       <tr><td>Width（幅） / Height（高さ）</td><td>0.1 〜 1.5</td></tr>
-      <tr><td>Area（面積）</td><td>0.1 〜 1</td></tr>
+      <tr><td>Area（面積）</td><td>0.05 〜 1</td></tr>
       <tr><td>FillRate（矩形充填率）</td><td>0.5 〜 0.9</td></tr>
       <tr><td>Aspect（アスペクト比）</td><td>0.25 〜 4</td></tr>
       <tr><td>Tilt（傾斜角）</td><td>30 〜 90</td></tr>
@@ -677,7 +677,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.12.1";
+  const HELP_VERSION = "1.12.2";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
