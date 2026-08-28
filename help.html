@@ -443,13 +443,13 @@
     </p>
     <table>
       <tr><th>属性</th><th>残す範囲</th><th>ねらい</th></tr>
-      <tr><td>Area（面積）</td><td>0.1 以上</td><td>小さすぎる破片を除く</td></tr>
+      <tr><td>Area（面積）</td><td>0.05 以上</td><td>小さすぎる破片を除く</td></tr>
       <tr><td>Aspect（アスペクト比）</td><td>0.25 〜 4</td><td>極端に細長い形を除く</td></tr>
       <tr><td>Tilt（傾斜角）</td><td>30 以上</td><td>水平に近い面を除く</td></tr>
     </table>
     <div class="note">
-      フィルタは<strong>色分けと合わせて使う機能</strong>です。先に「3. 色分けする」を
-      実行してから有効にしてください。また<strong>「色をリセット」するとフィルタも解除されます</strong>。
+      フィルタは<strong>色分けをしていなくても使えます</strong>。「形だけを絞り込んで見たい」ときは、
+      色分けを実行せずにそのまま条件を入れてください。「色をリセット」してもフィルタは有効なままです。
     </div>
 
     <h3 id="s6">6. ラベルを表示する（任意）</h3>
@@ -656,7 +656,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.10.0";
+  const HELP_VERSION = "1.11.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
