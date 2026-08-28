@@ -230,6 +230,7 @@
     <a href="#s7" class="sub">7. 書き出す</a>
     <a href="#data" class="section">データの準備</a>
     <a href="#export" class="section">書き出しの使い分け</a>
+    <a href="#settings" class="section">設定は覚えられる？</a>
     <a href="#trouble" class="section">困ったときは</a>
   </nav>
 
@@ -599,6 +600,26 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
     </div>
 
     <!-- ============ 困ったときは ============ -->
+    <h2 id="settings">設定は覚えられる？</h2>
+    <p>
+      <strong>見た目の設定は、次に開いたときも引き継がれます。</strong>
+      背景の不透明度、傾きラインの色と太さ、ラベルの文字サイズ、
+      SVG書き出しで含める要素、ライト/ダーク、投影方式などです。
+      毎回チェックを入れ直す手間がなくなります。
+    </p>
+    <p>
+      一方で<strong>色分けの設定（配色・範囲・反転）は引き継ぎません</strong>。
+      誰が開いても同じ配色になるようにするためです。
+      前回の設定が残っていると、本人には「前回の続き」に見えたまま
+      他の人と色の意味がずれてしまい、ずれていること自体に気づけません。
+    </p>
+    <div class="note">
+      設定は<strong>そのブラウザの中だけ</strong>に保存されます。外部に送信されることはありません。
+      別のパソコンやブラウザには引き継がれず、
+      ブラウザのデータを消すと初期状態に戻ります。
+      設定を変えたいときは、いつもどおり画面の項目を操作すればそのまま覚え直します。
+    </div>
+
     <h2 id="trouble">困ったときは</h2>
 
     <h3>ファイルを読み込めない・表示されない</h3>
@@ -656,7 +677,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.11.0";
+  const HELP_VERSION = "1.12.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

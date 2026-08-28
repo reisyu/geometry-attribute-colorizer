@@ -1280,7 +1280,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.11.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.12.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4971,6 +4971,7 @@ function applyTheme(light) {
   grid.position.y = gridY;
   scene.add(grid);
   document.getElementById("theme-toggle").textContent = light ? "🌙 ダーク" : "☀ ライト";
+  scheduleSaveSettings();
 }
 document.getElementById("theme-toggle").addEventListener("click", () => applyTheme(!isLightTheme));
 
@@ -5051,6 +5052,7 @@ function setProjection(mode) {
   document.getElementById("proj-toggle").textContent = mode === "ortho" ? "透視投影" : "平行投影";
   // 透視投影が既定のため、平行投影のときだけ文字を主張する(既定モードでは非表示)
   document.getElementById("proj-indicator").classList.toggle("active", mode === "ortho");
+  scheduleSaveSettings();
 }
 document.getElementById("proj-toggle").addEventListener("click", () => {
   setProjection(projectionMode === "ortho" ? "persp" : "ortho");
@@ -5108,8 +5110,112 @@ function updateStepSummaries() {
 }
 
 /* ============================================================
+   表示設定の保存(localStorage)
+
+   保存するのは「作業環境の好み」だけに絞っている。
+   ・**配色の基準は保存しない**(配色・グラデーションの反転・カスタム色・
+     範囲の指定・カテゴリ数)。誰が開いても同じ配色になるという前提を
+     崩さないため。保存すると、本人には「前回の続き」に見えたまま
+     他の人と色の意味がずれ、ずれていること自体に気づけない
+   ・**データに紐づくものも保存しない**(データ名・ID列・接頭辞・対象属性・
+     フィルタの条件)。次に開くデータでは意味を持たないため
+   ・**表示のオン/オフも保存しない**(傾きライン・ラベル・背景モデル)。
+     対象が読み込まれていない状態で復元しても意味がない
+
+   保管はブラウザごと・オリジンごと。GitHub Pagesは
+   https://reisyu.github.io というオリジン全体で保管領域を共有するため、
+   キーに接頭辞とバージョンを付けて他のプロジェクトとの衝突を避ける。
+   ローカルで開いた場合(file://)とは別の保管領域になる。
+
+   プライベートモードや容量超過では例外になるが、設定が保存できなくても
+   アプリは動くべきなので、読み書きは必ずtry/catchで囲む。
+============================================================ */
+const SETTINGS_KEY = "gac.settings.v1";
+
+/* [id, 種類, 復元後に発火させるイベント]
+   イベントを発火させるのは、値の表示(「50mm」など)や連動する状態を
+   更新する必要があるものだけ。書き出し設定は使うときに読まれるので不要 */
+const SAVED_SETTINGS = [
+  ["obj-opacity",       "value", "input"],
+  ["line-color-center", "value", "input"],
+  ["line-color-edge",   "value", "input"],
+  ["line-width",        "value", "input"],
+  ["label-size",        "value", "input"],
+  ["label-distance",    "value", "input"],
+  ["distance-cull",     "check", "change"],
+  ["filter-mode",       "value", null],
+  ["svg-inc-legend",    "check", null],
+  ["svg-inc-scalebar",  "check", null],
+  ["svg-inc-labels",    "check", null],
+  ["svg-inc-lines",     "check", null],
+  ["svg-no-fill",       "check", null],
+  ["svg-outline-width", "value", null],
+  ["batch-inc-lines",   "check", null],
+];
+
+let saveSettingsTimer = null;
+
+function saveSettings() {
+  try {
+    const data = { theme: isLightTheme ? "light" : "dark", projection: projectionMode };
+    for (const [id, kind] of SAVED_SETTINGS) {
+      const el = document.getElementById(id);
+      if (el) data[id] = (kind === "check") ? el.checked : el.value;
+    }
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+  } catch (e) {
+    /* 保存できなくても動作には影響しないので黙って続ける */
+  }
+}
+
+/* スライダーを動かすたびに書き込まないよう、少し待ってからまとめて保存する */
+function scheduleSaveSettings() {
+  clearTimeout(saveSettingsTimer);
+  saveSettingsTimer = setTimeout(saveSettings, 300);
+}
+
+function restoreSettings() {
+  let data = null;
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) data = JSON.parse(raw);
+  } catch (e) {
+    data = null;   // 壊れていたら既定値のまま進む
+  }
+  if (data && typeof data === "object") {
+    for (const [id, kind, ev] of SAVED_SETTINGS) {
+      if (!(id in data)) continue;              // 後から増えた項目は既定値のまま
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (kind === "check") el.checked = !!data[id];
+      else el.value = String(data[id]);
+      if (ev) el.dispatchEvent(new Event(ev, { bubbles: true }));
+    }
+    if (data.theme === "light") applyTheme(true);
+    if (data.projection === "ortho") setProjection("ortho");
+  }
+
+  // 「塗りつぶしなし」と凡例は両立しない。保存された値を尊重しつつ、
+  // 成立しない組み合わせだけ正す(no-fillのchangeを発火させると、
+  // 塗りありのときに凡例を強制的にオンへ戻してしまうため手で揃える)
+  const noFill = document.getElementById("svg-no-fill");
+  const legendCb = document.getElementById("svg-inc-legend");
+  legendCb.disabled = noFill.checked;
+  if (noFill.checked) legendCb.checked = false;
+}
+
+// 以後の変更を保存する(復元とは別に1度だけ登録する)
+for (const [id] of SAVED_SETTINGS) {
+  const el = document.getElementById(id);
+  if (!el) continue;
+  el.addEventListener("change", scheduleSaveSettings);
+  el.addEventListener("input", scheduleSaveSettings);
+}
+
+/* ============================================================
    起動: 全ての宣言が終わったここでレンダリングループを開始する
 ============================================================ */
+restoreSettings();
 animate();
 loadSampleData();
 
