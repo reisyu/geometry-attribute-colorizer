@@ -28,6 +28,7 @@
 | `tools/embed_sample.js` | サンプルDXFから内蔵サンプル（座標のみ）を再生成する |
 | `tools/build_offline.js` | オフライン配布用の単一HTMLを作る（ライブラリを埋め込む） |
 | `extract_for_tests.js` | index.html から実関数を抽出して tests/extracted.js を作る |
+| `quickstart.html` | 配布・印刷用の1枚手順書（A4縦。dist にも入る） |
 | `assets/hero-elevation.svg` | READMEの見出し画像。アプリ自身のSVG出力を使う |
 | `tests/` | Node.jsで動くテスト一式 |
 

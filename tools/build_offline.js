@@ -66,8 +66,24 @@ function fetchText(url) {
   // 配布はこのフォルダごと渡す前提にする
   fs.copyFileSync(path.join(ROOT, "help.html"), path.join(OUT_DIR, "help.html"));
   fs.copyFileSync(path.join(ROOT, "sample_ishigaki.dxf"), path.join(OUT_DIR, "sample_ishigaki.dxf"));
+  fs.copyFileSync(path.join(ROOT, "quickstart.html"), path.join(OUT_DIR, "quickstart.html"));
+
+  // 受け取った人が最初に開くファイルを迷わないようにする
+  fs.writeFileSync(path.join(OUT_DIR, "はじめにお読みください.txt"), [
+    "Geometry Attribute Colorizer 配布フォルダ",
+    "",
+    "1. quickstart.html          ... 使い方の1枚もの(印刷用)。まずこれを読む",
+    "2. geometry-attribute-colorizer_offline.html",
+    "                            ... アプリ本体。ダブルクリックで開く",
+    "3. sample_ishigaki.dxf      ... 練習用の石垣データ。アプリにドラッグして読み込む",
+    "4. help.html                ... 詳しい操作ガイド(アプリの右上からも開ける)",
+    "",
+    "インターネット接続は不要です。",
+    "読み込んだデータは手元のブラウザ内だけで処理され、外部に送信されません。",
+    "",
+  ].join(String.fromCharCode(13) + String.fromCharCode(10)), "utf8");
   console.log(NEWLINE + "作成しました: " + OUT);
   console.log("大きさ: " + Math.round(fs.statSync(OUT).size / 1024) + " KB");
-  console.log("同梱: help.html(操作ガイド) / sample_ishigaki.dxf(練習用データ)");
+  console.log("同梱: quickstart.html(1枚手順書) / help.html(操作ガイド) / sample_ishigaki.dxf(練習用データ)");
   console.log("配布するときは dist フォルダごと渡してください(ネットワーク不要)。");
 })();

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geometry Attribute Colorizer — はじめかた</title>
+<style>
+  /* 配布・印刷用の1枚もの。A4縦に収まるように余白と文字量を詰めている。
+     画面で読む人もいるので、印刷用の指定は @media print に限定する */
+  :root {
+    --ink: #1a1c1f;
+    --dim: #5b6169;
+    --line: #c9ced5;
+    --accent: #2f6f62;
+    --accent-bg: #eaf3f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    max-width: 210mm;
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: var(--ink);
+    background: #fff;
+  }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 5px; margin-bottom: 10px; }
+  h1 { font-size: 15pt; margin: 0 0 2px; }
+  .sub { font-size: 9pt; color: var(--dim); }
+
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; }
+  .step { border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; }
+  .step h2 {
+    font-size: 10.5pt; margin: 0 0 4px; color: var(--accent);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 9pt; flex: none;
+  }
+  .step p { margin: 0 0 4px; }
+  .step p:last-child { margin-bottom: 0; }
+  ul { margin: 3px 0 0; padding-left: 17px; }
+  li { margin-bottom: 2px; }
+
+  kbd, .ui {
+    display: inline-block; padding: 0 5px; border: 1px solid var(--line);
+    border-radius: 3px; background: #f4f6f8; font-size: 9.5pt; white-space: nowrap;
+  }
+  .ui { background: var(--accent-bg); border-color: #b6d3cb; color: #22544a; }
+
+  .note {
+    margin-top: 10px; border-left: 3px solid var(--accent); background: var(--accent-bg);
+    padding: 7px 11px; font-size: 9.5pt;
+  }
+  .trouble { margin-top: 10px; }
+  .trouble h2 { font-size: 10.5pt; margin: 0 0 4px; color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; vertical-align: top; }
+  th { background: #f4f6f8; width: 40%; font-weight: 600; }
+  footer { margin-top: 11px; font-size: 8.5pt; color: var(--dim); border-top: 1px solid var(--line); padding-top: 5px; }
+
+  @media print {
+    body { padding: 10mm 12mm; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Geometry Attribute Colorizer — はじめかた</h1>
+  <div class="sub">石垣などの輪郭データ（DXF）を読み込み、幅・高さ・面積などを自動計算して色分けするツールです。所要 10 分程度。</div>
+</header>
+
+<div class="steps">
+
+  <div class="step">
+    <h2><span class="num">1</span>アプリを開く</h2>
+    <p>配布フォルダの <span class="ui">geometry-attribute-colorizer_offline.html</span> を<strong>ダブルクリック</strong>します。</p>
+    <p>練習用の石垣が色分けされた状態で表示されます。ここまで何も読み込む必要はありません。</p>
+    <p><strong>左ドラッグで回転</strong>、<strong>ホイールで拡大縮小</strong>。</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">2</span>サンプルDXFを読み込む</h2>
+    <p>配布フォルダの <span class="ui">sample_ishigaki.dxf</span> を、<strong>3D表示の上にドラッグ＆ドロップ</strong>します。</p>
+    <p>123個の石が読み込まれ、幅・高さ・面積・傾斜角などが<strong>自動で計算</strong>されて色分けされます。</p>
+    <p>ダブルクリックではCADが開くだけです。必ず<strong>ブラウザにドロップ</strong>してください。</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">3</span>色分けを変えてみる</h2>
+    <p>左パネル「<span class="ui">3. 色分けする</span>」の<strong>属性</strong>を切り替えます。選ぶだけで即座に色が変わります。</p>
+    <ul>
+      <li><strong>Width（幅）</strong> — 石の大きさの分布</li>
+      <li><strong>Tilt（傾斜角）</strong> — 面の向きの違い</li>
+      <li><strong>RectAngle（矩形回転角）</strong> — 積み方の傾き</li>
+    </ul>
+    <p>画面下の<strong>凡例とヒストグラム</strong>で、どの色が何個あるか分かります。</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">4</span>絞り込む</h2>
+    <p>「<span class="ui">5. フィルタで絞り込む</span>」を開き、<strong>フィルタを有効にする</strong>にチェック。</p>
+    <p><span class="ui">おすすめ設定を適用</span>を押すと、小さすぎる破片・極端に細長い形・水平に近い面が除かれます。</p>
+    <p>入力する数値は<strong>「残す範囲」</strong>です（除外する範囲ではありません）。</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">5</span>図を書き出す</h2>
+    <p>「<span class="ui">7. 書き出す</span>」から保存します。</p>
+    <ul>
+      <li><span class="ui">立面図をSVGで保存</span> — 正面から見た図。報告書向け</li>
+      <li><span class="ui">まとめてZIPで保存</span> — 属性ごとの図を一度に</li>
+      <li><span class="ui">属性をCSVで保存</span> — 計算結果を表で</li>
+    </ul>
+    <p>SVGは拡大しても粗くならず、Illustrator等で編集できます。</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">6</span>自分のデータを使う場合</h2>
+    <p>手順2と同じく、自分のDXFをドロップするだけです。</p>
+    <p>読み込めるのは<strong>閉じたポリライン</strong>（LWPOLYLINE / POLYLINE）です。線分（LINE）やスプラインだけのファイルは読み込めません。CAD側で変換してください。</p>
+    <p>Z軸が上向き（鉛直）である前提で計算します。</p>
+  </div>
+
+</div>
+
+<div class="note">
+  <strong>書き出す前に</strong>　「1. モデルを読み込む」の<strong>データ名</strong>を自分の名前や対象名に変えておくと、
+  書き出すファイル名の先頭に付きます（例: <span class="ui">本丸東面_山田_elevation.svg</span>）。
+  全員が同じ名前のファイルを作らずに済みます。
+</div>
+
+<div class="trouble">
+  <h2>うまくいかないとき</h2>
+  <table>
+    <tr><th>色が全部同じになった</th><td>「3. 色分けする」の詳細設定で、範囲の最小・最大を確認してください。欄を空にすると自動になります</td></tr>
+    <tr><th>石が消えた／半透明になった</th><td>フィルタが効いています。「フィルタを有効にする」のチェックを外してください</td></tr>
+    <tr><th>DXFを読み込めない</th><td>閉じたポリラインになっているか確認してください（手順6）</td></tr>
+    <tr><th>元に戻したい</th><td>ページを再読み込み（<kbd>F5</kbd>）すれば最初の状態に戻ります</td></tr>
+  </table>
+  <p style="margin:6px 0 0">画面右上の <span class="ui">? 操作ガイド</span> から、より詳しい説明を開けます。</p>
+</div>
+
+<footer>
+  Geometry Attribute Colorizer　—　読み込んだデータはすべて手元のブラウザ内だけで処理され、外部に送信されません。
+</footer>
+
+</body>
+</html>
