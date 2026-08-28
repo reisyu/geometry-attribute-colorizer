@@ -985,6 +985,43 @@
 "use strict";
 
 /* ============================================================
+   外部ライブラリの読み込み確認
+
+   Three.js と PapaParse はCDNから読み込んでいる。会場のネットワーク制限や
+   オフラインで読み込めないことがあるが、**画面自体は普通に表示される**ため
+   「壊れている」と気づけない(サンプルが出ず、ファイルを読ませても無反応)。
+   原因が分かる形で止める。
+============================================================ */
+if (typeof THREE === "undefined" || typeof Papa === "undefined") {
+  const missing = [];
+  if (typeof THREE === "undefined") missing.push("Three.js(3D表示)");
+  if (typeof Papa === "undefined") missing.push("PapaParse(CSVの読み込み)");
+  document.body.innerHTML =
+    '<div style="max-width:640px;margin:12vh auto;padding:28px;font-family:system-ui,sans-serif;' +
+    'line-height:1.9;color:#e6e8ea;background:#22252a;border:1px solid #e0544a;border-radius:8px">' +
+    '<div style="font-size:19px;font-weight:600;margin-bottom:14px">' +
+    '外部ライブラリを読み込めませんでした</div>' +
+    '<p style="margin:0 0 14px">このアプリの動作に必要な ' + missing.join(" と ") +
+    ' を取得できなかったため、開始できません。</p>' +
+    '<p style="margin:0 0 8px;font-weight:600">よくある原因</p>' +
+    '<ul style="margin:0 0 14px;padding-left:22px">' +
+    '<li>インターネットに接続できていない</li>' +
+    '<li>ネットワークの制限で <code>cdnjs.cloudflare.com</code> がブロックされている' +
+    '(社内・校内ネットワークで起きやすい)</li>' +
+    '<li>通信が不安定で読み込みが途中で止まった</li></ul>' +
+    '<p style="margin:0 0 8px;font-weight:600">対処</p>' +
+    '<ul style="margin:0 0 14px;padding-left:22px">' +
+    '<li>接続を確かめてページを再読み込みする</li>' +
+    '<li>別のネットワーク(スマートフォンのテザリングなど)で開く</li>' +
+    '<li>ネットワーク管理者に <code>cdnjs.cloudflare.com</code> の許可を依頼する</li></ul>' +
+    '<button onclick="location.reload()" style="padding:9px 18px;font-size:14px;cursor:pointer;' +
+    'background:#2f6f62;color:#fff;border:none;border-radius:4px">再読み込み</button></div>';
+  document.body.style.background = "#17191d";
+  // ここで止める(以降はTHREEを前提にしているため、続けても意味のないエラーが出るだけ)
+  throw new Error("必要な外部ライブラリを読み込めませんでした: " + missing.join(", "));
+}
+
+/* ============================================================
    Three.js シーンのセットアップ
 ============================================================ */
 const canvas = document.getElementById("viewport");
@@ -1280,7 +1317,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.12.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.13.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)

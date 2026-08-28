@@ -26,6 +26,7 @@
 | `LICENSE` | MIT License |
 | `sample_ishigaki.dxf` | 同梱サンプルデータ（内蔵サンプルの元データでもある） |
 | `tools/embed_sample.js` | サンプルDXFから内蔵サンプル（座標のみ）を再生成する |
+| `tools/build_offline.js` | オフライン配布用の単一HTMLを作る（ライブラリを埋め込む） |
 | `extract_for_tests.js` | index.html から実関数を抽出して tests/extracted.js を作る |
 | `assets/hero-elevation.svg` | READMEの見出し画像。アプリ自身のSVG出力を使う |
 | `tests/` | Node.jsで動くテスト一式 |
@@ -126,7 +127,7 @@ UI・3D描画・SVG出力を変更したら、必ずブラウザで実際に動�
 
 ## 現在の状況
 
-- **v1.12.2 を公開中**（https://reisyu.github.io/geometry-attribute-colorizer/）
+- **v1.13.0 を公開中**（https://reisyu.github.io/geometry-attribute-colorizer/）
 - GitHub Releaseは v1.12.2 まで作成済み。作成は作者が手動で行う
   （`gh` CLI・トークンは未設定なので、Claude Codeからは作成できない。
   文面を用意して作者に渡す。タイトルと本文は別ファイルにする）

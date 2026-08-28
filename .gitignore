@@ -1,0 +1,3 @@
+# オフライン配布版はビルド成果物なのでリポジトリには入れない
+# (node tools/build_offline.js で作り直せる)
+dist/
