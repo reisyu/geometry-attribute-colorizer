@@ -128,7 +128,7 @@ UI・3D描画・SVG出力を変更したら、必ずブラウザで実際に動�
 
 ## 現在の状況
 
-- **v1.13.0 を公開中**（https://reisyu.github.io/geometry-attribute-colorizer/）
+- **v1.13.1 を公開中**（https://reisyu.github.io/geometry-attribute-colorizer/）
 - GitHub Releaseは v1.12.2 まで作成済み。作成は作者が手動で行う
   （`gh` CLI・トークンは未設定なので、Claude Codeからは作成できない。
   文面を用意して作者に渡す。タイトルと本文は別ファイルにする）

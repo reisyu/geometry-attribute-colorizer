@@ -15,7 +15,7 @@
     --accent-dim: #2f6d66;
     --warn: #e0a458;
     --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
-    --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Segoe UI", system-ui, sans-serif;
+    --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Segoe UI", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
   }
   body.light {
     --bg: #eef0f3;
@@ -985,38 +985,43 @@
 "use strict";
 
 /* ============================================================
-   外部ライブラリの読み込み確認
+   起動できないときの案内
 
-   Three.js と PapaParse はCDNから読み込んでいる。会場のネットワーク制限や
-   オフラインで読み込めないことがあるが、**画面自体は普通に表示される**ため
+   起動に必要なものが揃わない場合、**画面自体は普通に表示される**ため
    「壊れている」と気づけない(サンプルが出ず、ファイルを読ませても無反応)。
-   原因が分かる形で止める。
+   実際にCDNの遮断とWebGL無効の両方でこの状態を再現している。
+   原因と対処を示して止める。
 ============================================================ */
+function showStartupError(title, lead, causes, fixes) {
+  const li = (items) => items.map((s) => "<li>" + s + "</li>").join("");
+  document.body.innerHTML =
+    '<div style="max-width:640px;margin:12vh auto;padding:28px;font-family:system-ui,sans-serif;' +
+    'line-height:1.9;color:#e6e8ea;background:#22252a;border:1px solid #e0544a;border-radius:8px">' +
+    '<div style="font-size:19px;font-weight:600;margin-bottom:14px">' + title + '</div>' +
+    '<p style="margin:0 0 14px">' + lead + '</p>' +
+    '<p style="margin:0 0 8px;font-weight:600">よくある原因</p>' +
+    '<ul style="margin:0 0 14px;padding-left:22px">' + li(causes) + '</ul>' +
+    '<p style="margin:0 0 8px;font-weight:600">対処</p>' +
+    '<ul style="margin:0 0 14px;padding-left:22px">' + li(fixes) + '</ul>' +
+    '<button onclick="location.reload()" style="padding:9px 18px;font-size:14px;cursor:pointer;' +
+    'background:#2f6f62;color:#fff;border:none;border-radius:4px">再読み込み</button></div>';
+  document.body.style.background = "#17191d";
+}
+
+/* 外部ライブラリ(CDN)の読み込み確認 */
 if (typeof THREE === "undefined" || typeof Papa === "undefined") {
   const missing = [];
   if (typeof THREE === "undefined") missing.push("Three.js(3D表示)");
   if (typeof Papa === "undefined") missing.push("PapaParse(CSVの読み込み)");
-  document.body.innerHTML =
-    '<div style="max-width:640px;margin:12vh auto;padding:28px;font-family:system-ui,sans-serif;' +
-    'line-height:1.9;color:#e6e8ea;background:#22252a;border:1px solid #e0544a;border-radius:8px">' +
-    '<div style="font-size:19px;font-weight:600;margin-bottom:14px">' +
-    '外部ライブラリを読み込めませんでした</div>' +
-    '<p style="margin:0 0 14px">このアプリの動作に必要な ' + missing.join(" と ") +
-    ' を取得できなかったため、開始できません。</p>' +
-    '<p style="margin:0 0 8px;font-weight:600">よくある原因</p>' +
-    '<ul style="margin:0 0 14px;padding-left:22px">' +
-    '<li>インターネットに接続できていない</li>' +
-    '<li>ネットワークの制限で <code>cdnjs.cloudflare.com</code> がブロックされている' +
-    '(社内・校内ネットワークで起きやすい)</li>' +
-    '<li>通信が不安定で読み込みが途中で止まった</li></ul>' +
-    '<p style="margin:0 0 8px;font-weight:600">対処</p>' +
-    '<ul style="margin:0 0 14px;padding-left:22px">' +
-    '<li>接続を確かめてページを再読み込みする</li>' +
-    '<li>別のネットワーク(スマートフォンのテザリングなど)で開く</li>' +
-    '<li>ネットワーク管理者に <code>cdnjs.cloudflare.com</code> の許可を依頼する</li></ul>' +
-    '<button onclick="location.reload()" style="padding:9px 18px;font-size:14px;cursor:pointer;' +
-    'background:#2f6f62;color:#fff;border:none;border-radius:4px">再読み込み</button></div>';
-  document.body.style.background = "#17191d";
+  showStartupError(
+    "外部ライブラリを読み込めませんでした",
+    "このアプリの動作に必要な " + missing.join(" と ") + " を取得できなかったため、開始できません。",
+    ["インターネットに接続できていない",
+     "ネットワークの制限で <code>cdnjs.cloudflare.com</code> がブロックされている(社内・校内ネットワークで起きやすい)",
+     "通信が不安定で読み込みが途中で止まった"],
+    ["接続を確かめてページを再読み込みする",
+     "別のネットワーク(スマートフォンのテザリングなど)で開く",
+     "ネットワーク管理者に <code>cdnjs.cloudflare.com</code> の許可を依頼する"]);
   // ここで止める(以降はTHREEを前提にしているため、続けても意味のないエラーが出るだけ)
   throw new Error("必要な外部ライブラリを読み込めませんでした: " + missing.join(", "));
 }
@@ -1026,7 +1031,25 @@ if (typeof THREE === "undefined" || typeof Papa === "undefined") {
 ============================================================ */
 const canvas = document.getElementById("viewport");
 const wrap = document.getElementById("viewport-wrap");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+/* WebGLが使えない端末では、ここで例外になって以降が全て動かなくなる。
+   古い端末のほか、ハードウェアアクセラレーションを切っている場合や
+   リモートデスクトップ・仮想環境でGPUが使えない場合に起こる */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  showStartupError(
+    "3D表示(WebGL)を利用できません",
+    "このアプリは3D表示にWebGLを使います。お使いの環境で利用できないため、開始できません。",
+    ["ブラウザのハードウェアアクセラレーションが無効になっている",
+     "リモートデスクトップや仮想環境でGPUを使えない",
+     "ブラウザや端末が古い、またはグラフィックドライバの問題"],
+    ["ブラウザの設定で「ハードウェアアクセラレーションが使用可能な場合は使用する」を有効にして、ブラウザを再起動する",
+     "別のブラウザ(Chrome / Edge / Firefox の最新版)で開く",
+     "別の端末で開く"]);
+  throw e;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
@@ -1317,7 +1340,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.13.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.13.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)

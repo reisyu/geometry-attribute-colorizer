@@ -15,7 +15,7 @@
     --accent-dim: #2f6d66;
     --warn: #e0a458;
     --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
-    --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Segoe UI", system-ui, sans-serif;
+    --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Segoe UI", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
   }
   body.light {
     --bg: #eef0f3;
@@ -691,7 +691,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.13.0";
+  const HELP_VERSION = "1.13.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
