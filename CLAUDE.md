@@ -29,6 +29,7 @@
 | `tools/build_offline.js` | オフライン配布用の単一HTMLを作る（ライブラリを埋め込む） |
 | `extract_for_tests.js` | index.html から実関数を抽出して tests/extracted.js を作る |
 | `quickstart.html` | 配布・印刷用の1枚手順書（A4縦。dist にも入る） |
+| `build_offline.bat` | 上記をダブルクリックで実行する入口（Windows用。ASCIIのみで書くこと） |
 | `assets/hero-elevation.svg` | READMEの見出し画像。アプリ自身のSVG出力を使う |
 | `tests/` | Node.jsで動くテスト一式 |
 
