@@ -396,8 +396,10 @@ function computeContourAttributes(verts) {
       for (let k = i + 1; k <= j; k++) loopA.push(pts2d[k % np]);
       for (let k = j + 1; k <= i + np; k++) loopB.push(pts2d[k % np]);
       const sA = sxArea(loopA), sB = sxArea(loopB), all = sA + sB;
-      // 交差が複数ある輪郭ではこの分割は厳密でなくなる。最大値を採るのは
-      // 過小評価側(=見逃し寄りの安全側)に倒すため。§5.1.1に限界を記載
+      // 交差が複数ある輪郭では、この分割は厳密でなくなる(各ループ自体がさらに
+      // 交差しており、靴ひも面積では逆向きの周回が相殺されるため)。
+      // ずれは両方向に出る。実測ではしきい値0.01をまたいで判断が変わるのは
+      // 交差2個以上の2.8%だけなので許容している。詳細は §5.1.1
       if (all > 0) selfIntersect = Math.max(selfIntersect, Math.min(sA, sB) / all);
     }
   }
