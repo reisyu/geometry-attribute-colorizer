@@ -71,20 +71,57 @@ ok(a3.rectAngle > 0, "回転方向の符号(反時計回り=正)");
 // 完全対称の蝶ネクタイ型(法線が退化)→ 計算不能としてnullを返すべき
 const bow = [[0,0,0],[1,0,1],[1,0,0],[0,0,1]];
 ok(F.computeContourAttributes(bow) === null, "法線退化の輪郭はnull(修正済み)");
-// 非対称の自己交差(法線は生きている)→ selfIntersect=1で検出すべき
+// 非対称の自己交差(法線は生きている)→ 交差の大きさが0より大きいこと
 const bow2 = [[0,0,0],[2,0,1.5],[2,0,0],[0,0,1]];
 const abow2 = F.computeContourAttributes(bow2);
-ok(abow2 !== null && abow2.selfIntersect === 1, "非対称の自己交差を検出");
+ok(abow2 !== null && abow2.selfIntersect > 0.1, "非対称の自己交差を検出");
 // 対称な8の字型(6頂点)は面積相殺で法線退化 → nullが正しい
 const eight = [[0,0,0],[2,0,2],[4,0,0],[4,0,2],[2,0,0],[0,0,2]];
 ok(F.computeContourAttributes(eight) === null, "対称8の字は退化としてnull");
 // 非対称の8の字(法線あり)は構造的交差として検出
 const eight2 = [[0,0,0],[2,0,2.6],[4,0,0],[4,0,2],[2,0,0],[0,0,2]];
 const aeight2 = F.computeContourAttributes(eight2);
-ok(aeight2 !== null && aeight2.selfIntersect === 1, "非対称8の字を検出");
+ok(aeight2 !== null && aeight2.selfIntersect > 0.1, "非対称8の字を検出");
 // 正常な五角形は誤検出しない
 const penta5 = [[1,0,0],[0.31,0,0.95],[-0.81,0,0.59],[-0.81,0,-0.59],[0.31,0,-0.95]];
 ok(F.computeContourAttributes(penta5).selfIntersect === 0, "正五角形は誤検出しない");
+
+// --- 自己交差の「大きさ」(0〜0.5の実数) ---
+// 交差で分かれる小さい側のループが全体に占める面積比。食い込みを浅くすれば
+// 値も小さくなること(二値ではなく連続量であること)を確かめる
+const notch = (d) => F.computeContourAttributes([[0,0,0],[10,0,0],[10,0,1],[10-d,0,-d],[0,0,1]]).selfIntersect;
+const n50 = notch(0.5), n20 = notch(0.2), n05 = notch(0.05), n01 = notch(0.01);
+ok(n50 > n20 && n20 > n05 && n05 > n01, "食い込みが浅いほど値が小さい");
+ok(n50 > 0.1, "大きな食い込みは0.1超");
+ok(n01 > 0 && n01 < 0.002, "ごく浅い食い込みは0に近い正の値");
+// 上限は0.5(2つのループが同じ面積のとき)
+ok(n50 <= 0.5 && n20 <= 0.5, "値は0.5を超えない");
+
+// 値の意味: Areaはこの値の2倍だけ過小評価される。
+// 靴ひも面積は |大-小|、本来囲んでいる面積は 大+小 なので誤差は 2*小/(大+小)
+{
+  const d = 0.2, v = [[0,0,0],[10,0,0],[10,0,1],[10-d,0,-d],[0,0,1]];
+  const a = F.computeContourAttributes(v);
+  // 小ループの面積 = 比 * (大+小)。大+小 = Area + 2*小 なので逆算できる
+  const small = a.selfIntersect * a.area / (1 - 2 * a.selfIntersect);
+  const union = a.area + 2 * small;
+  ok(Math.abs(small / union - a.selfIntersect) < 1e-9, "面積比の定義がAreaと整合する");
+}
+
+// 退化した輪郭を交差と誤判定しないこと(かつての二値判定は全て1にしていた)
+// 閉じたポリラインの終端に始点を書き出すDXFは珍しくなく、そのままでは
+// 全オブジェクトが「自己交差あり」になっていた
+ok(F.computeContourAttributes([[0,0,0],[1,0,0],[1,0,1],[0,0,1],[0,0,0]]).selfIntersect === 0,
+   "閉じ頂点が重複していても誤検出しない");
+ok(F.computeContourAttributes([[0,0,0],[1,0,0],[1,0,0],[1,0,1],[0,0,1]]).selfIntersect === 0,
+   "長さ0の辺があっても誤検出しない");
+// リング距離で除外していた頃は、12頂点以上の輪郭で離れた辺の交差を見逃していた
+{
+  const p = [];
+  for (let k = 0; k < 12; k++) p.push([Math.cos(k / 12 * 2 * Math.PI), 0, Math.sin(k / 12 * 2 * Math.PI)]);
+  const t = p[3]; p[3] = p[5]; p[5] = t;   // リング距離2の交差ができる
+  ok(F.computeContourAttributes(p).selfIntersect > 0, "12頂点の輪郭でも近い辺の交差を見逃さない");
+}
 
 // 平面からズレた輪郭のFlatness
 const bumpy = [[0,0,0],[4,0,0],[4,2,0.1],[0,2,0]];

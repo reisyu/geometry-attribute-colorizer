@@ -441,7 +441,8 @@
     <p>
       数値属性ごとに<strong>残す範囲</strong>を決めて、そこから外れたオブジェクトを
       半透明または非表示にします。「面積が0.05以上」のように条件を複数組み合わせられます
-      （すべてを満たすものだけが残ります）。自己交差している輪郭をまとめて除くこともできます。
+      （すべてを満たすものだけが残ります）。輪郭が壊れたオブジェクトも、自己交差を条件に加えれば除けます
+      （「おすすめ設定を適用」に含まれています）。
     </p>
     <div class="note">
       入力するのは<strong>「残す範囲」</strong>です。最小値・最大値で挟んだ範囲の<strong>外側</strong>が
@@ -691,7 +692,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.13.1";
+  const HELP_VERSION = "1.14.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

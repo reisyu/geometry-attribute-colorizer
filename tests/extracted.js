@@ -336,32 +336,69 @@ function computeContourAttributes(verts) {
     if (d > flatness) flatness = d;
   }
 
-  // 自己交差: 投影した2D輪郭で、離れた辺同士が交差していないか判定する。
-  // リング距離(輪郭を一周する経路上での辺の隔たり)がK以下のペアは除外する。
+  // 自己交差: 投影した2D輪郭で、頂点を共有しない辺どうしの交差を調べ、
+  // 「交差の大きさ」を0〜0.5の実数で返す(0=交差なし)。
   //
-  // 除外が要る理由: 内蔵サンプル123輪郭での実測では、除外しないと111件(90%)が
-  // 「交差あり」になる。その111件は**すべて最後の辺と最初の辺の組**で、
-  // 共有頂点P0で外積が0になり判定が退化することが原因(微小な交差ではない)。
-  // 二重ループがj=i+2から始まるため隣接辺は元から対象外だが、
-  // 巻き終わりのこの組だけは残るので、K>=1で除外している。
-  // 詳しい実測と、K>=2に根拠が無いことは SPECIFICATION §5.1.1 を参照。
-  const segIntersect = (a, b, c, d) => {
-    const cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
-    const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d);
-    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  // 値の定義: 交差点で輪郭はちょうど2つのループに分かれる。その小さい側の
+  // 面積が、その交差によって生じた誤差の実体である。全体に対する比を値とする。
+  // 二重に周回する小ループは靴ひも面積で打ち消されるため、**Areaはこの値の
+  // 2倍だけ過小評価される**(比0.01ならAreaが約2%小さく出る)。
+  // しきい値を「許容できるAreaの誤差÷2」で決められるようにするための定義。
+  //
+  // 0/1の二値にしないのは、輪郭が視線方向に折り返している石(オーバーハングを
+  // 回り込んだ輪郭など)では投影の結果として必ず小さな交差が出るため。
+  // 実測ではそれは面積比3%以下に収まり、頂点の順序が壊れた輪郭(中央値12.6%)
+  // とは桁で分かれる。二値にすると両者を区別できない。詳細は SPECIFICATION §5.1.1。
+  //
+  // 向きの判定を三値(-1/0/+1)にしているのが要点。二値(cr > 0)で書くと共有頂点や
+  // 長さ0の辺で外積が厳密に0になったとき「負」へ倒れ、正常な輪郭を交差と誤判定する。
+  // かつてはこれをリング距離Kで迂回していたが、Kは離れた辺どうしの本物の交差まで
+  // 捨てていた(12頂点以上の輪郭で15%前後を見逃していた)。
+  const SX_EPS = 1e-12;  // 外積を辺長で正規化した相対値。角度の正弦がこれ未満なら共線とみなす
+  const sxOrient = (o, p, q) => {
+    const ux = p[0] - o[0], uy = p[1] - o[1], vx = q[0] - o[0], vy = q[1] - o[1];
+    const cr = ux * vy - uy * vx;
+    const sc = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+    if (!(Math.abs(cr) > SX_EPS * sc)) return 0;   // NaNもここで0に落ちる
+    return cr > 0 ? 1 : -1;
+  };
+  const sxArea = (pts) => {
+    let s = 0;
+    for (let k = 0; k < pts.length; k++) {
+      const a = pts[k], b = pts[(k + 1) % pts.length];
+      s += a[0] * b[1] - b[0] * a[1];
+    }
+    return Math.abs(s) / 2;
   };
   let selfIntersect = 0;
   const np = pts2d.length;
-  const K = Math.max(1, Math.min(3, Math.floor(np / 6)));  // 除外する近接範囲(隣接辺は常に除外)
-  outer:
   for (let i = 0; i < np; i++) {
-    for (let j = i + 2; j < np; j++) {
-      const ringDist = Math.min(j - i, np - (j - i));
-      if (ringDist <= K) continue;
-      if (segIntersect(pts2d[i], pts2d[(i + 1) % np], pts2d[j], pts2d[(j + 1) % np])) {
-        selfIntersect = 1;
-        break outer;
-      }
+    const a = pts2d[i], b = pts2d[(i + 1) % np];
+    // 辺のAABBが重ならないペアを先に捨てる。三値判定はhypotを使うぶん重く、
+    // これが無いと1万輪郭で6倍(12ms→80ms)かかる
+    const ax0 = Math.min(a[0], b[0]), ax1 = Math.max(a[0], b[0]);
+    const ay0 = Math.min(a[1], b[1]), ay1 = Math.max(a[1], b[1]);
+    for (let j = i + 1; j < np; j++) {
+      if ((i + 1) % np === j || (j + 1) % np === i) continue;  // 頂点を共有する辺は対象外
+      const c = pts2d[j], d = pts2d[(j + 1) % np];
+      if (Math.min(c[0], d[0]) > ax1 || Math.max(c[0], d[0]) < ax0) continue;
+      if (Math.min(c[1], d[1]) > ay1 || Math.max(c[1], d[1]) < ay0) continue;
+      const d1 = sxOrient(c, d, a), d2 = sxOrient(c, d, b);
+      const d3 = sxOrient(a, b, c), d4 = sxOrient(a, b, d);
+      if (!(d1 && d2 && d3 && d4 && d1 !== d2 && d3 !== d4)) continue;
+      // 交点を求め、そこで分かれる2つのループの面積を比べる
+      const rx = b[0] - a[0], ry = b[1] - a[1], sx = d[0] - c[0], sy = d[1] - c[1];
+      const den = rx * sy - ry * sx;
+      if (den === 0) continue;
+      const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den;
+      const P = [a[0] + t * rx, a[1] + t * ry];
+      const loopA = [P], loopB = [P];
+      for (let k = i + 1; k <= j; k++) loopA.push(pts2d[k % np]);
+      for (let k = j + 1; k <= i + np; k++) loopB.push(pts2d[k % np]);
+      const sA = sxArea(loopA), sB = sxArea(loopB), all = sA + sB;
+      // 交差が複数ある輪郭ではこの分割は厳密でなくなる。最大値を採るのは
+      // 過小評価側(=見逃し寄りの安全側)に倒すため。§5.1.1に限界を記載
+      if (all > 0) selfIntersect = Math.max(selfIntersect, Math.min(sA, sB) / all);
     }
   }
 
