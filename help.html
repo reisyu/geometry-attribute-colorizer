@@ -450,7 +450,7 @@
       そのCSVを読み込み直せば戻ります。<strong>メモは計算し直せない唯一のデータです。</strong>
       保存せずに閉じたり、別のファイルを読み込んだりすると失われるので、確認が出ます。
       メモを書くと<strong>「メモの有無」</strong>という属性が自動で作られ、これで色分けすれば
-      記入済みの箇所が図で一望できます。メモ本文はラベルに出せます（長いものは先頭だけ表示され、
+      記入済みの箇所が図で一望できます（記入済みが赤、未記入はグレーで表示されます）。メモ本文はラベルに出せます（長いものは先頭だけ表示され、
       全文はインスペクタで読めます）。
     </p>
     <div class="note">
@@ -701,7 +701,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.16.1";
+  const HELP_VERSION = "1.17.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
