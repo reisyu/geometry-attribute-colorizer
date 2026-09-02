@@ -444,6 +444,12 @@
       （すべてを満たすものだけが残ります）。輪郭が壊れたオブジェクトも、自己交差を条件に加えれば除けます
       （「おすすめ設定を適用」に含まれています）。
     </p>
+    <p>
+      オブジェクトをタップすると右上に属性が出ます。ここには<strong>メモ欄</strong>があり、
+      点検の所見などを書き留められます。書いた内容は「属性をCSVで保存」で出力され、
+      そのCSVを読み込み直せば戻ります。<strong>メモは計算し直せない唯一のデータです。</strong>
+      保存せずに閉じたり、別のファイルを読み込んだりすると失われるので、確認が出ます。
+    </p>
     <div class="note">
       入力するのは<strong>「残す範囲」</strong>です。最小値・最大値で挟んだ範囲の<strong>外側</strong>が
       除外されます。たとえば細長い石を除きたい場合、アスペクト比に
@@ -692,7 +698,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.14.0";
+  const HELP_VERSION = "1.15.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

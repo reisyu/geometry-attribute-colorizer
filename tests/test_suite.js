@@ -123,6 +123,18 @@ ok(F.computeContourAttributes([[0,0,0],[1,0,0],[1,0,0],[1,0,1],[0,0,1]]).selfInt
   ok(F.computeContourAttributes(p).selfIntersect > 0, "12頂点の輪郭でも近い辺の交差を見逃さない");
 }
 
+// --- CSVのエスケープ(メモ列が改行・カンマ・引用符を含むため) ---
+// RFC 4180: カンマ・引用符・改行を含む値は引用符で囲み、値中の " は "" にする
+ok(F.csvEscape("ふつうの値") === "ふつうの値", "囲む必要がない値はそのまま");
+ok(F.csvEscape("a,b") === '"a,b"', "カンマを含む値は引用符で囲む");
+ok(F.csvEscape('言った"南面"') === '"言った""南面"""', "引用符は2つに重ねて囲む");
+ok(F.csvEscape("1行目\n2行目") === '"1行目\n2行目"', "改行を含む値は引用符で囲む");
+ok(F.csvEscape("1行目\r\n2行目") === '"1行目\r\n2行目"', "CRLFの改行も囲む");
+ok(F.csvEscape("目地開き\n要経過観察, \"南面\"") === '"目地開き\n要経過観察, ""南面"""',
+   "改行・カンマ・引用符が同時に来ても壊れない");
+ok(F.csvEscape("") === "", "空文字はそのまま");
+ok(F.csvEscape(null) === "" || F.csvEscape(null) === "null", "nullでも例外にならない");
+
 // 平面からズレた輪郭のFlatness
 const bumpy = [[0,0,0],[4,0,0],[4,2,0.1],[0,2,0]];
 const a4 = F.computeContourAttributes(bumpy);

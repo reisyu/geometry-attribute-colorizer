@@ -635,6 +635,23 @@
     text-overflow: ellipsis;
   }
 
+  #insp-note-box { margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 8px; }
+  #inspector .insp-note-label { display: block; color: var(--ink-dim); margin-bottom: 4px; }
+  #inspector textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--field-bg, rgba(0,0,0,.25));
+    color: inherit;
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    padding: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    resize: vertical;
+  }
+  body.light #inspector textarea { background: rgba(0,0,0,.04); }
+  #inspector textarea:disabled { opacity: .5; }
+
   @media (max-width: 700px) {
     body { flex-direction: column; }
     #sidebar { width: 100%; min-width: 0; height: 45%; border-right: none; border-bottom: 1px solid var(--panel-edge); }
@@ -864,6 +881,9 @@
     <div class="sub-header">データ</div>
     <div class="row">
       <button class="ghost" id="download-csv-btn" disabled style="margin-top:0">属性をCSVで保存</button>
+      <div class="hint" id="note-unsaved" style="display:none; margin-top:6px; color:var(--warn)">
+        メモが未保存です。CSVで保存しないと残りません
+      </div>
     </div>
 
     <div class="sub-header">3Dモデル</div>
@@ -973,6 +993,12 @@
   <div id="inspector">
     <div class="insp-name" id="insp-name"></div>
     <table id="insp-table"></table>
+    <div id="insp-note-box">
+      <label class="insp-note-label" for="insp-note">メモ</label>
+      <!-- input ではなく textarea にしている。複数行が書けるだけでなく、
+           iOS/Androidの標準キーボードの音声入力が使えるため(現場では打つより速い) -->
+      <textarea id="insp-note" rows="3" placeholder="点検の所見などを記入"></textarea>
+    </div>
   </div>
 </div>
 
@@ -1337,7 +1363,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.14.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.15.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1370,6 +1396,12 @@ function beginLoading() {
     setStatus("別のファイルを読み込み中です。完了までお待ちください。", true);
     return false;
   }
+  // 読み込むと属性テーブルが作り直され、メモは失われる。
+  // メモはDXFから再計算できない唯一のデータなので、黙って捨てない
+  if (hasUnsavedNotes &&
+      !confirm("保存していないメモがあります。\n読み込むと失われます。続けますか？")) {
+    return false;
+  }
   isLoading = true;
   return true;
 }
@@ -1394,6 +1426,7 @@ const ATTR_INFO = {
   Tilt:      { jp: "傾斜角",   desc: "面の法線と鉛直(+Z)のなす角。0°=水平な面、90°=垂直な面" },
   RectAngle: { jp: "矩形回転角", desc: "外接矩形の水平辺が面内の水平基準から回転している角度。反時計回り(右上がり)がプラス" },
   Flatness:  { jp: "平面性",   desc: "フィット平面からの最大ズレ距離。大きいほど平面近似の信頼性が低い" },
+  Note: { jp: "メモ", desc: "点検時の所見などを自由に書き留める欄。属性インスペクタで編集し、CSVに書き出される" },
   SelfIntersect: { jp: "自己交差", desc: "輪郭の自己交差の大きさ(0〜0.5)。0は交差なし。交差で分かれる小さい側のループが全体に占める面積比で、Areaはこの値の2倍だけ小さく出る" },
   X: { jp: "重心X", desc: "輪郭の重心のX座標(原点シフト前の元の座標値)" },
   Y: { jp: "重心Y", desc: "輪郭の重心のY座標(原点シフト前の元の座標値)" },
@@ -2358,6 +2391,7 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
   a.href = URL.createObjectURL(blob);
   a.download = exportFileName("attributes.csv");
   a.click();
+  setUnsavedNotes(false);
   URL.revokeObjectURL(a.href);
 });
 
@@ -2992,7 +3026,7 @@ let batchRunning = false;   // 実行中は範囲のダイアログを出さな�
 function refreshBatchAttrList() {
   const box = document.getElementById("batch-attr-list");
   const idCol = document.getElementById("id-column").value;
-  const cols = csvColumns.filter((c) => c !== idCol);
+  const cols = visualizableColumns(idCol);
   box.innerHTML = "";
   if (!cols.length) {
     box.className = "row hint";
@@ -3631,11 +3665,20 @@ function loadCSVFile(file) {
   reader.readAsText(file);
 }
 
+/* メモ列は自由記述なので、値がほぼ全件異なる。色分けに使うと
+   カテゴリ色が石の数だけ生成されて意味のない虹になり、ラベルや立面図に出すと
+   長文が図を埋める。値を「見せる」用途からは外し、インスペクタとCSVでのみ扱う。
+   (フィルタは数値列限定なので、こちらは何もしなくても対象外になる) */
+const NOTE_COL = "Note";
+function visualizableColumns(idCol) {
+  return csvColumns.filter((c) => c !== idCol && c !== NOTE_COL);
+}
+
 function refreshAttributeOptions() {
   const idCol = document.getElementById("id-column").value;
   const attrSel = document.getElementById("attribute");
   attrSel.innerHTML = "";
-  csvColumns.filter((c) => c !== idCol).forEach((c) => {
+  visualizableColumns(idCol).forEach((c) => {
     const o = document.createElement("option");
     o.value = c; o.textContent = attrLabel(c);
     attrSel.appendChild(o);
@@ -3935,6 +3978,7 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   }
   document.getElementById("legend").style.display = "none";
   document.getElementById("inspector").style.display = "none";
+  bindNoteEditor(null);
   showLabelsCheckbox.checked = false;
   // 凡例の内容も捨てる。残しておくと、灰色一色に戻した図をSVGに書き出したとき
   // 前回の属性のグラデーション凡例だけが付いてしまう(図と説明が食い違う)
@@ -4472,6 +4516,9 @@ function disposeModel() {
   document.getElementById("range-min").value = "";
   document.getElementById("range-max").value = "";
 
+  bindNoteEditor(null);
+  setUnsavedNotes(false);
+
   if (!modelRoot) return;
   modelRoot.traverse((obj) => {
     if (obj.isMesh) {
@@ -4552,6 +4599,7 @@ canvas.addEventListener("pointerup", (e) => {
   const inspector = document.getElementById("inspector");
   if (!hits.length) {
     inspector.style.display = "none";
+    bindNoteEditor(null);
     setHighlight(null);  // 空クリックで選択解除
     return;
   }
@@ -4568,6 +4616,7 @@ canvas.addEventListener("pointerup", (e) => {
     const idCol = document.getElementById("id-column").value;
     for (const [k, v] of Object.entries(row)) {
       if (k === idCol) continue;  // IDは上の見出しに表示済みなので繰り返さない
+      if (k === NOTE_COL) continue;  // メモは下の編集欄で扱うので表には出さない
       const tr = document.createElement("tr");
       const td1 = document.createElement("td"); td1.textContent = attrLabel(k);
       const td2 = document.createElement("td"); td2.textContent = v;
@@ -4583,7 +4632,50 @@ canvas.addEventListener("pointerup", (e) => {
     tr.appendChild(td);
     table.appendChild(tr);
   }
+  bindNoteEditor(row);
   inspector.style.display = "block";
+});
+
+/* ============================================================
+   メモ(Note列)
+   属性は全てDXFから再計算できるが、**メモだけは作り直せない**。
+   そのため「書き出さないと残らない」ことを画面で主張し、閉じる前にも警告する。
+============================================================ */
+const noteInput = document.getElementById("insp-note");
+let noteTargetRow = null;   // いま編集中の行(属性テーブルの行オブジェクトそのもの)
+let hasUnsavedNotes = false;
+
+function bindNoteEditor(row) {
+  noteTargetRow = row || null;
+  noteInput.disabled = !row;
+  noteInput.value = row ? (row[NOTE_COL] ?? "") : "";
+}
+
+noteInput.addEventListener("input", () => {
+  if (!noteTargetRow) return;
+  // 列は最初に書き込まれたときに作る。使っていなければCSVに空列を増やさない
+  // (データ名からDataset列を作るのと同じ考え方)
+  if (!csvColumns.includes(NOTE_COL)) {
+    csvColumns.push(NOTE_COL);
+    refreshAttributeOptions();
+    refreshLabelContentOptions();
+    refreshFilterRuleOptions();
+  }
+  noteTargetRow[NOTE_COL] = noteInput.value;
+  setUnsavedNotes(true);
+});
+
+function setUnsavedNotes(dirty) {
+  if (hasUnsavedNotes === dirty) return;
+  hasUnsavedNotes = dirty;
+  document.getElementById("note-unsaved").style.display = dirty ? "" : "none";
+}
+
+// メモは再計算できないので、書き出さずに閉じようとしたら引き止める
+window.addEventListener("beforeunload", (e) => {
+  if (!hasUnsavedNotes) return;
+  e.preventDefault();
+  e.returnValue = "";
 });
 
 /* ============================================================
@@ -4705,7 +4797,7 @@ function refreshLabelContentOptions() {
   };
 
   makeItem("__id__", "ID(オブジェクト名)");
-  csvColumns.filter((c) => c !== idCol).forEach((c) => makeItem(c, attrLabel(c)));
+  visualizableColumns(idCol).forEach((c) => makeItem(c, attrLabel(c)));
 }
 
 showLabelsCheckbox.addEventListener("change", () => {
