@@ -449,6 +449,9 @@
       点検の所見などを書き留められます。書いた内容は「属性をCSVで保存」で出力され、
       そのCSVを読み込み直せば戻ります。<strong>メモは計算し直せない唯一のデータです。</strong>
       保存せずに閉じたり、別のファイルを読み込んだりすると失われるので、確認が出ます。
+      あわせて、書いたメモはブラウザにも自動で控えられます。うっかりページを閉じてしまっても、
+      <strong>同じデータを読み込み直せば「復元しますか？」と聞かれます</strong>。
+      ただし控えは同じブラウザの中だけのものです。確実に残すにはCSVで保存してください。
       メモを書くと<strong>「メモの有無」</strong>という属性が自動で作られ、これで色分けすれば
       記入済みの箇所が図で一望できます（記入済みが赤、未記入はグレーで表示されます）。メモ本文はラベルに出せます（長いものは先頭だけ表示され、
       全文はインスペクタで読めます）。
@@ -701,7 +704,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.17.0";
+  const HELP_VERSION = "1.18.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

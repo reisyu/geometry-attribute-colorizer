@@ -1363,7 +1363,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.17.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.18.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2356,6 +2356,7 @@ function loadDXFFile(file) {
       setTimeout(() => {
         document.getElementById("apply-btn").click();
         renumberIds();  // IDを立面図の左下から自動採番(元IDはSrcID属性に保持)
+        offerNoteRestore();  // 同じデータの前回の入力が残っていれば復元を提案する
         let msg = `DXFを読み込みました: ${meshes.length} オブジェクト\n` +
           `幾何属性(幅・高さ・面積など)を自動計算しました。\n` +
           `IDは立面図の左下から自動採番済み(元IDはSrcID属性)。\n` +
@@ -4721,6 +4722,7 @@ noteInput.addEventListener("input", () => {
     refreshFilterRuleOptions();
   }
   renderInspectorTable(noteTargetRow);   // HasNoteの表示を実際の値に追従させる
+  scheduleSaveNotes();
   // 有無で色分け中・ラベル表示中なら、書いた瞬間に図へ反映する
   if (hasApplied && document.getElementById("attribute").value === NOTE_FLAG_COL) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
@@ -4739,6 +4741,158 @@ window.addEventListener("beforeunload", (e) => {
   e.preventDefault();
   e.returnValue = "";
 });
+
+/* ============================================================
+   メモの自動保存とセッション復帰(localStorage)
+
+   §10.6の「保存するのは作業環境の好みだけ」という線引きの**唯一の例外**。
+   あちらが保存しないのは「次に開くデータでは意味を持たない」ものだが、
+   メモは違う。**DXFから再計算できない唯一のデータ**であり、現場での中断・
+   バッテリー切れ・タブの破棄で失われると戻せない。beforeunloadは
+   iPadのSafariなど効かない環境があり、それだけでは守りきれない。
+
+   ただし**黙って復元しない**。読み込んだデータに前回の入力が勝手に混ざるのは、
+   利用者が把握できないまま結果が変わることになる(§4.1.1「形やデータ件数が
+   変わる処理を無言で行わない」と同じ考え方)。保存した時刻・データ名・件数を
+   見せたうえで選ばせる。
+
+   照合はSrcID(読み込み時のID)で行う。表示上のIDは§7で自動採番されるため、
+   別の機会に読み直すと番号がずれる。SrcIDは元データ由来なので、
+   同じDXFを読み直す限り安定している。
+   さらに指紋(データ名・件数・SrcIDの並びのCRC32)が一致したときだけ提案する。
+   別のデータに前回のメモを持ち込むと、番号が偶然合っただけの石に
+   所見が付き、**画面上は正常に見える**ため気づけない。
+
+   **控えはデータごとに別の枠へ入れる**。枠が1つだと、同じ日にA壁とB壁を
+   回ったときにB壁の入力がA壁の控えを消してしまう。壁ごとに調査するのが
+   実際の使い方なので、指紋を鍵にして複数を並存させる。
+
+   保管はブラウザごと・オリジンごと。プライベートモードや容量超過では
+   例外になるが、保存できなくてもアプリは動くべきなのでtry/catchで囲む。
+============================================================ */
+const NOTES_KEY = "gac.notes.v1";
+const NOTES_MAX_SLOTS = 20;   // 際限なく溜めない。あふれたら古い順に捨てる
+
+/* このモデルを一意に表す指紋。別のデータへメモを持ち込ませないための鍵 */
+function noteFingerprint() {
+  const src = csvRows.map((r) => String(r["SrcID"] ?? "")).join(",");
+  const bytes = new TextEncoder().encode(src);
+  return {
+    dataset: document.getElementById("dataset-name").value.trim(),
+    count: csvRows.length,
+    crc: crc32(bytes),
+  };
+}
+
+/* 指紋から枠の鍵を作る。データ名は利用者が編集しうるので鍵には入れない */
+function noteSlotKey(fp) { return `${fp.count}:${fp.crc}`; }
+
+function readNoteStore() {
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (!raw) return { v: 1, slots: {} };
+    const d = JSON.parse(raw);
+    if (!d || d.v !== 1 || !d.slots) return { v: 1, slots: {} };
+    return d;
+  } catch (e) {
+    return { v: 1, slots: {} };   // 壊れていたら空から始める
+  }
+}
+
+let saveNotesTimer = null;
+
+function saveNotes() {
+  try {
+    if (!csvColumns.includes(NOTE_COL)) return;
+    const fp = noteFingerprint();
+    const key = noteSlotKey(fp);
+    const store = readNoteStore();
+
+    const notes = {};
+    let n = 0;
+    for (const row of csvRows) {
+      const text = String(row[NOTE_COL] ?? "");
+      if (text === "") continue;
+      const src = String(row["SrcID"] ?? "");
+      if (src === "") continue;   // 照合できないものは保存しない
+      notes[src] = text;
+      n++;
+    }
+    // 全部消したら、そのデータの枠だけを消す(他のデータの控えは残す)
+    if (n === 0) delete store.slots[key];
+    else store.slots[key] = { savedAt: Date.now(), fp, notes };
+
+    // あふれたら古い順に捨てる
+    const keys = Object.keys(store.slots);
+    if (keys.length > NOTES_MAX_SLOTS) {
+      keys.sort((a, b) => store.slots[a].savedAt - store.slots[b].savedAt)
+        .slice(0, keys.length - NOTES_MAX_SLOTS)
+        .forEach((k) => delete store.slots[k]);
+    }
+
+    if (Object.keys(store.slots).length === 0) localStorage.removeItem(NOTES_KEY);
+    else localStorage.setItem(NOTES_KEY, JSON.stringify(store));
+  } catch (e) {
+    /* 容量超過やプライベートモードでは保存できない。
+       書き出しという確実な保存手段があるので、ここでは止めない */
+  }
+}
+
+/* 1文字ごとに書き込まないよう、少し待ってからまとめて保存する */
+function scheduleSaveNotes() {
+  clearTimeout(saveNotesTimer);
+  saveNotesTimer = setTimeout(saveNotes, 500);
+}
+
+/* モデルを読み終えた直後に呼ぶ。このデータの枠に控えがあれば復元を提案する */
+function offerNoteRestore() {
+  const store = readNoteStore();
+  const saved = store.slots[noteSlotKey(noteFingerprint())];
+  if (!saved || !saved.notes) return;   // 別のデータなら枠が無いので何も起きない
+
+  const keys = Object.keys(saved.notes);
+  if (keys.length === 0) return;
+  const when = new Date(saved.savedAt).toLocaleString();
+  const name = saved.fp.dataset || "(データ名なし)";
+  if (!confirm(
+    `前回の入力が残っています。復元しますか？\n\n` +
+    `データ名: ${name}\n件数: ${keys.length} 件のメモ\n保存日時: ${when}\n\n` +
+    `「キャンセル」を選ぶと、このまま空の状態で続けます(保存は消えません)。`
+  )) return;
+
+  // SrcIDで突き合わせる。表示上のIDは自動採番でずれるため使わない
+  const bySrc = new Map();
+  for (const row of csvRows) {
+    const k = String(row["SrcID"] ?? "");
+    if (k !== "") bySrc.set(k, row);
+  }
+  let restored = 0;
+  const missing = [];
+  for (const [k, text] of Object.entries(saved.notes)) {
+    const row = bySrc.get(k);
+    if (row) { row[NOTE_COL] = text; restored++; }
+    else missing.push(k);
+  }
+  if (restored === 0) { setStatus("復元できるメモがありませんでした。", true); return; }
+
+  if (!csvColumns.includes(NOTE_COL)) csvColumns.push(NOTE_COL);
+  syncNoteDerived();
+  refreshAttributeOptions();
+  refreshLabelContentOptions();
+  refreshFilterRuleOptions();
+  // 色分け済みなら図に反映する。未実行なら勝手に着色しない(利用者の操作を待つ)
+  if (hasApplied) applyColorize();
+  setUnsavedNotes(true);   // 復元しただけではCSVに落ちていない
+
+  let msg = `メモを ${restored} 件復元しました。`;
+  // 取りこぼしを黙って捨てない
+  if (missing.length) {
+    msg += `\n${missing.length} 件は対応するオブジェクトが見つかりませんでした` +
+           `(元ID: ${missing.slice(0, 5).join("・")}${missing.length > 5 ? " ほか" : ""})。`;
+  }
+  msg += "\nCSVで保存するまでファイルには残りません。";
+  setStatus(msg, missing.length > 0);
+}
 
 /* ============================================================
    オブジェクトラベル(位置に合わせて属性値を常時表示)
@@ -5274,6 +5428,7 @@ function loadSampleData() {
     document.getElementById("apply-btn").click();
     renumberIds();  // IDを立面図の左下から自動採番
     setStatus("サンプルデータ(石垣)を表示中です。\n自分のDXF/GLBを読み込むと置き換わります。");
+    offerNoteRestore();  // 同じデータの前回の入力が残っていれば復元を提案する
   }, 100);
 }
 
