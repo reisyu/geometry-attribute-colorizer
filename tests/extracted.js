@@ -26,6 +26,10 @@ const PALETTE = [
   [0.85, 0.60, 0.50], [0.55, 0.25, 0.45], [0.40, 0.50, 0.30], [0.65, 0.65, 0.75],
 ];
 
+const NOTE_COL = "Note";
+
+const NOTE_LABEL_MAX = 12;
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -467,6 +471,18 @@ function csvEscape(v) {
   return s;
 }
 
+function formatValue(v) {
+  const n = Number(v);
+  return (String(v).trim() !== "" && Number.isFinite(n)) ? String(Number(n.toPrecision(5))) : String(v);
+}
+
+function labelText(key, v) {
+  const s = formatValue(v);
+  if (key !== NOTE_COL) return s;
+  const oneLine = s.replace(/\s+/g, " ").trim();
+  return oneLine.length > NOTE_LABEL_MAX ? oneLine.slice(0, NOTE_LABEL_MAX) + "…" : oneLine;
+}
+
 function categoryColorByIndex(i) {
   if (i < PALETTE.length) return PALETTE[i];
   // 黄金角による自動生成(彩度・明度を交互に変えて識別性を補う)
@@ -616,4 +632,4 @@ async function buildZip(entries) {
   return new Blob([...body, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
 }
 
-module.exports = { PALETTE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip };

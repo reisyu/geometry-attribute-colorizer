@@ -29,6 +29,8 @@ const FUNCS = [
   "isNumericColumn",
   "symmetricAngleColor",
   "csvEscape",
+  "formatValue",
+  "labelText",
   "categoryColorByIndex",
   "solveFitDistance",
   "solveFitOrtho",
@@ -40,7 +42,7 @@ const FUNCS = [
 ];
 
 // 抽出対象の定数
-const CONSTS = ["PALETTE"];
+const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX"];
 
 const root = __dirname;
 const htmlPath = path.join(root, "index.html");
@@ -77,12 +79,17 @@ function extractFunction(name) {
   throw new Error(`関数の終端が見つかりません: ${name}`);
 }
 
-/* const NAME = [ ... ]; 形式の定数を切り出す */
+/* 定数を切り出す。配列 (const NAME = [ ... ];) と、1行で書かれた
+   スカラー (const NAME = "x";) の両方に対応する */
 function extractConst(name) {
-  const start = src.indexOf(`const ${name} = [`);
-  if (start < 0) throw new Error(`定数が見つかりません: ${name}`);
-  const end = src.indexOf("];", start);
-  return src.slice(start, end + 2);
+  const arrStart = src.indexOf(`const ${name} = [`);
+  if (arrStart >= 0) {
+    const end = src.indexOf("];", arrStart);
+    return src.slice(arrStart, end + 2);
+  }
+  const m = src.match(new RegExp(`^const ${name} = [^\\n;]+;`, "m"));
+  if (!m) throw new Error(`定数が見つかりません: ${name}`);
+  return m[0];
 }
 
 const parts = [

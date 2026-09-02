@@ -1363,7 +1363,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.15.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.16.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1427,6 +1427,7 @@ const ATTR_INFO = {
   RectAngle: { jp: "矩形回転角", desc: "外接矩形の水平辺が面内の水平基準から回転している角度。反時計回り(右上がり)がプラス" },
   Flatness:  { jp: "平面性",   desc: "フィット平面からの最大ズレ距離。大きいほど平面近似の信頼性が低い" },
   Note: { jp: "メモ", desc: "点検時の所見などを自由に書き留める欄。属性インスペクタで編集し、CSVに書き出される" },
+  HasNote: { jp: "メモの有無", desc: "メモが書かれていれば「あり」、空なら「なし」。メモ本文から自動で作られる列で、色分け・立面図で記入済みの箇所を見るために使う" },
   SelfIntersect: { jp: "自己交差", desc: "輪郭の自己交差の大きさ(0〜0.5)。0は交差なし。交差で分かれる小さい側のループが全体に占める面積比で、Areaはこの値の2倍だけ小さく出る" },
   X: { jp: "重心X", desc: "輪郭の重心のX座標(原点シフト前の元の座標値)" },
   Y: { jp: "重心Y", desc: "輪郭の重心のY座標(原点シフト前の元の座標値)" },
@@ -2703,7 +2704,7 @@ function buildExportSVG(items, view, opt) {
       for (const key of keys) {
         if (key === "__id__") linesOut.push(item.matchName);
         else if (row && row[key] !== undefined && String(row[key]).trim() !== "") {
-          linesOut.push((multi ? key + ": " : "") + formatValue(row[key]));
+          linesOut.push((multi ? key + ": " : "") + labelText(key, row[key]));
         }
       }
       if (linesOut.length === 0) continue;
@@ -3637,6 +3638,9 @@ function loadCSVText(text, displayName) {
         }
       }
 
+      // 読み戻したCSVにメモ列があれば「メモの有無」を作り直してから選択肢を組む
+      // (書き出したCSVを読み込んだとき、有無での色分けがそのまま使えるように)
+      syncNoteDerived();
       refreshAttributeOptions();
       refreshLabelContentOptions();
       const droppedRules = refreshFilterRuleOptions();
@@ -3665,13 +3669,37 @@ function loadCSVFile(file) {
   reader.readAsText(file);
 }
 
-/* メモ列は自由記述なので、値がほぼ全件異なる。色分けに使うと
-   カテゴリ色が石の数だけ生成されて意味のない虹になり、ラベルや立面図に出すと
-   長文が図を埋める。値を「見せる」用途からは外し、インスペクタとCSVでのみ扱う。
-   (フィルタは数値列限定なので、こちらは何もしなくても対象外になる) */
+/* メモ本文は自由記述で値がほぼ全件異なるため、色分けに使うとカテゴリ色が
+   石の数だけ生成されて意味のない虹になる。**色分けの対象からは外す**。
+   代わりに「メモの有無」(HasNote)を自動で作り、2色で塗り分けられるようにする。
+   これなら記入済みの箇所が図で一望でき、立面図にも出せる。
+   ラベルには本文を出せるようにしてある(長文は labelText で切り詰める)。
+   (フィルタは数値列限定なので、どちらも何もしなくても対象外になる) */
 const NOTE_COL = "Note";
+const NOTE_FLAG_COL = "HasNote";
+const NOTE_YES = "あり", NOTE_NO = "なし";
+
+/* 色分け・まとめ書き出しに出す列(メモ本文を除く) */
 function visualizableColumns(idCol) {
   return csvColumns.filter((c) => c !== idCol && c !== NOTE_COL);
+}
+/* ラベルに出せる列(メモ本文も含む) */
+function labelableColumns(idCol) {
+  return csvColumns.filter((c) => c !== idCol);
+}
+
+/* メモ本文から「メモの有無」列を作り直す。
+   全行に必ず値を入れるのが要点で、空欄のままにすると §4.3 の欠損値スキップで
+   その石だけ色が付かず、「なし」なのか「未計算」なのか見分けられなくなる。
+   メモを一度も書いていないデータには列を作らない(使わない列をCSVに増やさない) */
+function syncNoteDerived() {
+  if (!csvColumns.includes(NOTE_COL)) return false;
+  const added = !csvColumns.includes(NOTE_FLAG_COL);
+  if (added) csvColumns.push(NOTE_FLAG_COL);
+  for (const row of csvRows) {
+    row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
+  }
+  return added;
 }
 
 function refreshAttributeOptions() {
@@ -4655,13 +4683,18 @@ noteInput.addEventListener("input", () => {
   if (!noteTargetRow) return;
   // 列は最初に書き込まれたときに作る。使っていなければCSVに空列を増やさない
   // (データ名からDataset列を作るのと同じ考え方)
-  if (!csvColumns.includes(NOTE_COL)) {
-    csvColumns.push(NOTE_COL);
+  let added = false;
+  if (!csvColumns.includes(NOTE_COL)) { csvColumns.push(NOTE_COL); added = true; }
+  noteTargetRow[NOTE_COL] = noteInput.value;
+  if (syncNoteDerived()) added = true;   // 「メモの有無」も同時に作られる
+  if (added) {
     refreshAttributeOptions();
     refreshLabelContentOptions();
     refreshFilterRuleOptions();
   }
-  noteTargetRow[NOTE_COL] = noteInput.value;
+  // 有無で色分け中・ラベル表示中なら、書いた瞬間に図へ反映する
+  if (hasApplied && document.getElementById("attribute").value === NOTE_FLAG_COL) applyColorize();
+  else if (showLabelsCheckbox.checked) rebuildLabels();
   setUnsavedNotes(true);
 });
 
@@ -4696,6 +4729,17 @@ function formatValue(v) {
   return (String(v).trim() !== "" && Number.isFinite(n)) ? String(Number(n.toPrecision(5))) : String(v);
 }
 
+/* ラベル(3D・立面図SVG共通)に出す文字列。
+   メモは複数行の長文になりうる。そのまま出すと1つの石のラベルが図を覆うため、
+   改行を空白に潰して先頭だけ見せる。全文はインスペクタで読む前提 */
+const NOTE_LABEL_MAX = 12;
+function labelText(key, v) {
+  const s = formatValue(v);
+  if (key !== NOTE_COL) return s;
+  const oneLine = s.replace(/\s+/g, " ").trim();
+  return oneLine.length > NOTE_LABEL_MAX ? oneLine.slice(0, NOTE_LABEL_MAX) + "…" : oneLine;
+}
+
 function rebuildLabels() {
   labelsContainer.innerHTML = "";
   labelEntries = [];
@@ -4720,7 +4764,7 @@ function rebuildLabels() {
         if (!row) continue;
         const v = row[key];
         if (v === undefined || v === null || String(v).trim() === "") continue;
-        lines.push({ key, value: formatValue(v) });
+        lines.push({ key, value: labelText(key, v) });
       }
     }
     if (lines.length === 0) continue;
@@ -4797,7 +4841,7 @@ function refreshLabelContentOptions() {
   };
 
   makeItem("__id__", "ID(オブジェクト名)");
-  visualizableColumns(idCol).forEach((c) => makeItem(c, attrLabel(c)));
+  labelableColumns(idCol).forEach((c) => makeItem(c, attrLabel(c)));
 }
 
 showLabelsCheckbox.addEventListener("change", () => {

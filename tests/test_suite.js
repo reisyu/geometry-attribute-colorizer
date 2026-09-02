@@ -135,6 +135,22 @@ ok(F.csvEscape("目地開き\n要経過観察, \"南面\"") === '"目地開き\n
 ok(F.csvEscape("") === "", "空文字はそのまま");
 ok(F.csvEscape(null) === "" || F.csvEscape(null) === "null", "nullでも例外にならない");
 
+// --- ラベルに出す文字列(メモは切り詰める) ---
+// メモは複数行の長文になりうる。そのまま出すと1つの石のラベルが図を覆う
+ok(F.labelText("Note", "短い") === "短い", "短いメモはそのまま出す");
+ok(F.labelText("Note", "目地開き\n要経過観察のため次回確認") === "目地開き 要経過観察のた…",
+   "長いメモは改行を空白に潰して先頭だけ出す");
+ok(F.labelText("Note", "あ".repeat(F.NOTE_LABEL_MAX)) === "あ".repeat(F.NOTE_LABEL_MAX),
+   "上限ちょうどのメモは省略記号を付けない");
+ok(F.labelText("Note", "あ".repeat(F.NOTE_LABEL_MAX + 1)) === "あ".repeat(F.NOTE_LABEL_MAX) + "…",
+   "上限を1文字超えたら省略する");
+ok(F.labelText("Note", "  前後の空白\t\n  ") === "前後の空白", "前後の空白は落とす");
+ok(F.labelText("Note", "") === "", "空のメモは空文字");
+// メモ以外の列は切り詰めない(数値の整形は formatValue のまま)
+ok(F.labelText("Width", "0.917723456") === "0.91772", "数値列は従来どおり有効数字5桁");
+ok(F.labelText("SrcID", "とても長いテキスト値だが切り詰めない") === "とても長いテキスト値だが切り詰めない",
+   "メモ以外の長いテキストは切り詰めない");
+
 // 平面からズレた輪郭のFlatness
 const bumpy = [[0,0,0],[4,0,0],[4,2,0.1],[0,2,0]];
 const a4 = F.computeContourAttributes(bumpy);
