@@ -455,6 +455,8 @@
       未保存のメモがあるあいだは、<strong>ビューの左上に「メモ○件 未保存」</strong>が出て、
       「7. 書き出す」の見出しにも件数が出ます（畳んでいても見えます）。
       「属性をCSVで保存」ボタンも目立つ色に変わります。保存すればすべて消えます。
+      書き出したCSVを読み戻すときは<strong>元ID（SrcID）で突き合わせます</strong>。
+      DXFを作り直すと表示上のIDは振り直されますが、メモは元の石に付いたままになります。
       メモを書くと<strong>「メモの有無」</strong>という属性が自動で作られ、これで色分けすれば
       記入済みの箇所が図で一望できます（記入済みが赤、未記入はグレーで表示されます）。メモ本文はラベルに出せます（長いものは先頭だけ表示され、
       全文はインスペクタで読めます）。
@@ -707,7 +709,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.19.1";
+  const HELP_VERSION = "1.20.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

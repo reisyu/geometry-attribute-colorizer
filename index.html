@@ -1395,7 +1395,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.19.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.20.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2340,6 +2340,9 @@ function loadDXFFile(file) {
           const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial(sharedMaterialParams));
           mesh.name = id;
           mesh.userData.isContour = true;  // 頂点順序が輪郭そのもの(SVG書き出し対象)
+          // 元ID(レイヤー名由来)を持たせる。表示上のIDは§7で振り直されるため、
+          // 書き出したCSVを読み戻すときの照合にはこちらを使う(§6.3.2)
+          mesh.userData.srcId = id;
           // 中心線(傾きライン): Z-up→Y-up変換+原点シフトを適用して保存
           mesh.userData.rectLine = {
             a: [attrs.rectLine.a[0] - ox, attrs.rectLine.a[2] - oz, -(attrs.rectLine.a[1] - oy)],
@@ -3884,8 +3887,6 @@ function applyColorize() {
   const invert = document.getElementById("invert-gradient").checked;
 
   // CSVをIDで引けるようにする
-  const dataById = new Map();
-  for (const row of csvRows) dataById.set(normalizeId(row[idCol]), row);
 
   const numericMode = isNumericColumn(csvRows, attr);
   let vmin = Infinity, vmax = -Infinity;
@@ -3986,12 +3987,10 @@ function applyColorize() {
   }
   let matched = 0;
   const unmatched = [];
+  const lookup = makeRowLookup();   // フィルタと同じ仕組みで照合する
 
   for (const { mesh, matchName } of meshes) {
-    let id = matchName || "";
-    if (prefix && id.startsWith(prefix)) id = id.slice(prefix.length);
-    id = normalizeId(id);
-    const row = dataById.get(id);
+    const row = lookup.find(mesh, matchName);
     if (!row) { unmatched.push(matchName); continue; }
 
     attributesByMesh.set(mesh.uuid, row);
@@ -4027,6 +4026,7 @@ function applyColorize() {
 
   let msg = `完了: ${matched} 個に反映 (対象属性: ${attr}, ${numericMode ? "数値" : "テキスト"})`;
   if (unmatched.length) msg += `\n未マッチ: ${unmatched.length} 個 (例: ${unmatched.slice(0, 5).join(", ")})`;
+  msg += idShiftNotice(lookup.stats);   // IDがずれていたら黙って進めない
   // 入力を無視した場合は必ず知らせる(指定したのに効いていない、と誤解させない)
   if (ignoredRange.length) msg += `\n範囲指定の${ignoredRange.join("・")}は数値として読めないため無視しました`;
   setStatus(msg, unmatched.length > 0 || ignoredRange.length > 0);
@@ -4305,19 +4305,75 @@ function refreshFilterRuleOptions() {
 /* フィルタには属性値の紐づけが要る。色分けを実行していれば applyColorize が
    作っているが、まだ実行していない/色をリセットした状態でも絞り込めるように、
    色を変えずに紐づけだけを作る */
-function buildAttributeMap() {
-  attributesByMesh.clear();
-  if (!csvRows.length) return;
+/* メッシュとCSVの行を突き合わせる仕組み。**色分けとフィルタで必ず同じものを使う**。
+   かつては両方に同じコードが写してあり、片方だけ直すと食い違う形になっていた。
+
+   照合は**元ID(SrcID)を優先する**。表示上のIDは§7で立面図の左下から自動採番
+   されるため、DXFを作り直すと石が1つ増減しただけで番号が全部ずれる。
+   書き出したCSVを読み戻したとき、IDで突き合わせると**別の石にメモが付く**。
+   画面上は正常に見えるので利用者は気づけない(§6.3の「属性が無くなった条件」と同じ型)。
+   元IDは元データ由来なので、振り直しの影響を受けない。
+
+   SrcID列を持たないCSV(外部で作った属性表など)では従来どおりIDで照合する。 */
+function makeRowLookup() {
   const idCol = document.getElementById("id-column").value;
   const prefix = document.getElementById("id-prefix").value;
-  const dataById = new Map();
-  for (const row of csvRows) dataById.set(normalizeId(row[idCol]), row);
-  for (const { mesh, matchName } of meshes) {
+  const byId = new Map();
+  for (const row of csvRows) byId.set(normalizeId(row[idCol]), row);
+
+  // SrcID列があり、かつ値が一意なときだけ元IDでの照合を使う。
+  // 重複があると別の石に付きうるので、その場合は使わない
+  let bySrc = null;
+  if (csvColumns.includes("SrcID") && idCol !== "SrcID") {
+    const m = new Map();
+    let dup = false;
+    for (const row of csvRows) {
+      const k = normalizeId(row["SrcID"]);
+      if (k === "") continue;
+      if (m.has(k)) { dup = true; break; }
+      m.set(k, row);
+    }
+    if (!dup && m.size > 0) bySrc = m;
+  }
+
+  const stats = { bySrc: 0, byId: 0, none: 0, differed: 0 };
+  function find(mesh, matchName) {
     let id = matchName || "";
     if (prefix && id.startsWith(prefix)) id = id.slice(prefix.length);
-    const row = dataById.get(normalizeId(id));
+    const rowById = byId.get(normalizeId(id));
+    const src = mesh && mesh.userData ? mesh.userData.srcId : undefined;
+    const rowBySrc = (bySrc && src !== undefined) ? bySrc.get(normalizeId(src)) : undefined;
+
+    if (rowBySrc) {
+      // IDでの照合と結果が違うなら番号がずれている。黙って進めず数える
+      if (rowById && rowById !== rowBySrc) stats.differed++;
+      stats.bySrc++;
+      return rowBySrc;
+    }
+    if (rowById) { stats.byId++; return rowById; }
+    stats.none++;
+    return null;
+  }
+  return { find, stats };
+}
+
+/* 照合のずれを利用者に伝える文。ずれていなければ空文字 */
+function idShiftNotice(stats) {
+  if (!stats || !stats.differed) return "";
+  const nl = String.fromCharCode(10);
+  return nl + `※ CSVのIDと現在の採番がずれています(${stats.differed} 個)。元ID(SrcID)で照合しました。` +
+    nl + "  DXFを作り直すとIDは振り直されます。IDで突き合わせると別のオブジェクトに付きます。";
+}
+
+function buildAttributeMap() {
+  attributesByMesh.clear();
+  if (!csvRows.length) return null;
+  const lookup = makeRowLookup();
+  for (const { mesh, matchName } of meshes) {
+    const row = lookup.find(mesh, matchName);
     if (row) attributesByMesh.set(mesh.uuid, row);
   }
+  return lookup.stats;
 }
 
 /* 除外表示(半透明)はマテリアルを書き換える。読み込んだGLBのマテリアルは
@@ -5461,6 +5517,7 @@ function loadSampleData() {
     );
     mesh.name = contour.id;
     mesh.userData.isContour = true;  // 頂点順序が輪郭そのもの(SVG書き出し対象)
+    mesh.userData.srcId = contour.id;   // 元ID。CSV読み戻しの照合に使う(§6.3.2)
     mesh.userData.rectLine = {
       a: [attrs.rectLine.a[0] - ox, attrs.rectLine.a[2] - oz, -(attrs.rectLine.a[1] - oy)],
       b: [attrs.rectLine.b[0] - ox, attrs.rectLine.b[2] - oz, -(attrs.rectLine.b[1] - oy)],
