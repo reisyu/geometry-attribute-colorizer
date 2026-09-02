@@ -103,6 +103,7 @@
     font-size: 10px;
     transition: transform 0.15s;
   }
+  .step-label .step-sum.warn { color: var(--warn); }
   .step-label .step-sum {
     margin-left: auto;
     margin-right: 8px;
@@ -441,6 +442,25 @@
     border-radius: 50%;
   }
   body.light #axis-gizmo { background: rgba(255, 255, 255, 0.75); }
+  /* 左下: メモの未保存表示。凡例と重ならないよう上端に置く。
+     失うと戻せない唯一のデータなので、パネルを畳んでいても見える場所に出す */
+  #note-badge {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    z-index: 5;
+    display: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(33, 36, 42, 0.85);
+    border: 1px solid var(--warn);
+    color: var(--warn);
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  body.light #note-badge { background: rgba(255, 255, 255, 0.9); }
+
   #proj-indicator {
     visibility: hidden;
     font-size: 10px;
@@ -956,6 +976,10 @@
     <button id="theme-toggle" title="背景色の切り替え">☀ ライト</button>
   </div>
 
+  <!-- メモが未保存であることは、パネルを畳んでいても目に入る必要がある。
+       ビュー上に出すのは §6.6 で投影方式のラベルを足したのと同じ考え方 -->
+  <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
+
   <div id="viewport-gizmo">
     <svg id="axis-gizmo" viewBox="-32 -32 64 64"></svg>
     <div id="proj-indicator">平行投影</div>
@@ -1363,7 +1387,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.18.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.19.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4730,9 +4754,27 @@ noteInput.addEventListener("input", () => {
 });
 
 function setUnsavedNotes(dirty) {
-  if (hasUnsavedNotes === dirty) return;
   hasUnsavedNotes = dirty;
-  document.getElementById("note-unsaved").style.display = dirty ? "" : "none";
+  const n = dirty ? csvRows.filter((r) => String(r[NOTE_COL] ?? "").trim() !== "").length : 0;
+
+  // パネル内の説明
+  const hint = document.getElementById("note-unsaved");
+  hint.style.display = dirty ? "" : "none";
+  hint.textContent = `メモ${n}件が未保存です。CSVで保存しないと残りません`;
+
+  // ビュー上のバッジ(パネルを畳んでいても見える)
+  const badge = document.getElementById("note-badge");
+  // 既定の display:none はCSS側にあるため、"" では戻らない。明示的に指定する
+  badge.style.display = dirty ? "block" : "none";
+  badge.textContent = `● メモ${n}件 未保存`;
+
+  // 保存先のボタン自体を「操作」の見た目に格上げする(色分けボタンと同じ手口)。
+  // どこを押せばよいかが、警告と同時に目に入るようにする
+  const btn = document.getElementById("download-csv-btn");
+  btn.classList.toggle("action", dirty);
+  btn.classList.toggle("ghost", !dirty);
+
+  updateStepSummaries();   // 畳んだステップの見出しにも出す
 }
 
 // メモは再計算できないので、書き出さずに閉じようとしたら引き止める
@@ -5610,8 +5652,11 @@ function updateStepSummaries() {
   }
   // 6. ラベル
   stepSummaryEls[5].textContent = showLabelsCheckbox.checked ? "表示中" : "";
-  // 7. 書き出す
-  stepSummaryEls[6].textContent = "";
+  // 7. 書き出す — 未保存のメモがあることは畳んでいても見せる
+  const unsavedN = hasUnsavedNotes
+    ? csvRows.filter((r) => String(r[NOTE_COL] ?? "").trim() !== "").length : 0;
+  stepSummaryEls[6].textContent = unsavedN ? `メモ${unsavedN}件 未保存` : "";
+  stepSummaryEls[6].classList.toggle("warn", unsavedN > 0);
 }
 
 /* ============================================================
