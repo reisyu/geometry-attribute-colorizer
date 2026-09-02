@@ -1395,7 +1395,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.20.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.20.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3648,6 +3648,7 @@ function loadCSVText(text, displayName) {
     complete: (result) => {
       csvRows = result.data;
       csvColumns = result.meta.fields || [];
+      noteBackupWarned = false;   // データが変わったら控えの可否を改めて知らせる
       if (csvColumns.length < 2) {
         setStatus("CSVにはID列と属性列の少なくとも2列が必要です。", true);
         return;
@@ -3677,6 +3678,11 @@ function loadCSVText(text, displayName) {
       // 読み戻したCSVにメモ列があれば「メモの有無」を作り直してから選択肢を組む
       // (書き出したCSVを読み込んだとき、有無での色分けがそのまま使えるように)
       syncNoteDerived();
+      // オブジェクトとCSVの行の対応を作り直す。ここで作らないと、
+      // 色分けをやり直すまで**前のCSVの行を指したまま**になる。
+      // インスペクタが古い属性を出すだけでなく、その状態で書いたメモは
+      // 捨てられる行に入り、画面には出ているのに書き出しにも控えにも残らない
+      buildAttributeMap();
       refreshAttributeOptions();
       refreshLabelContentOptions();
       const droppedRules = refreshFilterRuleOptions();
@@ -4790,10 +4796,21 @@ const noteInput = document.getElementById("insp-note");
 let noteTargetRow = null;   // いま編集中の行(属性テーブルの行オブジェクトそのもの)
 let hasUnsavedNotes = false;
 
+/* メモの書き込み先が、いま読み込んでいるデータの行であることを確かめる。
+   別のCSVを読み込んだ後などに古い行を掴んだままだと、画面には文字が出るのに
+   どこにも残らない。安全側に倒してメモ欄を出さない */
+function noteRowIsLive(row) {
+  return !!row && csvRows.includes(row);
+}
+
 function bindNoteEditor(row) {
-  noteTargetRow = row || null;
-  noteInput.disabled = !row;
-  noteInput.value = row ? (row[NOTE_COL] ?? "") : "";
+  const live = noteRowIsLive(row);
+  noteTargetRow = live ? row : null;
+  noteInput.disabled = !live;
+  noteInput.value = live ? (row[NOTE_COL] ?? "") : "";
+  // 掴んだ行が現在のデータのものでないときは、書けることにしない
+  noteInput.placeholder = live ? "点検の所見などを記入"
+    : "この行は現在のデータに含まれていません(色分けを実行し直してください)";
 }
 
 noteInput.addEventListener("input", () => {
@@ -4843,9 +4860,22 @@ function setUnsavedNotes(dirty) {
 
 // メモは再計算できないので、書き出さずに閉じようとしたら引き止める
 window.addEventListener("beforeunload", (e) => {
+  // 保存は500ms待ってからまとめて書くので、書いた直後に閉じられると
+  // 控えに入らないまま失われる。警告を出す前に必ず書き切る
+  clearTimeout(saveNotesTimer);
+  saveNotes();
   if (!hasUnsavedNotes) return;
   e.preventDefault();
   e.returnValue = "";
+});
+
+/* スマホでのアプリ切り替えやタブの破棄では beforeunload が発火しないことがある。
+   画面が隠れた時点でも書き切っておく */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    clearTimeout(saveNotesTimer);
+    saveNotes();
+  }
 });
 
 /* ============================================================
@@ -4911,6 +4941,8 @@ function readNoteStore() {
 }
 
 let saveNotesTimer = null;
+/* 控えを取れないことの通知は、データごとに1回だけにする(入力のたびに出すとうるさい) */
+let noteBackupWarned = false;
 
 function saveNotes() {
   try {
@@ -4920,14 +4952,25 @@ function saveNotes() {
     const store = readNoteStore();
 
     const notes = {};
-    let n = 0;
+    let n = 0, skipped = 0;
     for (const row of csvRows) {
       const text = String(row[NOTE_COL] ?? "");
       if (text === "") continue;
       const src = String(row["SrcID"] ?? "");
-      if (src === "") continue;   // 照合できないものは保存しない
+      if (src === "") { skipped++; continue; }   // 照合できないものは保存しない
       notes[src] = text;
       n++;
+    }
+
+    // 元IDを持たないデータ(GLB+外部CSVなど)では控えを取れない。
+    // 黙って何もしないと、自動保存されているつもりで失われる。
+    // IDで代用してはいけない(§6.3.2。振り直しで別のオブジェクトに付く)
+    if (skipped > 0 && !noteBackupWarned) {
+      noteBackupWarned = true;
+      setStatus(
+        "このデータには元ID(SrcID)が無いため、メモをブラウザに控えられません。" +
+        String.fromCharCode(10) +
+        "画面上のメモは残りますが、閉じると失われます。CSVで保存してください。", true);
     }
     // 全部消したら、そのデータの枠だけを消す(他のデータの控えは残す)
     if (n === 0) delete store.slots[key];
