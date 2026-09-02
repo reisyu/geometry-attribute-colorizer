@@ -1363,7 +1363,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.16.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.16.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4637,29 +4637,8 @@ canvas.addEventListener("pointerup", (e) => {
   const entry = meshes.find((m) => m.mesh === mesh);
   document.getElementById("insp-name").textContent = entry ? entry.matchName : mesh.name;
 
-  const table = document.getElementById("insp-table");
-  table.innerHTML = "";
   const row = attributesByMesh.get(mesh.uuid);
-  if (row) {
-    const idCol = document.getElementById("id-column").value;
-    for (const [k, v] of Object.entries(row)) {
-      if (k === idCol) continue;  // IDは上の見出しに表示済みなので繰り返さない
-      if (k === NOTE_COL) continue;  // メモは下の編集欄で扱うので表には出さない
-      const tr = document.createElement("tr");
-      const td1 = document.createElement("td"); td1.textContent = attrLabel(k);
-      const td2 = document.createElement("td"); td2.textContent = v;
-      td2.title = v;  // 省略された場合に備えて全文をツールチップで見せる
-      tr.appendChild(td1); tr.appendChild(td2);
-      table.appendChild(tr);
-    }
-  } else {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 2;
-    td.textContent = "(CSV属性は未割り当て)";
-    tr.appendChild(td);
-    table.appendChild(tr);
-  }
+  renderInspectorTable(row);
   bindNoteEditor(row);
   inspector.style.display = "block";
 });
@@ -4669,6 +4648,37 @@ canvas.addEventListener("pointerup", (e) => {
    属性は全てDXFから再計算できるが、**メモだけは作り直せない**。
    そのため「書き出さないと残らない」ことを画面で主張し、閉じる前にも警告する。
 ============================================================ */
+/* 属性表を組み立て直す。
+   石を選んだときだけでなく**メモを書いたときにも呼ぶ**こと。
+   メモを書くとHasNote(メモの有無)が変わるが、選択時に作った表を放置すると、
+   すぐ下のメモ欄には本文が入っていて石の色も「あり」なのに、表だけ「なし」の
+   ままになる。裏の値は正しいので色分けもCSVも合っており、**画面の文字だけが
+   食い違う**ため利用者が気づけない。実際にv1.16.0で発生させた */
+function renderInspectorTable(row) {
+  const table = document.getElementById("insp-table");
+  table.innerHTML = "";
+  if (!row) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.textContent = "(CSV属性は未割り当て)";
+    tr.appendChild(td);
+    table.appendChild(tr);
+    return;
+  }
+  const idCol = document.getElementById("id-column").value;
+  for (const [k, v] of Object.entries(row)) {
+    if (k === idCol) continue;     // IDは上の見出しに表示済みなので繰り返さない
+    if (k === NOTE_COL) continue;  // メモは下の編集欄で扱うので表には出さない
+    const tr = document.createElement("tr");
+    const td1 = document.createElement("td"); td1.textContent = attrLabel(k);
+    const td2 = document.createElement("td"); td2.textContent = v;
+    td2.title = v;  // 省略された場合に備えて全文をツールチップで見せる
+    tr.appendChild(td1); tr.appendChild(td2);
+    table.appendChild(tr);
+  }
+}
+
 const noteInput = document.getElementById("insp-note");
 let noteTargetRow = null;   // いま編集中の行(属性テーブルの行オブジェクトそのもの)
 let hasUnsavedNotes = false;
@@ -4692,6 +4702,7 @@ noteInput.addEventListener("input", () => {
     refreshLabelContentOptions();
     refreshFilterRuleOptions();
   }
+  renderInspectorTable(noteTargetRow);   // HasNoteの表示を実際の値に追従させる
   // 有無で色分け中・ラベル表示中なら、書いた瞬間に図へ反映する
   if (hasApplied && document.getElementById("attribute").value === NOTE_FLAG_COL) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
