@@ -725,6 +725,13 @@
         <input type="range" id="obj-opacity" min="10" max="100" step="5" value="100">
       </div>
       <div class="row">
+        <label class="small">輪郭モデルの不透明度 <span id="contour-opacity-value" class="slider-value">65%</span></label>
+        <input type="range" id="contour-opacity" min="10" max="100" step="5" value="65">
+      </div>
+      <div class="row hint">
+        背景モデルを重ねている間は、輪郭モデルを常に手前に描きます。色を薄くするほど下の写真が見えます
+      </div>
+      <div class="row">
         <label class="checkbox-row"><input type="checkbox" id="obj-visible" checked> 背景モデルを表示</label>
       </div>
       <div class="row">
@@ -843,6 +850,15 @@
     <div class="row">
       <label class="small" for="line-width">線の太さ <span id="line-width-value" class="slider-value">50mm</span></label>
       <input type="range" id="line-width" min="20" max="100" step="5" value="50">
+    </div>
+
+    <div class="sub-header">選択したオブジェクトの強調</div>
+    <div class="row">
+      <label class="small" for="highlight-width">輪郭線の太さ <span id="highlight-width-value" class="slider-value">4px</span></label>
+      <input type="range" id="highlight-width" min="1" max="12" step="1" value="4">
+    </div>
+    <div class="row hint">
+      画面上の太さ(px)です。傾きラインの実寸mm指定と違い、ズームしても太さが変わりません
     </div>
   </div>
 
@@ -1107,8 +1123,27 @@ try {
 }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x17191d);
+/* 前後関係を2つのシーンで決める。
+
+   輪郭モデル(DXFから起こした平らな板)は、フォトグラメトリモデルの
+   凸凹した表面と同じ場所を占める。石が手前に膨らんでいる部分では板が
+   写真の内側に潜り込むため、1つのシーンに置くと深度テストの勝ち負けが
+   ピクセルごとに入れ替わり、色がまだらに散る(実際にそうなっていた)。
+   深度の微調整(polygonOffset)は同一平面のちらつきには効くが、
+   数cm単位の食い込みには効かない。
+
+   そこで**奥のパスと手前のパスに分け、間で深度だけ捨てる**。
+   背景(bgScene)を描く → 深度を消す → 調査対象(scene)を描く、の順にすると、
+   輪郭モデルは常に写真の手前になる。あとは輪郭モデルを半透明にすれば
+   下の写真が透けて見える(不透明度はステップ1のスライダー)。
+
+   画面の消去は奥のパスが担当するため、背景色はbgSceneに持たせる。
+   sceneにも背景色を持たせると、手前のパスが奥のパスを塗り潰してしまう。 */
+renderer.autoClear = false;
+
+const scene = new THREE.Scene();     // 調査対象(手前のパス): 輪郭モデル・傾きライン・選択の強調
+const bgScene = new THREE.Scene();   // 背景(奥のパス): グリッドとフォトグラメトリモデル
+bgScene.background = new THREE.Color(0x17191d);
 
 /* 透視投影・平行投影の2台のカメラを用意し、`camera`が現在アクティブな方を指す。
    `camera`をletにしているのは、レイキャスト・投影・リサイズなど大半のコードが
@@ -1128,7 +1163,7 @@ dirLight2.position.set(-5, -3, -4);
 scene.add(dirLight2);
 
 let grid = new THREE.GridHelper(20, 20, 0x33373f, 0x24272d);
-scene.add(grid);
+bgScene.add(grid);   // グリッドは背景側。手前のパスに置くと写真の上に線が乗る
 
 /* ---- 軸ギズモ: 元データ(DXF等、Z-up)のX/Y/Z軸が現在の視点でどちらを向いているかを
    右下に常時表示する。カメラの回転(quaternion)だけを使い、位置・投影方式には依存しない。
@@ -1370,19 +1405,31 @@ function currentPanScale() {
     : orbit.spherical.radius * 0.0012;
 }
 
+/* 選択の強調表示で使う入れ物。宣言だけを前に出しているのは、
+   起動直後に呼ばれるresize()がupdateHighlightUniforms()を通るため。
+   letは宣言前に触れると例外になり、初期化の途中で止まってしまう
+   (実際にここで起動しなくなったことがある)。中身は「選択オブジェクトの
+   ハイライト」の節で作る */
+let highlightObj = null;
+let highlightMaterial = null;
+
 function resize() {
   const w = wrap.clientWidth, h = wrap.clientHeight;
   renderer.setSize(w, h, false);
   perspCamera.aspect = w / h;
   perspCamera.updateProjectionMatrix();
   updateOrthoFrustum();
+  updateHighlightUniforms();   // 選択の輪郭線はpx指定なので画面サイズを渡し直す
 }
 window.addEventListener("resize", resize);
 resize();
 
 function animate() {
   requestAnimationFrame(animate);
-  renderer.render(scene, camera);
+  renderer.clear();                  // 色・深度・ステンシルを消す(autoClearを切っているため明示する)
+  renderer.render(bgScene, camera);  // 奥のパス
+  renderer.clearDepth();             // 深度だけ捨て、以降を必ず手前に描く
+  renderer.render(scene, camera);    // 手前のパス
   updateLabels();
 }
 // 注意: animate()の開始はスクリプトの最後で行う(全ての変数宣言が終わってから)
@@ -1395,7 +1442,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.20.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.21.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3409,8 +3456,9 @@ function disposeBackground() {
       obj.material.dispose();
     }
   });
-  scene.remove(backgroundRoot);
+  bgScene.remove(backgroundRoot);
   backgroundRoot = null;
+  applyOverlayOpacity();   // 透かす理由が無くなったので不透明に戻す
   document.getElementById("obj-controls").style.display = "none";
   document.getElementById("obj-btn").classList.remove("loaded");
   document.getElementById("obj-btn").innerHTML =
@@ -3556,7 +3604,7 @@ async function loadOBJSet(fileList) {
       const mesh = new THREE.Mesh(geometry, material);
       backgroundRoot.add(mesh);
     }
-    scene.add(backgroundRoot);
+    bgScene.add(backgroundRoot);
 
     // --- テクスチャの読み込み(縮小しながら順次) ---
     for (let i = 0; i < pendingTex.length; i++) {
@@ -3577,6 +3625,7 @@ async function loadOBJSet(fileList) {
     document.getElementById("obj-btn").textContent = objFile.name;
     document.getElementById("obj-controls").style.display = "block";
     document.getElementById("dropzone-hint").classList.add("hidden");
+    applyOverlayOpacity();   // 背景が入ったので輪郭モデルを透かす
 
     const missing = [...matTex.values()].filter((t) => !imageFiles.has(t));
     let msg = `背景モデルを読み込みました: ${(triCount).toLocaleString()} 三角形, テクスチャ ${pendingTex.length} 枚(2048pxに縮小)`;
@@ -3608,6 +3657,10 @@ document.getElementById("obj-opacity").addEventListener("input", (e) => {
       obj.material.depthWrite = o >= 0.999;
     }
   });
+});
+document.getElementById("contour-opacity").addEventListener("input", (e) => {
+  document.getElementById("contour-opacity-value").textContent = e.target.value + "%";
+  applyOverlayOpacity();
 });
 document.getElementById("obj-visible").addEventListener("change", (e) => {
   if (backgroundRoot) backgroundRoot.visible = e.target.checked;
@@ -4026,6 +4079,7 @@ function applyColorize() {
   }
 
   updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
+  applyOverlayOpacity();   // 作り直したマテリアルに、除外表示と背景モデル用の透過を貼り直す
   rebuildLabels();
   document.getElementById("reset-btn").disabled = false;
   document.getElementById("download-csv-btn").disabled = false;
@@ -4195,8 +4249,8 @@ function rebuildRectLines() {
     polygonOffsetUnits: -2,
   });
   rectLinesObj = new THREE.Mesh(geometry, material);
-  rectLinesObj.renderOrder = 1;
   scene.add(rectLinesObj);
+  updateRectLineLayering();
 }
 
 document.getElementById("show-rect-lines").addEventListener("change", () => {
@@ -4205,6 +4259,10 @@ document.getElementById("show-rect-lines").addEventListener("change", () => {
 });
 /* 色・太さの変更は即時反映(デバウンス付き) */
 let rectLineTimer = null;
+document.getElementById("highlight-width").addEventListener("input", (e) => {
+  document.getElementById("highlight-width-value").textContent = e.target.value + "px";
+  updateHighlightUniforms();
+});
 for (const id of ["line-color-center", "line-color-edge", "line-width"]) {
   document.getElementById(id).addEventListener("input", () => {
     document.getElementById("line-width-value").textContent =
@@ -4395,6 +4453,55 @@ function dimmableMaterial(mesh) {
   return clone;
 }
 
+/* ============================================================
+   背景モデルと輪郭モデルの重なり
+
+   前後関係は描画パス(bgScene → 深度クリア → scene)で決まっており、
+   輪郭モデルは常に背景モデルの手前になる。ここで決めるのは
+   **どれだけ透かすか**だけ。
+
+   不透明度を触る理由が2つ(フィルタの除外表示と、背景モデルを
+   透かして見せる表示)あるため、別々に書くと片方が他方を1.0に
+   戻してしまう。1つの関数に集約して、両方をここで決める
+============================================================ */
+function overlayOpacity() {
+  if (!backgroundRoot) return 1;   // 背景モデルが無ければ透かす理由がない
+  const v = Number(document.getElementById("contour-opacity").value);
+  return Number.isFinite(v) && v > 0 ? v / 100 : 1;
+}
+
+function applyMeshOpacity(mat, filtered) {
+  const o = filtered ? 0.12 : overlayOpacity();
+  mat.transparent = o < 0.999;
+  mat.opacity = o;
+  mat.depthWrite = !filtered;   // 除外した石は他の石を隠さない
+}
+
+/* 全オブジェクトに反映する。背景モデルの読み込み・削除・不透明度の変更と、
+   色分けの実行後に呼ぶ(フィルタ経由の場合はapplyFilterが同じことをする) */
+function applyOverlayOpacity() {
+  const translucent = overlayOpacity() < 0.999;
+  for (const { mesh } of meshes) {
+    const m = mesh.material;
+    if (!m) continue;
+    const filtered = !!mesh.userData.filtered;
+    const mine = m.userData && (m.userData.gac || m.userData.gacDim);
+    // 触る必要があるときだけ複製する(全件の複製は無駄が大きい)
+    if (!mine && !filtered && !translucent) { applyMeshOpacity(m, false); continue; }
+    applyMeshOpacity(mine ? m : dimmableMaterial(mesh), filtered);
+  }
+  updateRectLineLayering();
+}
+
+/* 傾きラインは輪郭モデルの手前に置きたい。輪郭モデルが半透明になると
+   「不透明を先、半透明を後」というグループ分けが優先され、renderOrderだけでは
+   前後が決まらなくなるため、同じ半透明グループに入れてから順番を指定する */
+function updateRectLineLayering() {
+  if (!rectLinesObj) return;
+  rectLinesObj.material.transparent = overlayOpacity() < 0.999;
+  rectLinesObj.renderOrder = 2;
+}
+
 function applyFilter() {
   const enabled = document.getElementById("filter-enable").checked;
   // 使う直前に紐づけを作り直す。色分けの実行時にも作られるが、それだけに頼ると
@@ -4443,11 +4550,9 @@ function applyFilter() {
       const m = mesh.material;
       const mine = m && m.userData && (m.userData.gac || m.userData.gacDim);
       // 除外するものだけ複製する(全件を複製すると無駄が大きい)
-      if (filtered || mine) {
-        const mat = mine ? m : dimmableMaterial(mesh);
-        mat.transparent = filtered;
-        mat.opacity = filtered ? 0.12 : 1.0;
-        mat.depthWrite = !filtered;
+      // 背景モデルを重ねている間は、除外していない石も半透明にする
+      if (filtered || mine || overlayOpacity() < 0.999) {
+        applyMeshOpacity(mine ? m : dimmableMaterial(mesh), filtered);
       }
     }
   }
@@ -4631,10 +4736,131 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
 
 /* ============================================================
    選択オブジェクトのハイライト
+
    ・クリックした石の輪郭を発光色の線で強調する
    ・深度テスト無効で他の石に隠れても位置が分かる
+   ・**線の太さは画面上のpx指定**にする。WebGLはlineWidthを無視する
+     (ANGLE経由では常に1px)ため、線分ごとに板を張り、頂点シェーダで
+     画面上の太さに広げる。傾きラインは実寸mm指定だが、こちらは
+     「どこを選んだか気づくため」の表示なので、ズームしても
+     太さが変わらないほうが目的に合う
 ============================================================ */
-let highlightObj = null;
+
+/* 閉じた輪郭(頂点の並び)を線分の並びに変換する。6要素で1本(始点xyz, 終点xyz)。
+   末尾と先頭も結んで閉じる */
+function contourToSegments(p) {
+  const n = Math.floor(p.length / 3);
+  if (n < 2) return new Float32Array(0);
+  const seg = new Float32Array(n * 6);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, o = i * 6;
+    seg[o] = p[i * 3]; seg[o + 1] = p[i * 3 + 1]; seg[o + 2] = p[i * 3 + 2];
+    seg[o + 3] = p[j * 3]; seg[o + 4] = p[j * 3 + 1]; seg[o + 5] = p[j * 3 + 2];
+  }
+  return seg;
+}
+
+/* 線分の集まりを、太さを持つ板(2三角形)の頂点属性に変換する。
+   板の4頂点には「この線分の始点と終点」「どちらの端か」「左右どちらへ広げるか」を
+   持たせ、実際の広げ方は頂点シェーダが画面座標で行う。
+   Three.jsに依存しない形にしてあるのは、ここだけをテストできるようにするため */
+function thickLineAttributes(seg) {
+  const n = Math.floor(seg.length / 6);
+  const pos = new Float32Array(n * 4 * 3);
+  const aStart = new Float32Array(n * 4 * 3);
+  const aEnd = new Float32Array(n * 4 * 3);
+  const aExpand = new Float32Array(n * 4 * 2);
+  const verts = n * 4;
+  const idx = verts > 65535 ? new Uint32Array(n * 6) : new Uint16Array(n * 6);
+  const side = [1, -1, 1, -1];      // 線に直交する向き
+  const which = [-1, -1, 1, 1];     // -1: 始点側  +1: 終点側
+  for (let i = 0; i < n; i++) {
+    const o = i * 6;
+    const sx = seg[o], sy = seg[o + 1], sz = seg[o + 2];
+    const ex = seg[o + 3], ey = seg[o + 4], ez = seg[o + 5];
+    for (let k = 0; k < 4; k++) {
+      const v = i * 4 + k, p = v * 3;
+      const atEnd = which[k] > 0;
+      pos[p] = atEnd ? ex : sx; pos[p + 1] = atEnd ? ey : sy; pos[p + 2] = atEnd ? ez : sz;
+      aStart[p] = sx; aStart[p + 1] = sy; aStart[p + 2] = sz;
+      aEnd[p] = ex; aEnd[p + 1] = ey; aEnd[p + 2] = ez;
+      aExpand[v * 2] = side[k];
+      aExpand[v * 2 + 1] = which[k];
+    }
+    const b = i * 4;
+    idx[o] = b; idx[o + 1] = b + 1; idx[o + 2] = b + 2;
+    idx[o + 3] = b + 2; idx[o + 4] = b + 1; idx[o + 5] = b + 3;
+  }
+  return { position: pos, aStart: aStart, aEnd: aEnd, aExpand: aExpand, index: idx };
+}
+
+function segmentsToThickGeometry(seg) {
+  const a = thickLineAttributes(seg);
+  const g = new THREE.BufferGeometry();
+  // position はシェーダでは使わないが、境界球の計算に必要なので持たせる
+  g.setAttribute("position", new THREE.BufferAttribute(a.position, 3));
+  g.setAttribute("aStart", new THREE.BufferAttribute(a.aStart, 3));
+  g.setAttribute("aEnd", new THREE.BufferAttribute(a.aEnd, 3));
+  g.setAttribute("aExpand", new THREE.BufferAttribute(a.aExpand, 2));
+  g.setIndex(new THREE.BufferAttribute(a.index, 1));
+  return g;
+}
+
+function getHighlightMaterial() {
+  if (highlightMaterial) return highlightMaterial;
+  highlightMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(0xffa028) },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uWidth: { value: 4 },
+    },
+    vertexShader: [
+      "attribute vec3 aStart;",
+      "attribute vec3 aEnd;",
+      "attribute vec2 aExpand;",      // x: 直交方向(±1)  y: -1=始点 / +1=終点
+      "uniform vec2 uResolution;",    // キャンバスの大きさ(CSS px)
+      "uniform float uWidth;",        // 線の太さ(px)
+      "void main() {",
+      "  vec4 cs = projectionMatrix * modelViewMatrix * vec4(aStart, 1.0);",
+      "  vec4 ce = projectionMatrix * modelViewMatrix * vec4(aEnd, 1.0);",
+      // 端点がカメラの後ろに回ると投影が破綻し、画面を横切る帯になる。板をつぶして隠す
+      "  if (cs.w <= 0.0 || ce.w <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }",
+      "  vec2 hres = uResolution * 0.5;",
+      "  vec2 ps = cs.xy / cs.w * hres;",
+      "  vec2 pe = ce.xy / ce.w * hres;",
+      "  vec2 d = pe - ps;",
+      "  float len = length(d);",
+      "  vec2 dir = len > 0.00001 ? d / len : vec2(1.0, 0.0);",
+      "  vec2 nrm = vec2(-dir.y, dir.x);",
+      "  vec4 c = (aExpand.y < 0.0) ? cs : ce;",
+      // 直交方向に半分ずつ広げ、線方向にも半分伸ばして角の欠けを埋める
+      "  vec2 off = (nrm * aExpand.x + dir * aExpand.y) * (uWidth * 0.5);",
+      "  c.xy += off / hres * c.w;",
+      "  gl_Position = c;",
+      "}",
+    ].join("\n"),
+    fragmentShader: [
+      "uniform vec3 uColor;",
+      "void main() { gl_FragColor = vec4(uColor, 1.0); }",
+    ].join("\n"),
+    side: THREE.DoubleSide,
+    depthTest: false,   // 他の石の裏に隠れても見えるようにする
+    // 半透明として扱わせる。輪郭モデルを半透明にしたとき、不透明のままだと
+    // 先に描かれてしまい、上から石の色をかぶってくすむ(renderOrderは
+    // 不透明・半透明のグループをまたいでは効かない)
+    transparent: true,
+  });
+  updateHighlightUniforms();
+  return highlightMaterial;
+}
+
+/* キャンバスの大きさと太さの設定をシェーダへ渡す。リサイズ時とスライダー操作時に呼ぶ */
+function updateHighlightUniforms() {
+  if (!highlightMaterial) return;
+  highlightMaterial.uniforms.uResolution.value.set(wrap.clientWidth || 1, wrap.clientHeight || 1);
+  const w = Number(document.getElementById("highlight-width").value);
+  highlightMaterial.uniforms.uWidth.value = Number.isFinite(w) && w > 0 ? w : 4;
+}
 
 /* モデルを破棄してGPUメモリを解放する。
    scene.remove()だけではジオメトリ・マテリアルがGPUに残り続け、
@@ -4675,27 +4901,27 @@ function disposeModel() {
 function setHighlight(mesh) {
   if (highlightObj) {
     scene.remove(highlightObj);
-    highlightObj.geometry.dispose();
-    highlightObj.material.dispose();
+    highlightObj.geometry.dispose();   // マテリアルは使い回すので破棄しない
     highlightObj = null;
   }
   if (!mesh) return;
 
-  const material = new THREE.LineBasicMaterial({
-    color: 0xffa028,
-    depthTest: false,  // 他の石の裏に隠れても見えるようにする
-  });
+  let seg;
   if (mesh.userData.isContour) {
-    // 輪郭モデル: 頂点順序がそのまま輪郭なのでLineLoopで縁取る
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", mesh.geometry.getAttribute("position").clone());
-    highlightObj = new THREE.LineLoop(geometry, material);
+    // 輪郭モデル: 頂点順序がそのまま輪郭なので、順に結んで閉じる
+    seg = contourToSegments(mesh.geometry.getAttribute("position").array);
+    if (seg.length < 6) return;
   } else {
-    // GLB等の三角形メッシュ: エッジ抽出で縁取る
-    const geometry = new THREE.EdgesGeometry(mesh.geometry, 30);
-    highlightObj = new THREE.LineSegments(geometry, material);
+    // GLB等の三角形メッシュ: エッジ抽出で縁取る(2頂点で1本の並びになる)
+    const eg = new THREE.EdgesGeometry(mesh.geometry, 30);
+    seg = new Float32Array(eg.getAttribute("position").array);
+    eg.dispose();
+    if (seg.length < 6) return;
   }
-  highlightObj.renderOrder = 999;  // 常に最前面
+
+  highlightObj = new THREE.Mesh(segmentsToThickGeometry(seg), getHighlightMaterial());
+  highlightObj.frustumCulled = false;  // 太さの分だけ境界からはみ出すため、culling対象から外す
+  highlightObj.renderOrder = 999;      // 常に最前面
   scene.add(highlightObj);
 }
 
@@ -5616,15 +5842,15 @@ let isLightTheme = false;
 function applyTheme(light) {
   isLightTheme = light;
   document.body.classList.toggle("light", light);
-  scene.background = new THREE.Color(light ? 0xeef0f3 : 0x17191d);
+  bgScene.background = new THREE.Color(light ? 0xeef0f3 : 0x17191d);
   // グリッドは色を作り直す
   const gridY = grid.position.y;
-  scene.remove(grid);
+  bgScene.remove(grid);
   grid = light
     ? new THREE.GridHelper(20, 20, 0xc3c8cf, 0xdadee4)
     : new THREE.GridHelper(20, 20, 0x33373f, 0x24272d);
   grid.position.y = gridY;
-  scene.add(grid);
+  bgScene.add(grid);
   document.getElementById("theme-toggle").textContent = light ? "🌙 ダーク" : "☀ ライト";
   scheduleSaveSettings();
 }
@@ -5795,6 +6021,8 @@ const SETTINGS_KEY = "gac.settings.v1";
    更新する必要があるものだけ。書き出し設定は使うときに読まれるので不要 */
 const SAVED_SETTINGS = [
   ["obj-opacity",       "value", "input"],
+  ["contour-opacity",   "value", "input"],
+  ["highlight-width",   "value", "input"],
   ["line-color-center", "value", "input"],
   ["line-color-edge",   "value", "input"],
   ["line-width",        "value", "input"],

@@ -37,6 +37,7 @@ const TESTS = [
   ["test_lwpolyline.js", "LWPOLYLINE形式DXF"],
   ["test_aspect.js", "アスペクト比"],
   ["test_zip.js", "ZIP書き出し"],
+  ["test_thickline.js", "選択の輪郭線(太線)"],
   ["integration_test.js", "実データ統合"],
 ];
 

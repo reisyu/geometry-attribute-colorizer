@@ -632,4 +632,46 @@ async function buildZip(entries) {
   return new Blob([...body, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip };
+function contourToSegments(p) {
+  const n = Math.floor(p.length / 3);
+  if (n < 2) return new Float32Array(0);
+  const seg = new Float32Array(n * 6);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, o = i * 6;
+    seg[o] = p[i * 3]; seg[o + 1] = p[i * 3 + 1]; seg[o + 2] = p[i * 3 + 2];
+    seg[o + 3] = p[j * 3]; seg[o + 4] = p[j * 3 + 1]; seg[o + 5] = p[j * 3 + 2];
+  }
+  return seg;
+}
+
+function thickLineAttributes(seg) {
+  const n = Math.floor(seg.length / 6);
+  const pos = new Float32Array(n * 4 * 3);
+  const aStart = new Float32Array(n * 4 * 3);
+  const aEnd = new Float32Array(n * 4 * 3);
+  const aExpand = new Float32Array(n * 4 * 2);
+  const verts = n * 4;
+  const idx = verts > 65535 ? new Uint32Array(n * 6) : new Uint16Array(n * 6);
+  const side = [1, -1, 1, -1];      // 線に直交する向き
+  const which = [-1, -1, 1, 1];     // -1: 始点側  +1: 終点側
+  for (let i = 0; i < n; i++) {
+    const o = i * 6;
+    const sx = seg[o], sy = seg[o + 1], sz = seg[o + 2];
+    const ex = seg[o + 3], ey = seg[o + 4], ez = seg[o + 5];
+    for (let k = 0; k < 4; k++) {
+      const v = i * 4 + k, p = v * 3;
+      const atEnd = which[k] > 0;
+      pos[p] = atEnd ? ex : sx; pos[p + 1] = atEnd ? ey : sy; pos[p + 2] = atEnd ? ez : sz;
+      aStart[p] = sx; aStart[p + 1] = sy; aStart[p + 2] = sz;
+      aEnd[p] = ex; aEnd[p + 1] = ey; aEnd[p + 2] = ez;
+      aExpand[v * 2] = side[k];
+      aExpand[v * 2 + 1] = which[k];
+    }
+    const b = i * 4;
+    idx[o] = b; idx[o + 1] = b + 1; idx[o + 2] = b + 2;
+    idx[o + 3] = b + 2; idx[o + 4] = b + 1; idx[o + 5] = b + 3;
+  }
+  return { position: pos, aStart: aStart, aEnd: aEnd, aExpand: aExpand, index: idx };
+}
+
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes };

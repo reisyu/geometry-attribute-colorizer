@@ -39,6 +39,8 @@ const FUNCS = [
   "crc32",
   "deflateRaw",
   "buildZip",
+  "contourToSegments",
+  "thickLineAttributes",
 ];
 
 // 抽出対象の定数
