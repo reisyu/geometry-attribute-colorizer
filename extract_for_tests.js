@@ -41,6 +41,7 @@ const FUNCS = [
   "buildZip",
   "contourToSegments",
   "thickLineAttributes",
+  "distToSegmentSq",
 ];
 
 // 抽出対象の定数

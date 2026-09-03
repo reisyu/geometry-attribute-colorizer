@@ -674,4 +674,13 @@ function thickLineAttributes(seg) {
   return { position: pos, aStart: aStart, aEnd: aEnd, aExpand: aExpand, index: idx };
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes };
+function distToSegmentSq(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0;
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  const qx = x0 + t * dx, qy = y0 + t * dy;
+  return (px - qx) * (px - qx) + (py - qy) * (py - qy);
+}
+
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq };

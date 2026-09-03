@@ -38,6 +38,7 @@ const TESTS = [
   ["test_aspect.js", "アスペクト比"],
   ["test_zip.js", "ZIP書き出し"],
   ["test_thickline.js", "選択の輪郭線(太線)"],
+  ["test_selection.js", "ブラシ選択の当たり判定"],
   ["integration_test.js", "実データ統合"],
 ];
 

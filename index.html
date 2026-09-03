@@ -426,6 +426,11 @@
   }
   #view-toolbar button:hover { color: var(--ink); border-color: var(--accent-dim); }
   body.light #view-toolbar button { background: rgba(255, 255, 255, 0.88); }
+  /* 状態が続くボタン(選択モード)は、押している間ずっと点いていることを面色で示す */
+  #view-toolbar button.on,
+  body.light #view-toolbar button.on {
+    background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700;
+  }
 
   /* 右下: 軸ギズモ(常時表示)+投影方式キャプション(平行投影のときだけ文字が見える)。
      キャプションはvisibility切り替え(display切り替えではない)で常にスペースを確保し、
@@ -464,6 +469,32 @@
     pointer-events: none;
   }
   body.light #note-badge { background: rgba(255, 255, 255, 0.9); }
+
+  #select-badge {
+    display: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(33, 36, 42, 0.85);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  body.light #select-badge { background: rgba(255, 255, 255, 0.9); }
+
+  /* ブラシの太さを見えるようにする円。指やカーソルの先に付いて回る。
+     どこまで拾うかが分からないまま塗るのは怖いので、範囲を必ず見せる */
+  #brush-cursor {
+    position: absolute;
+    display: none;
+    border: 1px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 4;
+    transform: translate(-50%, -50%);
+  }
 
   #proj-indicator {
     visibility: hidden;
@@ -675,6 +706,24 @@
   }
   body.light #inspector textarea { background: rgba(0,0,0,.04); }
   #inspector textarea:disabled { opacity: .5; }
+
+  #insp-group { display: none; }
+  #insp-group .g-warn { color: var(--warn); margin: 6px 0; white-space: normal; }
+  #insp-group .g-row { display: flex; gap: 6px; margin-top: 8px; }
+  #inspector .g-btn {
+    flex: 1;
+    background: rgba(127, 138, 150, 0.14);
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
+    cursor: pointer;
+  }
+  #inspector .g-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #inspector .g-btn.primary { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
+  #inspector .g-btn:disabled { opacity: .4; cursor: not-allowed; }
 
   @media (max-width: 700px) {
     body { flex-direction: column; }
@@ -979,12 +1028,14 @@
   <canvas id="viewport"></canvas>
   <div id="labels"></div>
   <div id="dropzone-hint">ファイルをここにドロップ(GLB / DXF / OBJ / CSV)</div>
+  <div id="brush-cursor"></div>
 
   <div id="view-toolbar">
     <button id="view-front" title="モデルの正面(立面図SVGと同じ向き)から見る">正面</button>
     <button id="view-top" title="モデルの真上から見る">上面</button>
     <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
     <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
+    <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択モード</button>
     <button id="theme-toggle" title="背景色の切り替え">☀ ライト</button>
   </div>
 
@@ -993,6 +1044,7 @@
        ビュー上に状態を出すのは §6.6 で投影方式のラベルを足したのと同じ考え方 -->
   <div id="viewport-badges">
     <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
+    <div id="select-badge">選択モード</div>
     <div id="sample-badge">サンプルデータを表示中</div>
   </div>
 
@@ -1033,6 +1085,18 @@
   <div id="inspector">
     <div class="insp-name" id="insp-name"></div>
     <table id="insp-table"></table>
+    <div id="insp-group">
+      <div class="g-warn" id="insp-group-warn"></div>
+      <label class="insp-note-label" for="insp-group-note">選択したすべてに書くメモ</label>
+      <textarea id="insp-group-note" rows="3" placeholder="例: この区画は孕み出しあり"></textarea>
+      <div class="g-row">
+        <button class="g-btn primary" id="insp-group-apply">まとめて書く</button>
+      </div>
+      <div class="g-row">
+        <button class="g-btn" id="insp-group-undo">直前を取り消す</button>
+        <button class="g-btn" id="insp-group-clear">選択を解除</button>
+      </div>
+    </div>
     <div id="insp-note-box">
       <label class="insp-note-label" for="insp-note">メモ</label>
       <!-- input ではなく textarea にしている。複数行が書けるだけでなく、
@@ -1247,11 +1311,19 @@ canvas.addEventListener("pointerdown", (e) => {
     const [p1, p2] = [...activePointers.values()];
     pinchLastDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
     pinchLastMid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    endBrushStroke();   // 2本目が触れたらズーム/パンに切り替わる。筆はここで区切る
     dragMode = null;
   } else if (activePointers.size === 1) {
-    // 右ボタン(2)・中ボタン(1)・Shift+左 は平行移動、それ以外(左)は回転
-    dragMode = (e.button === 1 || e.button === 2 || e.shiftKey) ? "pan" : "rotate";
-    if (dragMode === "rotate") retargetPivot();  // 回転開始時に中心を補正
+    // 選択モードでは左ドラッグが筆になる。奪うのは回転だけで、
+    // 右ドラッグのパンとホイールのズームは通常モードのまま使える
+    if (selectMode && e.button === 0 && !e.shiftKey) {
+      dragMode = "brush";
+      beginBrushStroke(e.clientX, e.clientY);
+    } else {
+      // 右ボタン(2)・中ボタン(1)・Shift+左 は平行移動、それ以外(左)は回転
+      dragMode = (e.button === 1 || e.button === 2 || e.shiftKey) ? "pan" : "rotate";
+      if (dragMode === "rotate") retargetPivot();  // 回転開始時に中心を補正
+    }
     lastX = e.clientX; lastY = e.clientY;
   }
   canvas.setPointerCapture(e.pointerId);
@@ -1289,6 +1361,7 @@ canvas.addEventListener("pointermove", (e) => {
   }
 
   if (!dragMode) return;
+  if (dragMode === "brush") { paintTo(e.clientX, e.clientY); return; }
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if (dragMode === "rotate") {
@@ -1310,7 +1383,10 @@ function releasePointer(e) {
     pinchLastDist = 0;
     pinchLastMid = null;
   }
-  if (activePointers.size === 0) dragMode = null;
+  if (activePointers.size === 0) {
+    if (dragMode === "brush") endBrushStroke();
+    dragMode = null;
+  }
 }
 canvas.addEventListener("pointerup", releasePointer);
 canvas.addEventListener("pointercancel", releasePointer);
@@ -1405,6 +1481,11 @@ function currentPanScale() {
 let highlightObj = null;
 let highlightMaterial = null;
 
+/* 複数選択の状態も同じ理由で前に出す(不透明度の計算から参照されるため)。
+   中身は「複数選択(ブラシ)」の節で扱う */
+let selectMode = false;
+const selection = new Set();
+
 function resize() {
   const w = wrap.clientWidth, h = wrap.clientHeight;
   renderer.setSize(w, h, false);
@@ -1418,6 +1499,7 @@ resize();
 
 function animate() {
   requestAnimationFrame(animate);
+  if (selectionOutlineDirty) rebuildSelectionOutline();   // 選択が変わったフレームだけ作り直す
   renderer.clear();                  // 色・深度・ステンシルを消す(autoClearを切っているため明示する)
   renderer.render(bgScene, camera);  // 奥のパス
   renderer.clearDepth();             // 深度だけ捨て、以降を必ず手前に描く
@@ -1434,7 +1516,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.21.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.22.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4164,26 +4246,8 @@ function rebuildRectLines() {
   const thickness = Number(document.getElementById("line-width").value) / 1000; // mm -> m
   const { center, edge } = currentLineColors();
 
-  // --- 1周目: 壁全体の平均法線を求める(浮かせる向きの基準) ---
-  // 各石の法線は巻き方向次第で表裏が反転しているため、SVG立面図と同じ
-  // 「上向き成分が正」ルールで揃えてから平均する
-  const globalN = new THREE.Vector3();
-  const tmpN = new THREE.Vector3();
-  let refN = null;
-  for (const { mesh } of meshes) {
-    const rl = mesh.userData.rectLine;
-    if (!rl) continue;
-    tmpN.set(rl.n[0], rl.n[2], -rl.n[1]);
-    if (Math.abs(tmpN.y) > 0.05) {
-      if (tmpN.y < 0) tmpN.negate();
-    } else if (refN && tmpN.dot(refN) < 0) {
-      tmpN.negate();
-    }
-    if (refN === null) refN = tmpN.clone();
-    globalN.add(tmpN);
-  }
-  if (globalN.lengthSq() > 1e-9) globalN.normalize();
-  else globalN.set(0, 0, 1);
+  // 壁全体の平均法線(浮かせる向きの基準)。ブラシの表裏判定と同じものを使う
+  const globalN = wallAverageNormal();
 
   const positions = [];
   const colors = [];
@@ -4458,8 +4522,11 @@ function overlayOpacity() {
   return Number.isFinite(v) && v > 0 ? v / 100 : 1;
 }
 
-function applyMeshOpacity(mat, filtered) {
-  const o = filtered ? 0.12 : overlayOpacity();
+function applyMeshOpacity(mesh, mat, filtered) {
+  let o = filtered ? 0.12 : overlayOpacity();
+  // 選択中は、選ばれていないものを薄くして「選んだ範囲」を面で読めるようにする。
+  // 縁取りだけでは、数十個を選んだときに線だらけになって範囲が読めない
+  if (!filtered && selection.size > 0 && !selection.has(mesh)) o = Math.min(o, SELECTION_DIM);
   mat.transparent = o < 0.999;
   mat.opacity = o;
   mat.depthWrite = !filtered;   // 除外した石は他の石を隠さない
@@ -4475,8 +4542,8 @@ function applyOverlayOpacity() {
     const filtered = !!mesh.userData.filtered;
     const mine = m.userData && (m.userData.gac || m.userData.gacDim);
     // 触る必要があるときだけ複製する(全件の複製は無駄が大きい)
-    if (!mine && !filtered && !translucent) { applyMeshOpacity(m, false); continue; }
-    applyMeshOpacity(mine ? m : dimmableMaterial(mesh), filtered);
+    if (!mine && !filtered && !translucent && selection.size === 0) { applyMeshOpacity(mesh, m, false); continue; }
+    applyMeshOpacity(mesh, mine ? m : dimmableMaterial(mesh), filtered);
   }
   updateRectLineLayering();
 }
@@ -4539,8 +4606,8 @@ function applyFilter() {
       const mine = m && m.userData && (m.userData.gac || m.userData.gacDim);
       // 除外するものだけ複製する(全件を複製すると無駄が大きい)
       // 背景モデルを重ねている間は、除外していない石も半透明にする
-      if (filtered || mine || overlayOpacity() < 0.999) {
-        applyMeshOpacity(mine ? m : dimmableMaterial(mesh), filtered);
+      if (filtered || mine || overlayOpacity() < 0.999 || selection.size > 0) {
+        applyMeshOpacity(mesh, mine ? m : dimmableMaterial(mesh), filtered);
       }
     }
   }
@@ -4878,6 +4945,12 @@ function disposeModel() {
   bindNoteEditor(null);
   setUnsavedNotes(false);
 
+  // 選択は別のモデルへ持ち越さない(消えたメッシュを掴み続けることになる)
+  selection.clear();
+  selectionUndo.length = 0;
+  selectionOutlineDirty = true;
+  updateSelectionUI();
+
   if (!modelRoot) return;
   modelRoot.traverse((obj) => {
     if (obj.isMesh) {
@@ -4918,6 +4991,362 @@ function setHighlight(mesh) {
 }
 
 /* ============================================================
+   複数選択(ブラシ)
+
+   選びたいのは「孕み出している一角」「積み直しの範囲」「ひびが連なる列」の
+   ような、**属性では表せないまとまり**である。計算で表せる集合ならフィルタで
+   足り、そもそもメモを書く必要がない(メモが再計算できない属性であるのと
+   同じ理由。§5.1.2)。だから手でなぞって選ぶ。
+
+   左ドラッグは回転で埋まっているため、モードを分けて奪う。
+   **奪うのは回転だけ**で、パン・ズームは通常モードと同じにしておく。
+   選択は分単位で続く作業なので、途中で見る場所を変えられないと使えない。
+   回転が要るときはモードを一度抜ける(選択は保持される)。
+============================================================ */
+const BRUSH_RADIUS_PX = 16;         // 筆の太さ(画面上の半径)。設定にはしない(§10.7)
+const SELECTION_DIM = 0.28;         // 選ばれていないものの不透明度
+const SELECTION_OUTLINE_MAX = 600;  // これを超えたら縁取りは省き、減光だけで示す
+
+let selectionOutline = null;
+let selectionOutlineDirty = false;
+let brushStroke = null;             // { x, y, cands } ストローク中だけ入る
+const selectionUndo = [];           // ストローク単位のスナップショット
+
+/* 点と線分の距離(の2乗)。pointermoveは飛び飛びに届くため、点ではなく
+   **線分**で判定しないと、速くなぞったときに間の石が抜ける */
+function distToSegmentSq(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0;
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  const qx = x0 + t * dx, qy = y0 + t * dy;
+  return (px - qx) * (px - qx) + (py - qy) * (py - qy);
+}
+
+/* 壁全体の平均法線。個々の石の法線は巻き方向次第で表裏が反転しているため、
+   「上向き成分が正」ルールで揃えてから平均する(傾きライン・SVG立面図と同じ) */
+function wallAverageNormal() {
+  const g = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  let ref = null;
+  for (const { mesh } of meshes) {
+    const rl = mesh.userData.rectLine;
+    if (!rl) continue;
+    t.set(rl.n[0], rl.n[2], -rl.n[1]);
+    if (Math.abs(t.y) > 0.05) {
+      if (t.y < 0) t.negate();
+    } else if (ref && t.dot(ref) < 0) {
+      t.negate();
+    }
+    if (ref === null) ref = t.clone();
+    g.add(t);
+  }
+  return g.lengthSq() > 1e-9 ? g.normalize() : g.set(0, 0, 1);
+}
+
+/* ブラシが拾う候補を、ストロークの開始時に1度だけ作る。
+
+   判定は**重心が筆の円に入ったか**で行う。輪郭に少しでも触れたら拾う方式は
+   隣を巻き込みやすく、拾ったつもりのない石が混ざる。
+
+   裏側を向いた面を外すのは、壁が曲がっていると向こう側の石も画面上は
+   同じ場所に来るため。**見えていない石が黙って混ざる**のを防ぐ */
+function buildBrushCandidates() {
+  const list = [];
+  const globalN = wallAverageNormal();
+  const box = new THREE.Box3();
+  const n = new THREE.Vector3();
+  const toCam = new THREE.Vector3();
+  const viewDir = new THREE.Vector3();
+  camera.getWorldDirection(viewDir);
+  for (const { mesh } of meshes) {
+    if (!mesh.visible || mesh.userData.filtered) continue;
+    let c = mesh.userData.centerV;
+    if (!c) {
+      box.setFromObject(mesh);
+      if (box.isEmpty()) continue;
+      c = new THREE.Vector3();
+      box.getCenter(c);
+      mesh.userData.centerV = c;   // 石は動かないので使い回す
+    }
+    const rl = mesh.userData.rectLine;
+    if (rl) {
+      n.set(rl.n[0], rl.n[2], -rl.n[1]);
+      if (n.dot(globalN) < 0) n.negate();   // 表側に揃える
+      if (camera === orthoCamera) toCam.copy(viewDir).negate();
+      else toCam.subVectors(camera.position, c);
+      if (n.dot(toCam) <= 0) continue;
+    }
+    list.push({ mesh, c });
+  }
+  return list;
+}
+
+function beginBrushStroke(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left, y = clientY - rect.top;
+  pushSelectionUndo();
+  brushStroke = { x, y, cands: buildBrushCandidates() };
+  paintSegment(x, y, x, y);
+  paintUnderCursor(clientX, clientY);
+}
+
+function paintTo(clientX, clientY) {
+  if (!brushStroke) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left, y = clientY - rect.top;
+  paintSegment(brushStroke.x, brushStroke.y, x, y);
+  paintUnderCursor(clientX, clientY);
+  brushStroke.x = x; brushStroke.y = y;
+}
+
+/* 筆の中心の真下にあるものは、重心が遠くても拾う。
+   重心だけで判定すると、**大きな石の端をなぞったときに選ばれない**。
+   画面では明らかに筆が乗っているのに入らないのは、理由が分からない挙動になる */
+function paintUnderCursor(clientX, clientY) {
+  if (!brushStroke || meshes.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(brushStroke.cands.map((c) => c.mesh), false);
+  if (!hits.length) return;
+  const mesh = hits[0].object;
+  if (selection.has(mesh)) return;
+  const prevSize = selection.size;
+  selection.add(mesh);
+  setMeshSelectionAppearance(mesh);
+  afterSelectionChange(prevSize);
+}
+
+function endBrushStroke() {
+  brushStroke = null;
+}
+
+const _brushProj = new THREE.Vector3();
+
+function paintSegment(x0, y0, x1, y1) {
+  if (!brushStroke) return;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const r2 = BRUSH_RADIUS_PX * BRUSH_RADIUS_PX;
+  const prevSize = selection.size;
+  for (const item of brushStroke.cands) {
+    if (selection.has(item.mesh)) continue;
+    _brushProj.copy(item.c).project(camera);
+    if (_brushProj.z > 1) continue;   // カメラの後ろ
+    const px = (_brushProj.x + 1) / 2 * w;
+    const py = (-_brushProj.y + 1) / 2 * h;
+    if (distToSegmentSq(px, py, x0, y0, x1, y1) > r2) continue;
+    selection.add(item.mesh);
+    setMeshSelectionAppearance(item.mesh);
+  }
+  if (selection.size !== prevSize) afterSelectionChange(prevSize);
+}
+
+/* ---- 選択の出し入れ ---- */
+
+function pushSelectionUndo() {
+  selectionUndo.push(new Set(selection));
+  if (selectionUndo.length > 20) selectionUndo.shift();
+}
+
+function undoSelection() {
+  if (selectionUndo.length === 0) return;
+  const prevSize = selection.size;
+  const snap = selectionUndo.pop();
+  selection.clear();
+  for (const m of snap) selection.add(m);
+  refreshSelectionAppearance();
+  afterSelectionChange(prevSize);
+  setStatus("選択を1つ前に戻しました(" + selection.size + "個)");
+}
+
+function clearSelection() {
+  if (selection.size === 0) return;
+  const prevSize = selection.size;
+  pushSelectionUndo();
+  selection.clear();
+  refreshSelectionAppearance();
+  afterSelectionChange(prevSize);
+}
+
+function toggleSelected(mesh) {
+  const prevSize = selection.size;
+  pushSelectionUndo();
+  if (selection.has(mesh)) selection.delete(mesh);
+  else selection.add(mesh);
+  setMeshSelectionAppearance(mesh);
+  afterSelectionChange(prevSize);
+}
+
+/* 空↔非空の切り替わりでは、選ばれていない側の見え方も変わるので全件に反映する。
+   ストローク中の1個ずつの追加で全件を触ると重いので、切り替わりのときだけ行う */
+function afterSelectionChange(prevSize) {
+  if ((prevSize === 0) !== (selection.size === 0)) refreshSelectionAppearance();
+  selectionOutlineDirty = true;
+  updateSelectionUI();
+}
+
+function setMeshSelectionAppearance(mesh) {
+  const m = mesh.material;
+  if (!m) return;
+  const mine = m.userData && (m.userData.gac || m.userData.gacDim);
+  applyMeshOpacity(mesh, mine ? m : dimmableMaterial(mesh), !!mesh.userData.filtered);
+}
+
+function refreshSelectionAppearance() {
+  for (const { mesh } of meshes) setMeshSelectionAppearance(mesh);
+  selectionOutlineDirty = true;
+}
+
+/* 選択中の縁取り。1つのメッシュにまとめて張る(石ごとに作ると数百個になる)。
+   単一選択の強調と同じ材質を使い、見え方を揃える */
+function rebuildSelectionOutline() {
+  selectionOutlineDirty = false;
+  if (selectionOutline) {
+    scene.remove(selectionOutline);
+    selectionOutline.geometry.dispose();
+    selectionOutline = null;
+  }
+  if (selection.size === 0 || selection.size > SELECTION_OUTLINE_MAX) return;
+  const segs = [];
+  let total = 0;
+  for (const mesh of selection) {
+    if (!mesh.visible || mesh.userData.filtered) continue;
+    if (!mesh.userData.isContour) continue;   // 輪郭を持たないものは減光だけで示す
+    const s = contourToSegments(mesh.geometry.getAttribute("position").array);
+    if (s.length >= 6) { segs.push(s); total += s.length; }
+  }
+  if (total === 0) return;
+  const all = new Float32Array(total);
+  let off = 0;
+  for (const s of segs) { all.set(s, off); off += s.length; }
+  selectionOutline = new THREE.Mesh(segmentsToThickGeometry(all), getHighlightMaterial());
+  selectionOutline.frustumCulled = false;
+  selectionOutline.renderOrder = 998;
+  scene.add(selectionOutline);
+}
+
+/* ---- モードの切り替え ---- */
+
+function setSelectMode(on) {
+  if (selectMode === on) return;
+  selectMode = on;
+  document.getElementById("select-mode-toggle").classList.toggle("on", on);
+  document.getElementById("brush-cursor").style.display = "none";
+  canvas.style.cursor = on ? "crosshair" : "";
+  if (!on) endBrushStroke();
+  updateSelectionUI();
+}
+
+document.getElementById("select-mode-toggle").addEventListener("click", () => setSelectMode(!selectMode));
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && selectMode) setSelectMode(false);
+});
+
+/* 筆の太さを見せる円。どこまで拾うか分からないまま塗るのは怖い */
+const brushCursor = document.getElementById("brush-cursor");
+brushCursor.style.width = (BRUSH_RADIUS_PX * 2) + "px";
+brushCursor.style.height = (BRUSH_RADIUS_PX * 2) + "px";
+canvas.addEventListener("pointermove", (e) => {
+  if (!selectMode) return;
+  const rect = wrap.getBoundingClientRect();
+  brushCursor.style.display = "block";
+  brushCursor.style.left = (e.clientX - rect.left) + "px";
+  brushCursor.style.top = (e.clientY - rect.top) + "px";
+});
+canvas.addEventListener("pointerleave", () => { brushCursor.style.display = "none"; });
+
+/* ---- 画面の表示 ---- */
+
+function updateSelectionUI() {
+  const n = selection.size;
+  // 選択はモードを抜けても残る。残っていることが分かるよう、
+  // 通常モードでもバッジは出し続ける(減光だけが残って理由が分からない状態を作らない)
+  const badge = document.getElementById("select-badge");
+  badge.style.display = (selectMode || n > 0) ? "block" : "none";
+  badge.textContent = !selectMode ? n + "個を選択中"
+    : (n > 0 ? "選択モード ● " + n + "個" : "選択モード ● なぞって選ぶ");
+
+  const group = document.getElementById("insp-group");
+  const single = document.getElementById("insp-note-box");
+  const table = document.getElementById("insp-table");
+
+  if (n < 2) {
+    group.style.display = "none";
+    table.style.display = "";
+    single.style.display = "";
+    if (n === 1) showInspectorFor([...selection][0]);
+    return;
+  }
+
+  document.getElementById("inspector").style.display = "block";
+  document.getElementById("insp-name").textContent = n + "個を選択中";
+  table.style.display = "none";
+  single.style.display = "none";
+  group.style.display = "block";
+
+  // 既にメモがあるものを数える。黙って上書きしない(§5.1.2)
+  let withNote = 0, noRow = 0;
+  for (const mesh of selection) {
+    const row = attributesByMesh.get(mesh.uuid);
+    if (!noteRowIsLive(row)) { noRow++; continue; }
+    if (String(row[NOTE_COL] ?? "").trim() !== "") withNote++;
+  }
+  const msgs = [];
+  if (withNote > 0) msgs.push(withNote + "個には既にメモがあります(書くと上書きされます)");
+  if (noRow > 0) msgs.push(noRow + "個は属性データと結び付いていないため書けません");
+  document.getElementById("insp-group-warn").textContent = msgs.join(" / ");
+  document.getElementById("insp-group-undo").disabled = selectionUndo.length === 0;
+  document.getElementById("insp-group-apply").disabled = (n - noRow) === 0;
+}
+
+/* ---- 選択したすべてにメモを書く ---- */
+
+function applyGroupNote() {
+  const text = document.getElementById("insp-group-note").value;
+  const targets = [];
+  for (const mesh of selection) {
+    const row = attributesByMesh.get(mesh.uuid);
+    if (noteRowIsLive(row)) targets.push(row);
+  }
+  if (targets.length === 0) {
+    setStatus("メモを書ける行がありませんでした。" + String.fromCharCode(10) +
+              "色分けを実行し直してから、もう一度選び直してください。", true);
+    return;
+  }
+
+  // 列は最初に書き込まれたときに作る(単票のメモ欄と同じ扱い)
+  let added = false;
+  if (!csvColumns.includes(NOTE_COL)) { csvColumns.push(NOTE_COL); added = true; }
+  for (const row of targets) row[NOTE_COL] = text;
+  if (syncNoteDerived()) added = true;
+  if (added) {
+    refreshAttributeOptions();
+    refreshLabelContentOptions();
+    refreshFilterRuleOptions();
+  }
+  scheduleSaveNotes();
+  if (hasApplied && document.getElementById("attribute").value === NOTE_FLAG_COL) applyColorize();
+  else if (showLabelsCheckbox.checked) rebuildLabels();
+  setUnsavedNotes(true);
+  updateSelectionUI();
+
+  const skipped = selection.size - targets.length;
+  const NL = String.fromCharCode(10);
+  let msg = targets.length + "個にメモを書きました。" + NL + "CSVで保存しないと残りません。";
+  if (skipped > 0) msg += NL + skipped + "個は属性データと結び付いていないため書けませんでした。";
+  setStatus(msg, skipped > 0);
+}
+
+document.getElementById("insp-group-apply").addEventListener("click", applyGroupNote);
+document.getElementById("insp-group-undo").addEventListener("click", undoSelection);
+document.getElementById("insp-group-clear").addEventListener("click", () => {
+  clearSelection();
+  document.getElementById("inspector").style.display = "none";
+});
+
+/* ============================================================
    クリックで属性を表示(インスペクタ)
 ============================================================ */
 const raycaster = new THREE.Raycaster();
@@ -4935,7 +5364,7 @@ canvas.addEventListener("pointerup", (e) => {
 
   // ダブルクリック / ダブルタップ判定: クリック地点を回転中心にする
   const now = performance.now();
-  if (lastTapPos && now - lastTapTime < 350 &&
+  if (!selectMode && lastTapPos && now - lastTapTime < 350 &&
       Math.hypot(e.clientX - lastTapPos[0], e.clientY - lastTapPos[1]) < 24) {
     const rect0 = canvas.getBoundingClientRect();
     const sp = new THREE.Vector2(
@@ -4955,24 +5384,34 @@ canvas.addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(meshes.map((m) => m.mesh), false);
 
+  // 選択モードのタップは1個ずつの足し引き。空きをタップしても全解除しない
+  // (時間をかけて選んだものが、押し間違い1回で消えるのを避ける)
+  if (selectMode) {
+    if (hits.length) toggleSelected(hits[0].object);
+    return;
+  }
+
   const inspector = document.getElementById("inspector");
   if (!hits.length) {
     inspector.style.display = "none";
     bindNoteEditor(null);
-    setHighlight(null);  // 空クリックで選択解除
+    setHighlight(null);  // 空クリックで強調表示を消す
     return;
   }
+  showInspectorFor(hits[0].object);
+});
 
-  const mesh = hits[0].object;
+/* 1つのオブジェクトの属性をインスペクタに出す。通常モードのクリックと、
+   ブラシの選択が1個になったときの両方から呼ぶ */
+function showInspectorFor(mesh) {
   setHighlight(mesh);  // 選択した石を3D上で強調表示
   const entry = meshes.find((m) => m.mesh === mesh);
   document.getElementById("insp-name").textContent = entry ? entry.matchName : mesh.name;
-
   const row = attributesByMesh.get(mesh.uuid);
   renderInspectorTable(row);
   bindNoteEditor(row);
-  inspector.style.display = "block";
-});
+  document.getElementById("inspector").style.display = "block";
+}
 
 /* ============================================================
    メモ(Note列)
