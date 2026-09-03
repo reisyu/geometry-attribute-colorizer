@@ -42,10 +42,12 @@ const FUNCS = [
   "contourToSegments",
   "thickLineAttributes",
   "distToSegmentSq",
+  "normalizeClassValue",
+  "isReservedColumn",
 ];
 
 // 抽出対象の定数
-const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX"];
+const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO"];
 
 const root = __dirname;
 const htmlPath = path.join(root, "index.html");
@@ -82,13 +84,20 @@ function extractFunction(name) {
   throw new Error(`関数の終端が見つかりません: ${name}`);
 }
 
-/* 定数を切り出す。配列 (const NAME = [ ... ];) と、1行で書かれた
-   スカラー (const NAME = "x";) の両方に対応する */
+/* 定数を切り出す。配列 (const NAME = [ ... ];)、オブジェクト
+   (const NAME = { ... };)、1行で書かれたスカラー (const NAME = "x";) に対応する */
 function extractConst(name) {
   const arrStart = src.indexOf(`const ${name} = [`);
   if (arrStart >= 0) {
     const end = src.indexOf("];", arrStart);
     return src.slice(arrStart, end + 2);
+  }
+  const objStart = src.indexOf(`const ${name} = {`);
+  if (objStart >= 0) {
+    // 閉じ括弧は行頭の "};" とする(入れ子の括弧はインデントされている前提)
+    const end = src.indexOf("\n};", objStart);
+    if (end < 0) throw new Error(`定数の終わりが見つかりません: ${name}`);
+    return src.slice(objStart, end + 3);
   }
   const m = src.match(new RegExp(`^const ${name} = [^\\n;]+;`, "m"));
   if (!m) throw new Error(`定数が見つかりません: ${name}`);

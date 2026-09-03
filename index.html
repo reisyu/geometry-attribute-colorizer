@@ -707,6 +707,36 @@
   body.light #inspector textarea { background: rgba(0,0,0,.04); }
   #inspector textarea:disabled { opacity: .5; }
 
+  #insp-classify { display: none; margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 8px; }
+  #insp-classify .cls-head { display: flex; align-items: center; gap: 8px; }
+  #insp-classify .cls-head select { flex: 1; min-width: 0; }
+  #insp-classify .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  #inspector .cls-chip {
+    background: rgba(127, 138, 150, 0.16);
+    border: 1px solid var(--panel-edge);
+    border-radius: 999px;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 11.5px;
+    padding: 3px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #inspector .cls-chip:hover { border-color: var(--accent); color: var(--accent); }
+  #inspector .cls-chip.on { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
+  #inspector .cls-chip .cls-n { opacity: .65; margin-left: 4px; }
+  #insp-classify .cls-new { display: flex; gap: 6px; }
+  #insp-classify .cls-new input { flex: 1; min-width: 0; }
+  #insp-classify .cls-new .g-btn { flex: none; }
+
+  /* ステップ2の分類列の管理(値の一覧と統合) */
+  .cls-col { border: 1px solid var(--panel-edge); border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; }
+  .cls-col > summary { cursor: pointer; font-size: 12px; }
+  .cls-val { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .cls-val input { flex: 1; min-width: 0; }
+  .cls-val .cls-n { color: var(--ink-dim); font-size: 11px; white-space: nowrap; }
+  .cls-val button { flex: none; margin-top: 0; }
+
   #insp-group { display: none; }
   #insp-group .g-warn { color: var(--warn); margin: 6px 0; white-space: normal; }
   #insp-group .g-row { display: flex; gap: 6px; margin-top: 8px; }
@@ -810,6 +840,19 @@
     <div class="row">
       <button class="ghost" id="renumber-btn" style="margin-top:0">IDを振り直す(立面図の左下から)</button>
     </div>
+
+    <div class="sub-header">分類の列(手入力)</div>
+    <div class="row hint">
+      石種・エリアなど、計算では出せない分類を手で付けるための列です。
+      選択したオブジェクトへの入力はビュー上のパネルから行います
+    </div>
+    <div class="row">
+      <div style="display:flex; gap:6px">
+        <input type="text" id="new-class-col" placeholder="例: 石種" style="flex:1">
+        <button class="ghost" id="add-class-col" style="margin-top:0; flex:none">列を作る</button>
+      </div>
+    </div>
+    <div class="row" id="class-col-list"></div>
   </div>
 
   <!-- STEP 3: 色分け -->
@@ -1085,6 +1128,18 @@
   <div id="inspector">
     <div class="insp-name" id="insp-name"></div>
     <table id="insp-table"></table>
+    <div id="insp-classify">
+      <div class="cls-head">
+        <label class="insp-note-label" for="insp-class-col">分類</label>
+        <select id="insp-class-col"></select>
+      </div>
+      <div class="cls-chips" id="insp-class-chips"></div>
+      <div class="cls-new">
+        <input type="text" id="insp-class-new" placeholder="新しい値を入力">
+        <button class="g-btn" id="insp-class-add">追加</button>
+      </div>
+      <div class="g-warn" id="insp-class-warn"></div>
+    </div>
     <div id="insp-group">
       <div class="g-warn" id="insp-group-warn"></div>
       <label class="insp-note-label" for="insp-group-note">選択したすべてに書くメモ</label>
@@ -1516,7 +1571,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.22.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.23.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3776,6 +3831,8 @@ function loadCSVText(text, displayName) {
       csvRows = result.data;
       csvColumns = result.meta.fields || [];
       noteBackupWarned = false;   // データが変わったら控えの可否を改めて知らせる
+      // 手入力の記録は前のデータのもの。持ち越すと関係のない列を控えてしまう
+      manualCols.clear();
       if (csvColumns.length < 2) {
         setStatus("CSVにはID列と属性列の少なくとも2列が必要です。", true);
         return;
@@ -3813,6 +3870,8 @@ function loadCSVText(text, displayName) {
       refreshAttributeOptions();
       refreshLabelContentOptions();
       const droppedRules = refreshFilterRuleOptions();
+      renderClassColumnManager();   // 読み戻したCSVの分類列と、その値を一覧に出す
+      renderClassifyUI();
       updateStepSummaries();
       document.getElementById("csv-btn").classList.add("loaded");
       document.getElementById("csv-btn").textContent = displayName;
@@ -4133,6 +4192,11 @@ function applyColorize() {
     if (numericMode && raw.trim() !== "" && Number.isFinite(vmin)) {
       rgb = numericToColor(Number(raw), vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
     } else if (numericMode) {
+      rgb = [0.5, 0.5, 0.5];
+    } else if (String(raw).trim() === "") {
+      // 未入力はカテゴリにしない。分類の途中では空欄が最も多く、
+      // 色を1つ食うだけでなく「まだ付けていない場所」が読めなくなる。
+      // 数値属性で値が無いものを灰色にしているのと同じ扱い
       rgb = [0.5, 0.5, 0.5];
     } else {
       rgb = textToColor(raw);
@@ -4775,6 +4839,20 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
       item.appendChild(sw); item.appendChild(label);
       catDiv.appendChild(item);
     }
+    // 未入力(空欄)はカテゴリにしていないので、灰色として別に出す。
+    // 分類の途中では「まだ付けていない数」が最も知りたい情報になる
+    const blanks = csvRows.length - values.length;
+    if (blanks > 0) {
+      const item = document.createElement("div");
+      item.className = "cat-item";
+      const sw = document.createElement("span");
+      sw.className = "cat-swatch";
+      sw.style.background = rgbToCss([0.5, 0.5, 0.5]);
+      const label = document.createElement("span");
+      label.textContent = "未入力 (" + blanks + ")";
+      item.appendChild(sw); item.appendChild(label);
+      catDiv.appendChild(item);
+    }
     if (othersCats > 0) {
       const item = document.createElement("div");
       item.className = "cat-item";
@@ -4945,7 +5023,8 @@ function disposeModel() {
   bindNoteEditor(null);
   setUnsavedNotes(false);
 
-  // 選択は別のモデルへ持ち越さない(消えたメッシュを掴み続けることになる)
+  // 手入力の記録・選択は別のモデルへ持ち越さない
+  manualCols.clear();
   selection.clear();
   selectionUndo.length = 0;
   selectionOutlineDirty = true;
@@ -5278,6 +5357,11 @@ canvas.addEventListener("pointerleave", () => { brushCursor.style.display = "non
 /* ---- 画面の表示 ---- */
 
 function updateSelectionUI() {
+  updateSelectionPanels();
+  renderClassifyUI();   // 選択の増減に合わせて、値を付ける相手も変わる
+}
+
+function updateSelectionPanels() {
   const n = selection.size;
   // 選択はモードを抜けても残る。残っていることが分かるよう、
   // 通常モードでもバッジは出し続ける(減光だけが残って理由が分からない状態を作らない)
@@ -5432,6 +5516,7 @@ canvas.addEventListener("pointerup", (e) => {
     inspector.style.display = "none";
     bindNoteEditor(null);
     setHighlight(null);  // 空クリックで強調表示を消す
+    renderClassifyUI();
     return;
   }
   showInspectorFor(hits[0].object);
@@ -5447,6 +5532,7 @@ function showInspectorFor(mesh) {
   renderInspectorTable(row);
   bindNoteEditor(row);
   document.getElementById("inspector").style.display = "block";
+  renderClassifyUI();
 }
 
 /* ============================================================
@@ -5483,6 +5569,288 @@ function renderInspectorTable(row) {
     tr.appendChild(td1); tr.appendChild(td2);
     table.appendChild(tr);
   }
+}
+
+/* ============================================================
+   分類の列(手入力)
+
+   石種・エリアのように、**計算では出せない分類**を手で付けるための列。
+   メモ(§5.1.2)と同じ「再計算できないデータ」なので、失わせない仕組み
+   (未保存の表示・ブラウザへの控え・SrcIDでの読み戻し)を共有する。
+
+   選択肢は事前に決められない。新しい石種は現場で出てくるし、
+   決め打ちにすると入力が止まる。かといって自由入力だけにすると
+   **表記ゆれで同じものが別カテゴリに割れる**(「花崗岩」「花コウ岩」)。
+   割れても画面上は正しく見えるため気づけない。
+
+   そこで、
+   ・選択肢は**その列に実際に使われている値**から作る(事前定義は不要)
+   ・語彙の保管場所は**CSVそのもの**。前回のCSVを読み込めば選択肢が戻る
+   ・入力時に前後の空白と全角英数だけ揃える(漢字の異体字は機械では揃わない)
+   ・**後から統合できる**ようにする。ゆれは必ず起きるので、
+     起きない仕組みより、起きた後に直せる仕組みを用意する
+============================================================ */
+const CLASS_MAX_NAME = 40;
+
+/* 手で書き込んだ列。控えと未保存の対象を「メモだけ」から広げるために覚えておく */
+const manualCols = new Set();
+
+function idColumnName() {
+  const sel = document.getElementById("id-column");
+  return sel ? String(sel.value || "") : "";
+}
+
+/* 自動計算される列と、仕組み上の列。ここに手入力の列を作らせてはいけない。
+   DXFを読み直した瞬間に計算値で上書きされ、手で入れた値が消える */
+function isReservedColumn(name, idCol) {
+  const n = String(name == null ? "" : name).trim();
+  if (n === "") return true;
+  if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
+  if (idCol && n === idCol) return true;
+  if (n.toLowerCase() === "id") return true;
+  return false;
+}
+
+/* 分類の値の正規化。前後と連続する空白(全角含む)を詰め、全角英数を半角に揃える。
+   漢字の異体字までは触らない(機械では同じものか判断できない) */
+function normalizeClassValue(v) {
+  let s = String(v == null ? "" : v);
+  if (s.normalize) s = s.normalize("NFKC");
+  s = s.replace(/[\s　]+/g, " ");
+  return s.trim();
+}
+
+function classColumns() {
+  const idCol = idColumnName();
+  return csvColumns.filter((c) => !isReservedColumn(c, idCol));
+}
+
+/* その列で実際に使われている値と件数。多い順に並べる(よく使う値を手前に) */
+function classValueCounts(col) {
+  const m = new Map();
+  for (const row of csvRows) {
+    const v = normalizeClassValue(row[col]);
+    if (v === "") continue;
+    m.set(v, (m.get(v) || 0) + 1);
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"));
+}
+
+/* 値を付ける相手。ブラシで2個以上選んでいればそれ、そうでなければ
+   いま開いている1個。古い行(別のCSVの行)は必ず外す(§5.1.2) */
+function classifyTargets() {
+  if (selection.size >= 2) {
+    const rows = [];
+    for (const mesh of selection) {
+      const row = attributesByMesh.get(mesh.uuid);
+      if (noteRowIsLive(row)) rows.push(row);
+    }
+    return { rows, total: selection.size };
+  }
+  if (noteRowIsLive(noteTargetRow)) return { rows: [noteTargetRow], total: 1 };
+  return { rows: [], total: 0 };
+}
+
+/* ---- ビュー上のパネル(値を付ける) ---- */
+
+function renderClassifyUI() {
+  const box = document.getElementById("insp-classify");
+  const sel = document.getElementById("insp-class-col");
+  const cols = classColumns();
+  const { rows, total } = classifyTargets();
+  if (cols.length === 0 || total === 0) { box.style.display = "none"; return; }
+  box.style.display = "block";
+
+  const prev = sel.value;
+  sel.innerHTML = "";
+  for (const c of cols) {
+    const o = document.createElement("option");
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  }
+  sel.value = cols.includes(prev) ? prev : cols[0];
+  const col = sel.value;
+
+  // いま付いている値(全部同じならその値を点灯させる)
+  const current = new Set(rows.map((r) => normalizeClassValue(r[col])));
+
+  const chips = document.getElementById("insp-class-chips");
+  chips.innerHTML = "";
+  for (const [v, n] of classValueCounts(col)) {
+    const b = document.createElement("button");
+    b.className = "cls-chip" + (current.size === 1 && current.has(v) ? " on" : "");
+    b.textContent = v;
+    const cn = document.createElement("span");
+    cn.className = "cls-n"; cn.textContent = n;
+    b.appendChild(cn);
+    b.addEventListener("click", () => applyClassValue(col, v));
+    chips.appendChild(b);
+  }
+  const clr = document.createElement("button");
+  clr.className = "cls-chip";
+  clr.textContent = "空にする";
+  clr.addEventListener("click", () => applyClassValue(col, ""));
+  chips.appendChild(clr);
+
+  // 上書きの予告。黙って書き換えない(メモの一括入力と同じ扱い)
+  let filled = 0;
+  for (const r of rows) if (normalizeClassValue(r[col]) !== "") filled++;
+  const skipped = total - rows.length;
+  const msgs = [];
+  if (filled > 0 && total > 1) msgs.push(filled + "個には既に値が入っています(上書きされます)");
+  if (skipped > 0) msgs.push(skipped + "個は属性データと結び付いていないため書けません");
+  document.getElementById("insp-class-warn").textContent = msgs.join(" / ");
+}
+
+function applyClassValue(col, rawValue) {
+  const value = normalizeClassValue(rawValue);
+  const { rows, total } = classifyTargets();
+  if (rows.length === 0) {
+    setStatus("値を書ける行がありませんでした。" + String.fromCharCode(10) +
+              "色分けを実行し直してから、もう一度選び直してください。", true);
+    return;
+  }
+  // 列は最初の書き込み時に作る(メモ欄と同じ扱い)
+  let added = false;
+  if (!csvColumns.includes(col)) { csvColumns.push(col); added = true; }
+  for (const r of rows) r[col] = value;
+  manualCols.add(col);
+  if (added) {
+    refreshAttributeOptions();
+    refreshLabelContentOptions();
+    refreshFilterRuleOptions();
+  }
+  afterManualEdit(col);
+
+  const NL = String.fromCharCode(10);
+  const what = value === "" ? "空に" : "「" + value + "」に";
+  let msg = rows.length + "個を" + what + "しました。" + NL + "CSVで保存しないと残りません。";
+  const skipped = total - rows.length;
+  if (skipped > 0) msg += NL + skipped + "個は属性データと結び付いていないため書けませんでした。";
+  setStatus(msg, skipped > 0);
+}
+
+/* 手入力を書いた後の後始末。色分け・ラベル・未保存表示・控えを揃える。
+   メモ欄と分類で同じ経路を通す(片方だけ更新すると表示と実態が食い違う) */
+function afterManualEdit(col) {
+  scheduleSaveNotes();
+  setUnsavedNotes(true);
+  if (hasApplied && document.getElementById("attribute").value === col) applyColorize();
+  else if (showLabelsCheckbox.checked) rebuildLabels();
+  if (noteTargetRow) renderInspectorTable(noteTargetRow);
+  renderClassifyUI();
+  renderClassColumnManager();
+}
+
+document.getElementById("insp-class-col").addEventListener("change", renderClassifyUI);
+document.getElementById("insp-class-add").addEventListener("click", addClassValueFromInput);
+document.getElementById("insp-class-new").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); addClassValueFromInput(); }
+});
+
+function addClassValueFromInput() {
+  const inp = document.getElementById("insp-class-new");
+  const v = normalizeClassValue(inp.value);
+  if (v === "") { setStatus("値を入力してください。", true); return; }
+  const col = document.getElementById("insp-class-col").value;
+  inp.value = "";
+  applyClassValue(col, v);
+}
+
+/* ---- ステップ2(列を作る・値を整える) ---- */
+
+document.getElementById("add-class-col").addEventListener("click", () => {
+  const input = document.getElementById("new-class-col");
+  const name = normalizeClassValue(input.value);
+  const NL = String.fromCharCode(10);
+  if (csvRows.length === 0) {
+    setStatus("先にモデル(またはCSV)を読み込んでください。", true); return;
+  }
+  if (name === "") { setStatus("列の名前を入力してください。", true); return; }
+  if (name.length > CLASS_MAX_NAME) {
+    setStatus("列の名前が長すぎます(" + CLASS_MAX_NAME + "文字まで)。", true); return;
+  }
+  if (csvColumns.includes(name)) {
+    setStatus("「" + name + "」という列はすでにあります。", true); return;
+  }
+  if (isReservedColumn(name, idColumnName())) {
+    setStatus("「" + name + "」は自動計算・仕組み用の列名なので使えません。" + NL +
+              "この名前で作ると、DXFを読み直したときに計算値で上書きされ、手で入れた値が消えます。", true);
+    return;
+  }
+  csvColumns.push(name);
+  manualCols.add(name);
+  input.value = "";
+  refreshAttributeOptions();
+  refreshLabelContentOptions();
+  refreshFilterRuleOptions();
+  renderClassColumnManager();
+  renderClassifyUI();
+  setStatus("分類の列「" + name + "」を作りました。" + NL +
+            "ビュー上でオブジェクトを選ぶと、値を付けられます。");
+});
+
+function renderClassColumnManager() {
+  const box = document.getElementById("class-col-list");
+  if (!box) return;
+  box.innerHTML = "";
+  const cols = classColumns();
+  if (cols.length === 0 || csvRows.length === 0) return;
+
+  for (const col of cols) {
+    const counts = classValueCounts(col);
+    let filled = 0;
+    for (const [, n] of counts) filled += n;
+    const d = document.createElement("details");
+    d.className = "cls-col";
+    const sum = document.createElement("summary");
+    sum.textContent = col + " — " + counts.length + "種 / 入力済み " + filled +
+                      "個 (未入力 " + (csvRows.length - filled) + "個)";
+    d.appendChild(sum);
+
+    if (counts.length === 0) {
+      const p = document.createElement("div");
+      p.className = "hint";
+      p.textContent = "まだ値が入っていません";
+      d.appendChild(p);
+    }
+    for (const [v, n] of counts) {
+      const row = document.createElement("div");
+      row.className = "cls-val";
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.value = v;
+      const cn = document.createElement("span");
+      cn.className = "cls-n";
+      cn.textContent = n + "個";
+      const btn = document.createElement("button");
+      btn.className = "ghost";
+      btn.textContent = "変更";
+      btn.addEventListener("click", () => renameClassValue(col, v, inp.value));
+      row.appendChild(inp); row.appendChild(cn); row.appendChild(btn);
+      d.appendChild(row);
+    }
+    box.appendChild(d);
+  }
+}
+
+/* 値の名前を変える。既にある値に変えれば**統合**になり、空にすれば消える。
+   表記ゆれは必ず起きるので、後から直せることを保証する */
+function renameClassValue(col, from, to) {
+  const next = normalizeClassValue(to);
+  if (next === from) return;
+  const existed = classValueCounts(col).some(([v]) => v === next);
+  let n = 0;
+  for (const row of csvRows) {
+    if (normalizeClassValue(row[col]) === from) { row[col] = next; n++; }
+  }
+  if (n === 0) return;
+  manualCols.add(col);
+  afterManualEdit(col);
+  const NL = String.fromCharCode(10);
+  if (next === "") setStatus("「" + from + "」を空にしました(" + n + "個)。" + NL + "CSVで保存しないと残りません。");
+  else if (existed) setStatus("「" + from + "」を「" + next + "」に統合しました(" + n + "個)。" + NL + "CSVで保存しないと残りません。");
+  else setStatus("「" + from + "」を「" + next + "」に変えました(" + n + "個)。" + NL + "CSVで保存しないと残りません。");
 }
 
 const noteInput = document.getElementById("insp-note");
@@ -5527,20 +5895,32 @@ noteInput.addEventListener("input", () => {
   setUnsavedNotes(true);
 });
 
+/* 未保存として数える列。メモだけでなく、分類など手で書いた列すべてが対象。
+   ここが漏れると「保存しなくてよい」と誤解させる */
+function manualEditColumns() {
+  const cols = new Set(manualCols);
+  if (csvColumns.includes(NOTE_COL)) cols.add(NOTE_COL);
+  return [...cols];
+}
+
 function setUnsavedNotes(dirty) {
   hasUnsavedNotes = dirty;
-  const n = dirty ? csvRows.filter((r) => String(r[NOTE_COL] ?? "").trim() !== "").length : 0;
+  const cols = manualEditColumns();
+  const n = dirty ? csvRows.filter(
+    (r) => cols.some((c) => String(r[c] ?? "").trim() !== "")).length : 0;
+  // メモだけのときは今までどおり「メモ」と呼ぶ(分類も使い始めたら「手入力」)
+  const word = (cols.length <= 1 && cols[0] === NOTE_COL) ? "メモ" : "手入力";
 
   // パネル内の説明
   const hint = document.getElementById("note-unsaved");
   hint.style.display = dirty ? "" : "none";
-  hint.textContent = `メモ${n}件が未保存です。CSVで保存しないと残りません`;
+  hint.textContent = `${word}${n}件が未保存です。CSVで保存しないと残りません`;
 
   // ビュー上のバッジ(パネルを畳んでいても見える)
   const badge = document.getElementById("note-badge");
   // 既定の display:none はCSS側にあるため、"" では戻らない。明示的に指定する
   badge.style.display = dirty ? "block" : "none";
-  badge.textContent = `● メモ${n}件 未保存`;
+  badge.textContent = `● ${word}${n}件 未保存`;
 
   // 保存先のボタン自体を「操作」の見た目に格上げする(色分けボタンと同じ手口)。
   // どこを押せばよいかが、警告と同時に目に入るようにする
@@ -5639,20 +6019,27 @@ let noteBackupWarned = false;
 
 function saveNotes() {
   try {
-    if (!csvColumns.includes(NOTE_COL)) return;
+    // メモだけでなく、分類など手で書いた列をすべて控える。
+    // ここを広げ忘れると、石種を40個に付けて閉じた瞬間に消える
+    const targets = manualEditColumns();
+    if (targets.length === 0) return;
     const fp = noteFingerprint();
     const key = noteSlotKey(fp);
     const store = readNoteStore();
 
-    const notes = {};
+    const cols = {};
     let n = 0, skipped = 0;
-    for (const row of csvRows) {
-      const text = String(row[NOTE_COL] ?? "");
-      if (text === "") continue;
-      const src = String(row["SrcID"] ?? "");
-      if (src === "") { skipped++; continue; }   // 照合できないものは保存しない
-      notes[src] = text;
-      n++;
+    for (const col of targets) {
+      const map = {};
+      for (const row of csvRows) {
+        const text = String(row[col] ?? "");
+        if (text === "") continue;
+        const src = String(row["SrcID"] ?? "");
+        if (src === "") { skipped++; continue; }   // 照合できないものは保存しない
+        map[src] = text;
+        n++;
+      }
+      if (Object.keys(map).length > 0) cols[col] = map;
     }
 
     // 元IDを持たないデータ(GLB+外部CSVなど)では控えを取れない。
@@ -5661,13 +6048,13 @@ function saveNotes() {
     if (skipped > 0 && !noteBackupWarned) {
       noteBackupWarned = true;
       setStatus(
-        "このデータには元ID(SrcID)が無いため、メモをブラウザに控えられません。" +
+        "このデータには元ID(SrcID)が無いため、手入力の内容をブラウザに控えられません。" +
         String.fromCharCode(10) +
-        "画面上のメモは残りますが、閉じると失われます。CSVで保存してください。", true);
+        "画面上の入力は残りますが、閉じると失われます。CSVで保存してください。", true);
     }
     // 全部消したら、そのデータの枠だけを消す(他のデータの控えは残す)
     if (n === 0) delete store.slots[key];
-    else store.slots[key] = { savedAt: Date.now(), fp, notes };
+    else store.slots[key] = { savedAt: Date.now(), fp, cols };
 
     if (Object.keys(store.slots).length === 0) { localStorage.removeItem(NOTES_KEY); return; }
 
@@ -5683,8 +6070,8 @@ function saveNotes() {
         if (others.length === 0) {
           // これ以上捨てられない。控えを持てないことを伝える
           setStatus(
-            "メモの控えをブラウザに保存できませんでした(保管領域がいっぱいです)。\n" +
-            "画面上のメモは残っていますが、閉じると失われます。CSVで保存してください。", true);
+            "手入力の控えをブラウザに保存できませんでした(保管領域がいっぱいです)。\n" +
+            "画面上の入力は残っていますが、閉じると失われます。CSVで保存してください。", true);
           return;
         }
         others.sort((a, b) => store.slots[a].savedAt - store.slots[b].savedAt);
@@ -5716,15 +6103,21 @@ function scheduleSaveNotes() {
 function offerNoteRestore() {
   const store = readNoteStore();
   const saved = store.slots[noteSlotKey(noteFingerprint())];
-  if (!saved || !saved.notes) return;   // 別のデータなら枠が無いので何も起きない
+  if (!saved) return;   // 別のデータなら枠が無いので何も起きない
 
-  const keys = Object.keys(saved.notes);
-  if (keys.length === 0) return;
+  // v1.22系まではメモ1列だけを { SrcID: 本文 } で控えていた。古い控えも読める形にする
+  const cols = saved.cols || (saved.notes ? { [NOTE_COL]: saved.notes } : null);
+  if (!cols) return;
+  let total = 0;
+  for (const col of Object.keys(cols)) total += Object.keys(cols[col]).length;
+  if (total === 0) return;
+
   const when = new Date(saved.savedAt).toLocaleString();
   const name = saved.fp.dataset || "(データ名なし)";
+  const what = Object.keys(cols).map((c) => c + " " + Object.keys(cols[c]).length + "件").join(" / ");
   if (!confirm(
     `前回の入力が残っています。復元しますか？\n\n` +
-    `データ名: ${name}\n件数: ${keys.length} 件のメモ\n保存日時: ${when}\n\n` +
+    `データ名: ${name}\n内容: ${what}\n保存日時: ${when}\n\n` +
     `「キャンセル」を選ぶと、このまま空の状態で続けます(保存は消えません)。`
   )) return;
 
@@ -5735,15 +6128,18 @@ function offerNoteRestore() {
     if (k !== "") bySrc.set(k, row);
   }
   let restored = 0;
-  const missing = [];
-  for (const [k, text] of Object.entries(saved.notes)) {
-    const row = bySrc.get(k);
-    if (row) { row[NOTE_COL] = text; restored++; }
-    else missing.push(k);
+  const missing = new Set();
+  for (const [col, map] of Object.entries(cols)) {
+    for (const [k, text] of Object.entries(map)) {
+      const row = bySrc.get(k);
+      if (row) { row[col] = text; restored++; }
+      else missing.add(k);
+    }
+    if (!csvColumns.includes(col)) csvColumns.push(col);
+    if (col !== NOTE_COL) manualCols.add(col);   // 復元した分も未保存・控えの対象にする
   }
-  if (restored === 0) { setStatus("復元できるメモがありませんでした。", true); return; }
+  if (restored === 0) { setStatus("復元できる入力がありませんでした。", true); return; }
 
-  if (!csvColumns.includes(NOTE_COL)) csvColumns.push(NOTE_COL);
   syncNoteDerived();
   refreshAttributeOptions();
   refreshLabelContentOptions();
@@ -5752,14 +6148,16 @@ function offerNoteRestore() {
   if (hasApplied) applyColorize();
   setUnsavedNotes(true);   // 復元しただけではCSVに落ちていない
 
-  let msg = `メモを ${restored} 件復元しました。`;
+  let msg = `前回の入力を ${restored} 件復元しました(${what})。`;
   // 取りこぼしを黙って捨てない
-  if (missing.length) {
-    msg += `\n${missing.length} 件は対応するオブジェクトが見つかりませんでした` +
-           `(元ID: ${missing.slice(0, 5).join("・")}${missing.length > 5 ? " ほか" : ""})。`;
+  const lost = [...missing];
+  if (lost.length) {
+    msg += `\n${lost.length} 件は対応するオブジェクトが見つかりませんでした` +
+           `(元ID: ${lost.slice(0, 5).join("・")}${lost.length > 5 ? " ほか" : ""})。`;
   }
   msg += "\nCSVで保存するまでファイルには残りません。";
-  setStatus(msg, missing.length > 0);
+  renderClassColumnManager();
+  setStatus(msg, lost.length > 0);
 }
 
 /* ============================================================

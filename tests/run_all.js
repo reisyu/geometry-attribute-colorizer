@@ -39,6 +39,7 @@ const TESTS = [
   ["test_zip.js", "ZIP書き出し"],
   ["test_thickline.js", "選択の輪郭線(太線)"],
   ["test_selection.js", "ブラシ選択の当たり判定"],
+  ["test_classify.js", "分類の列(手入力)"],
   ["integration_test.js", "実データ統合"],
 ];
 

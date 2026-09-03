@@ -30,6 +30,26 @@ const NOTE_COL = "Note";
 
 const NOTE_LABEL_MAX = 12;
 
+const ATTR_INFO = {
+  Width:     { jp: "幅",       desc: "最小外接矩形の2辺のうち、水平に近い方の辺の長さ" },
+  Height:    { jp: "高さ",     desc: "最小外接矩形の2辺のうち、鉛直に近い方の辺の長さ" },
+  Area:      { jp: "面積",     desc: "フィット平面に投影した輪郭の面積" },
+  FillRate:  { jp: "矩形充填率", desc: "輪郭の面積 ÷ 外接矩形の面積(1に近いほど矩形に近い形)" },
+  Aspect:    { jp: "アスペクト比", desc: "幅 ÷ 高さ。1より大きいほど横長、1より小さいほど縦長。1に近いほど正方形に近い" },
+  Tilt:      { jp: "傾斜角",   desc: "面の法線と鉛直(+Z)のなす角。0°=水平な面、90°=垂直な面" },
+  RectAngle: { jp: "矩形回転角", desc: "外接矩形の水平辺が面内の水平基準から回転している角度。反時計回り(右上がり)がプラス" },
+  Flatness:  { jp: "平面性",   desc: "フィット平面からの最大ズレ距離。大きいほど平面近似の信頼性が低い" },
+  Note: { jp: "メモ", desc: "点検時の所見などを自由に書き留める欄。属性インスペクタで編集し、CSVに書き出される" },
+  HasNote: { jp: "メモの有無", desc: "メモが書かれていれば「あり」、空なら「なし」。メモ本文から自動で作られる列で、色分け・立面図で記入済みの箇所を見るために使う" },
+  SelfIntersect: { jp: "自己交差", desc: "輪郭の自己交差の大きさ(0〜0.5)。0は交差なし。交差で分かれる小さい側のループが全体に占める面積比で、Areaはこの値の2倍だけ小さく出る" },
+  X: { jp: "重心X", desc: "輪郭の重心のX座標(原点シフト前の元の座標値)" },
+  Y: { jp: "重心Y", desc: "輪郭の重心のY座標(原点シフト前の元の座標値)" },
+  Z: { jp: "重心Z", desc: "輪郭の重心のZ座標=標高(原点シフト前の元の座標値)" },
+  SrcID: { jp: "元ID", desc: "読み込み時のID(DXFのレイヤー名由来)。自動採番で振り直される前の値" },
+  Course: { jp: "段", desc: "立面図で下から数えた段(コース)番号。ID自動採番時の段判定に基づく" },
+  Dataset: { jp: "データ名", desc: "書き出し時に付与されるデータセット識別名。複数データの横断分析での由来識別に使う" },
+};
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -683,4 +703,20 @@ function distToSegmentSq(px, py, x0, y0, x1, y1) {
   return (px - qx) * (px - qx) + (py - qy) * (py - qy);
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq };
+function normalizeClassValue(v) {
+  let s = String(v == null ? "" : v);
+  if (s.normalize) s = s.normalize("NFKC");
+  s = s.replace(/[\s　]+/g, " ");
+  return s.trim();
+}
+
+function isReservedColumn(name, idCol) {
+  const n = String(name == null ? "" : name).trim();
+  if (n === "") return true;
+  if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
+  if (idCol && n === idCol) return true;
+  if (n.toLowerCase() === "id") return true;
+  return false;
+}
+
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn };
