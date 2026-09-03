@@ -1006,7 +1006,7 @@
     <div class="row">
       <button class="ghost" id="download-csv-btn" disabled style="margin-top:0">属性をCSVで保存</button>
       <div class="hint" id="note-unsaved" style="display:none; margin-top:6px; color:var(--warn)">
-        メモが未保存です。CSVで保存しないと残りません
+        手入力が未保存です。CSVで保存しないと残りません
       </div>
     </div>
 
@@ -1571,7 +1571,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.23.3";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.23.4";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -5954,13 +5954,24 @@ function manualEditColumns() {
   return [...cols];
 }
 
-function setUnsavedNotes(dirty) {
-  hasUnsavedNotes = dirty;
+/* 未保存の件数と呼び名。バッジ・パネルの注意・畳んだ見出しの3箇所で同じ値を使う。
+
+   別々に数えると片方だけ取り残される。実際、畳んだステップ7の見出しだけが
+   メモの件数を数えており、**分類だけを入力した状態では何も出なかった**
+   (バッジは「手入力20件 未保存」と出ているのに、畳むと消える)。 */
+function unsavedManualSummary() {
   const cols = manualEditColumns();
-  const n = dirty ? csvRows.filter(
-    (r) => cols.some((c) => String(r[c] ?? "").trim() !== "")).length : 0;
+  const n = csvRows.filter((r) => cols.some((c) => String(r[c] ?? "").trim() !== "")).length;
   // メモだけのときは今までどおり「メモ」と呼ぶ(分類も使い始めたら「手入力」)
   const word = (cols.length <= 1 && cols[0] === NOTE_COL) ? "メモ" : "手入力";
+  return { n, word };
+}
+
+function setUnsavedNotes(dirty) {
+  hasUnsavedNotes = dirty;
+  const sum = unsavedManualSummary();
+  const n = dirty ? sum.n : 0;
+  const word = sum.word;
 
   // パネル内の説明
   const hint = document.getElementById("note-unsaved");
@@ -6886,8 +6897,11 @@ function updateStepSummaries() {
   stepSummaryEls[0].textContent = glbBtn.classList.contains("loaded")
     ? glbBtn.textContent
     : (meshes.length > 0 ? `サンプル ${meshes.length}個` : "");
-  // 2. 属性データ
-  stepSummaryEls[1].textContent = csvRows.length > 0 ? `${csvRows.length}行` : "";
+  // 2. 属性データ — 分類の列を作ってあることも畳んだ状態で分かるようにする
+  const nClass = csvRows.length > 0 ? classColumns().length : 0;
+  stepSummaryEls[1].textContent = csvRows.length > 0
+    ? `${csvRows.length}行` + (nClass > 0 ? ` / 分類${nClass}列` : "")
+    : "";
   // 3. 色分け
   const attrSel = document.getElementById("attribute");
   stepSummaryEls[2].textContent = hasApplied && attrSel.value ? attrLabel(attrSel.value) : "";
@@ -6902,11 +6916,11 @@ function updateStepSummaries() {
   }
   // 6. ラベル
   stepSummaryEls[5].textContent = showLabelsCheckbox.checked ? "表示中" : "";
-  // 7. 書き出す — 未保存のメモがあることは畳んでいても見せる
-  const unsavedN = hasUnsavedNotes
-    ? csvRows.filter((r) => String(r[NOTE_COL] ?? "").trim() !== "").length : 0;
-  stepSummaryEls[6].textContent = unsavedN ? `メモ${unsavedN}件 未保存` : "";
-  stepSummaryEls[6].classList.toggle("warn", unsavedN > 0);
+  // 7. 書き出す — 未保存の手入力があることは畳んでいても見せる。
+  // 件数と呼び名はバッジ・パネルの注意と同じ関数から取る(数え方を分けない)
+  const unsaved = hasUnsavedNotes ? unsavedManualSummary() : { n: 0, word: "メモ" };
+  stepSummaryEls[6].textContent = unsaved.n ? `${unsaved.word}${unsaved.n}件 未保存` : "";
+  stepSummaryEls[6].classList.toggle("warn", unsaved.n > 0);
 }
 
 /* ============================================================
