@@ -571,7 +571,8 @@
     </table>
     <div class="note">
       <strong>変わるのは回転だけ</strong>です。移動と拡大縮小はそのまま使えるので、選びながら見る場所を変えられます。
-      回転したくなったら一度モードを抜けてください。<strong>選択はモードを抜けても残ります</strong>。
+      <strong>モードを抜けると選択は解除されます</strong>ので、値やメモを付けてから抜けてください
+      （何個解除したかは画面左上に出ます）。
     </div>
 
     <h3>なぞって選ぶ</h3>
@@ -872,7 +873,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.23.0";
+  const HELP_VERSION = "1.23.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
