@@ -1571,7 +1571,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.23.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.23.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2821,12 +2821,19 @@ function buildLegendSVGParts(items, contentH, margin) {
     for (const [cat, rgb] of Object.entries(categoryColorCache)) {
       if (categoryOthers.has(cat)) { svgOthers++; continue; }
       parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss(rgb)}"/>`);
-      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">${esc(cat || "(空欄)")}</text>`);
+      const catN = (L.catCounts && L.catCounts[cat]) || 0;
+      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">${esc(cat || "(空欄)")} (${catN})</text>`);
+      cy2 += 18;
+    }
+    if (L.blanks > 0) {
+      // 未入力は灰色で塗られている。凡例に無いと、図の灰色を説明できない
+      parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss([0.5, 0.5, 0.5])}"/>`);
+      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">未入力 (${L.blanks})</text>`);
       cy2 += 18;
     }
     if (svgOthers > 0) {
       parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss(OTHER_COLOR)}"/>`);
-      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">その他 ${svgOthers}種</text>`);
+      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">その他 ${svgOthers}種 (${(L.othersCount || 0)})</text>`);
     }
   }
   return parts;
@@ -4151,8 +4158,9 @@ function applyColorize() {
   categoryOthers = new Set();
   attributesByMesh.clear();
 
-  // テキスト属性の場合: 出現数の多い順に色を事前割り当てする。
-  // 「上位のみ色分け」がONなら、上位7カテゴリ以外は「その他」(グレー)に集約する
+  // テキスト属性の場合: 色を事前割り当てする。割り当ての順は「使い始めた順」で、
+  // 初めて見る値だけを出現数の多い順に末尾へ足す(既存の色を動かさないため)。
+  // 「上位のみ色分け」がONなら、出現数が上位7カテゴリ以外を「その他」(グレー)に集約する
   if (!numericMode) {
     const counts = {};
     for (const row of csvRows) {
@@ -4168,7 +4176,7 @@ function applyColorize() {
     const topSet = new Set(sortedByCount.slice(0, 7));
 
     // メモの有無だけは配色を固定する。
-    // 出現数順に色を割り当てる既定のままだと、大多数を占める「なし」に
+    // 既定の割り当て(初回は出現数順)のままだと、大多数を占める「なし」に
     // パレット先頭の赤が付き、**注目すべきでない側が最も目立つ**逆転が起きる
     // (実データでは なし122個・あり1個)。
     // 「なし」はグレー=「その他」と同じ色にする。このアプリでグレーは既に
@@ -4847,6 +4855,7 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
     // カテゴリごとの個数を数える
     const catCounts = {};
     for (const v of values) catCounts[v] = (catCounts[v] || 0) + 1;
+    lastLegendState.catCounts = catCounts;   // 書き出したSVGの凡例でも同じ件数を使う
     let othersCount = 0, othersCats = 0;
     for (const [cat, rgb] of Object.entries(categoryColorCache)) {
       if (categoryOthers.has(cat)) {
@@ -4867,6 +4876,9 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
     // 未入力(空欄)はカテゴリにしていないので、灰色として別に出す。
     // 分類の途中では「まだ付けていない数」が最も知りたい情報になる
     const blanks = csvRows.length - values.length;
+    // 書き出したSVGの凡例にも同じ行を出すため、件数をここで控える。
+    // 画面にだけ出して図に出さないと、灰色の石を説明する行が図から消える
+    lastLegendState.blanks = blanks;
     if (blanks > 0) {
       const item = document.createElement("div");
       item.className = "cat-item";
@@ -4878,6 +4890,7 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
       item.appendChild(sw); item.appendChild(label);
       catDiv.appendChild(item);
     }
+    lastLegendState.othersCount = othersCount;
     if (othersCats > 0) {
       const item = document.createElement("div");
       item.className = "cat-item";

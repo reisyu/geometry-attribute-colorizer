@@ -642,8 +642,10 @@
     <h3>付けた分類を色で見る</h3>
     <p>
       作った列は「3. 色分けする」の属性としてすぐ選べます。
-      <strong>まだ付けていないものは灰色</strong>になり、凡例に「未入力（残り○個）」として出るので、
-      <strong>塗り残しが一目で分かります</strong>。
+      <strong>値ごとの色は、使い始めた順に決まって以降変わりません</strong>。
+      新しい石種を足しても、既に色が付いている石種の色はそのままです。
+      <strong>まだ付けていないものは灰色</strong>になり、凡例に「未入力（○個）」として出るので、
+      <strong>塗り残しが一目で分かります</strong>。書き出したSVGの凡例にも同じ行が入ります。
     </p>
 
     <h3>表記ゆれを直す</h3>
@@ -873,7 +875,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.23.2";
+  const HELP_VERSION = "1.23.3";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
