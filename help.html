@@ -438,18 +438,8 @@
     <ul>
       <li><strong>色</strong> — 傾きに応じたグラデーション（初期設定は 0°＝青、±45°＝赤）。
         中央色・両端色は自由に変更できます。</li>
-      <li><strong>太さ</strong> — 20〜100mm（実寸）で調整。ズームしても実際の寸法として表示されます。</li>
+      <li><strong>太さ</strong> — 20〜100mm（実寸）で調整（初期値75mm）。ズームしても実際の寸法として表示されます。</li>
     </ul>
-    <p>
-      同じステップの<strong>「選択したオブジェクトの強調」</strong>では、
-      オブジェクトをクリックしたときに付く<strong>輪郭線の太さ</strong>を 1〜12px で変えられます（初期値4px）。
-      写真を重ねた上や細かい石が並ぶ場所では、太くすると見つけやすくなります。
-    </p>
-    <div class="note">
-      こちらは<strong>画面上の太さ（px）</strong>です。傾きラインの実寸mm指定と違い、
-      ズームしても太さは変わりません。「どこを選んだか気づくため」の表示なので、
-      見かけの大きさを一定に保つほうが目的に合うためです。
-    </div>
 
     <h3 id="s5">5. フィルタで絞り込む（任意）</h3>
     <p>
@@ -688,7 +678,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
     <h2 id="settings">設定は覚えられる？</h2>
     <p>
       <strong>見た目の設定は、次に開いたときも引き継がれます。</strong>
-      背景モデルと輪郭モデルの不透明度、傾きラインの色と太さ、選択の輪郭線の太さ、
+      背景モデルと輪郭モデルの不透明度、傾きラインの色と太さ、
       ラベルの文字サイズ、SVG書き出しで含める要素、ライト/ダーク、投影方式などです。
       毎回チェックを入れ直す手間がなくなります。
     </p>
@@ -762,7 +752,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.21.0";
+  const HELP_VERSION = "1.21.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
