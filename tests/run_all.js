@@ -40,6 +40,7 @@ const TESTS = [
   ["test_thickline.js", "選択の輪郭線(太線)"],
   ["test_selection.js", "ブラシ選択の当たり判定"],
   ["test_classify.js", "分類の列(手入力)"],
+  ["test_geoloc.js", "現在地(平面直角座標)"],
   ["integration_test.js", "実データ統合"],
 ];
 

@@ -579,6 +579,35 @@
   }
 
   /* ---------- 凡例 ---------- */
+  /* 現在地の俯瞰ミニマップ。開いている間は凡例を上へ逃がす */
+  #minimap {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    width: 200px;
+    background: rgba(33,36,42,.94);
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+    display: none;
+    z-index: 6;
+  }
+  body.light #minimap { background: rgba(255,255,255,.94); }
+  #minimap .mm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #minimap .mm-head span { color: var(--accent); font-weight: 700; }
+  #minimap .mm-head button {
+    background: none; border: none; color: var(--ink-dim);
+    font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px;
+  }
+  #minimap .mm-head button:hover { color: var(--ink); }
+  #mm-canvas { width: 184px; height: 184px; display: block; background: rgba(0,0,0,.18); border-radius: 4px; }
+  body.light #mm-canvas { background: rgba(0,0,0,.05); }
+  #minimap .mm-info { color: var(--ink-dim); margin: 6px 0; }
+  #minimap button.ghost { width: 100%; margin-top: 0; font-size: 11px; padding: 5px; }
+  #viewport-wrap.mm-open #legend { bottom: 296px; }
+
   #legend {
     position: absolute;
     left: 16px;
@@ -1078,6 +1107,7 @@
     <button id="view-top" title="モデルの真上から見る">上面</button>
     <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
     <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
+    <button id="geo-btn" title="現在地の目安を俯瞰図に示す(オンラインのみ・石の特定には使えません)">現在地</button>
     <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択モード</button>
     <button id="theme-toggle" title="背景色の切り替え">☀ ライト</button>
   </div>
@@ -1089,6 +1119,16 @@
     <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
     <div id="select-badge">選択モード</div>
     <div id="sample-badge">サンプルデータを表示中</div>
+  </div>
+
+  <div id="minimap">
+    <div class="mm-head">
+      <span>現在地(目安)</span>
+      <button id="mm-close" title="閉じる">×</button>
+    </div>
+    <canvas id="mm-canvas" width="184" height="184"></canvas>
+    <div class="mm-info" id="mm-info"></div>
+    <button class="ghost" id="mm-goto">近くの区画を見る</button>
   </div>
 
   <div id="viewport-gizmo">
@@ -1571,7 +1611,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.23.4";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.24.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -5061,9 +5101,15 @@ function disposeModel() {
   bindNoteEditor(null);
   setUnsavedNotes(false);
 
-  // 手入力の記録・選択・カテゴリ色の並びは別のモデルへ持ち越さない
+  // 手入力の記録・選択・カテゴリ色の並び・座標系の推定は別のモデルへ持ち越さない
   manualCols.clear();
   categoryOrders.clear();
+  geoGuess = null;
+  geoFix = null;
+  if (minimap) {
+    minimap.style.display = "none";
+    document.getElementById("viewport-wrap").classList.remove("mm-open");
+  }
   selection.clear();
   selectionUndo.length = 0;
   selectionOutlineDirty = true;
@@ -5621,6 +5667,351 @@ function renderInspectorTable(row) {
     table.appendChild(tr);
   }
 }
+
+/* ============================================================
+   現在地の目安表示(俯瞰ミニマップ)
+
+   目的は**石を特定することではない**。「壁のどのあたりに立っているか」を
+   誤差込みで示す。スマホのGPSは屋外で5〜20m、石垣の際では遮蔽と反射で
+   20〜50mまで落ちる。石1つ(0.3〜1m)には全く足りないが、
+   区画(10〜100m)を見当付けるには足りる。
+
+   **精度円を必ず一緒に描く。** 点だけを出すと、利用者はその点を信じて
+   別の区画を記録する。円が壁の半分を覆っていれば、それが実態である。
+
+   地図タイルは読まない。外部通信はこのアプリの約束に反し、オフライン版でも
+   動かなくなる。「地図」はデータ自身の俯瞰図(石の重心を上から見たもの)を使う。
+   必要なのは「壁のどのあたりか」だけなので、それで足りる。
+
+   位置は端末内だけで扱い、外部に送らない。CSVにも記録しない。
+============================================================ */
+
+/* 平面直角座標系19系の原点(緯度, 経度)。度で持つ */
+const JP_ZONES = {
+  1:  [33, 129.5],      2:  [33, 131],        3:  [36, 132 + 10 / 60],
+  4:  [33, 133.5],      5:  [36, 134 + 20 / 60], 6:  [36, 136],
+  7:  [36, 137 + 10 / 60], 8:  [36, 138.5],    9:  [36, 139 + 50 / 60],
+  10: [40, 140 + 50 / 60], 11: [44, 140.25],   12: [44, 142.25],
+  13: [44, 144.25],     14: [26, 142],        15: [26, 127.5],
+  16: [26, 124],        17: [26, 131],        18: [20, 136],
+  19: [26, 154],
+};
+
+/* 緯度経度(WGS84/JGD2011)を平面直角座標へ変換する。国土地理院の計算式。
+   戻り値の x は**北方向**、y は**東方向**(測量の慣習。CADのxyとは限らない)。
+
+   原点で厳密に(0,0)になること、近距離の平面距離が球面距離と一致することを
+   tests/test_geoloc.js で検証している */
+function latLonToJPRect(lat, lon, zone) {
+  const o = JP_ZONES[zone];
+  if (!o) return null;
+  const rad = Math.PI / 180;
+  const phi = lat * rad, lam = lon * rad;
+  const phi0 = o[0] * rad, lam0 = o[1] * rad;
+
+  const a = 6378137, F = 298.257222101, m0 = 0.9999;   // GRS80
+  const n = 1 / (2 * F - 1);
+  const n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n;
+
+  const A0 = 1 + n2 / 4 + n4 / 64;
+  const A1 = -(3 / 2) * (n - n3 / 8 - n5 / 64);
+  const A2 = (15 / 16) * (n2 - n4 / 4);
+  const A3 = -(35 / 48) * (n3 - (5 / 16) * n5);
+  const A4 = (315 / 512) * n4;
+  const A5 = -(693 / 1280) * n5;
+
+  const al = [
+    (1 / 2) * n - (2 / 3) * n2 + (5 / 16) * n3 + (41 / 180) * n4 - (127 / 288) * n5,
+    (13 / 48) * n2 - (3 / 5) * n3 + (557 / 1440) * n4 + (281 / 630) * n5,
+    (61 / 240) * n3 - (103 / 140) * n4 + (15061 / 26880) * n5,
+    (49561 / 161280) * n4 - (179 / 168) * n5,
+    (34729 / 80640) * n5,
+  ];
+
+  const Abar = ((m0 * a) / (1 + n)) * A0;
+  const Sbar = ((m0 * a) / (1 + n)) *
+    (A0 * phi0 + A1 * Math.sin(2 * phi0) + A2 * Math.sin(4 * phi0) +
+     A3 * Math.sin(6 * phi0) + A4 * Math.sin(8 * phi0) + A5 * Math.sin(10 * phi0));
+
+  const lamc = lam - lam0;
+  const k = (2 * Math.sqrt(n)) / (1 + n);
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - k * Math.atanh(k * Math.sin(phi)));
+  const tb = Math.sqrt(1 + t * t);
+  const xi = Math.atan2(t, Math.cos(lamc));
+  const eta = Math.atanh(Math.sin(lamc) / tb);
+
+  let sx = 0, sy = 0;
+  for (let j = 1; j <= 5; j++) {
+    sx += al[j - 1] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
+    sy += al[j - 1] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+  }
+  return { x: Abar * (xi + sx) - Sbar, y: Abar * (eta + sy) };
+}
+
+/* データがどの系で、CADのxyがどちら向きに入っているかを推定する。
+
+   DXFには座標系の情報が無い。しかし19系の原点は経度で2度(約180km)ずつ
+   離れているため、**現在地を全系で変換し、データの中心に最も近いものを選ぶ**
+   だけで一意に決まる。外れた系は100km以上ずれる。
+
+   軸の並びも同時に判定する。測量の平面直角座標は X=北・Y=東 だが、
+   CADは図面を北上にするため (東, 北) の順で入っていることが多い。
+   データからは区別できないので、両方を候補にして近い方を採る。
+
+   近い候補が無ければ**何も返さない**。別の場所のデータか、平面直角座標
+   ではないということなので、当てずっぽうの位置を出してはいけない */
+const GEO_ACCEPT_M = 5000;      // これより遠い候補は採らない
+const GEO_MARGIN = 3;           // 2番目の候補がこの倍率より近いと、曖昧として採らない
+
+function estimateJPZone(lat, lon, cx, cy) {
+  const cands = [];
+  for (const z of Object.keys(JP_ZONES)) {
+    const p = latLonToJPRect(lat, lon, Number(z));
+    if (!p) continue;
+    // swap=false: CADのx=北(X), y=東(Y)   swap=true: CADのx=東(Y), y=北(X)
+    cands.push({ zone: Number(z), swap: false, dist: Math.hypot(p.x - cx, p.y - cy) });
+    cands.push({ zone: Number(z), swap: true, dist: Math.hypot(p.y - cx, p.x - cy) });
+  }
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => a.dist - b.dist);
+  const best = cands[0], second = cands[1];
+  if (best.dist > GEO_ACCEPT_M) return null;
+  if (second && second.dist < best.dist * GEO_MARGIN) return null;
+  return best;
+}
+
+/* ---- ここから画面側 ---- */
+
+let geoGuess = null;        // 推定した系。データごとに1回だけ決める
+let geoFix = null;          // { x, y, acc } データ座標系での現在地と精度(m)
+let geoBusy = false;
+
+const minimap = document.getElementById("minimap");
+const mmCanvas = document.getElementById("mm-canvas");
+const mmInfo = document.getElementById("mm-info");
+
+/* Three.js(Y-up)の座標を、元データ(Z-up)のXYへ戻す。§3の変換の逆 */
+function threeToDataXY(v) {
+  return { x: v.x + worldOffset.x, y: -v.z + worldOffset.y };
+}
+
+function geoUnavailableReason() {
+  if (!navigator.geolocation) return "このブラウザは位置情報に対応していません。";
+  if (!window.isSecureContext) {
+    return "位置情報は安全な接続(https)でのみ使えます。" + String.fromCharCode(10) +
+           "オフライン版(ファイルを直接開く形)では利用できません。";
+  }
+  if (meshes.length === 0) return "先にモデルを読み込んでください。";
+  if (!worldOffset.set) {
+    return "このデータには実際の測量座標が入っていないため、現在地を重ねられません。" +
+           String.fromCharCode(10) + "平面直角座標系のDXFを読み込むと使えます。";
+  }
+  return null;
+}
+
+function requestLocation() {
+  const reason = geoUnavailableReason();
+  if (reason) { setStatus(reason, true); return; }
+  if (geoBusy) return;
+  geoBusy = true;
+  setStatus("現在地を取得しています...");
+  navigator.geolocation.getCurrentPosition(onGeoOk, onGeoError, {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 0,      // 押したときの位置を取る(古い測位を使わない)
+  });
+}
+
+function onGeoOk(pos) {
+  geoBusy = false;
+  const { latitude, longitude, accuracy } = pos.coords;
+  const NL = String.fromCharCode(10);
+
+  if (!geoGuess) {
+    geoGuess = estimateJPZone(latitude, longitude, worldOffset.x, worldOffset.y);
+    if (!geoGuess) {
+      setStatus(
+        "このデータの座標系を判定できませんでした。" + NL +
+        "現在地から遠すぎるか、平面直角座標系ではないデータです。" + NL +
+        "別の場所のデータを開いている場合は、その場所で試してください。", true);
+      return;
+    }
+  }
+
+  const p = latLonToJPRect(latitude, longitude, geoGuess.zone);
+  geoFix = geoGuess.swap
+    ? { x: p.y, y: p.x, acc: accuracy }
+    : { x: p.x, y: p.y, acc: accuracy };
+
+  minimap.style.display = "block";
+  document.getElementById("viewport-wrap").classList.add("mm-open");
+  drawMinimap();
+
+  const d = Math.hypot(geoFix.x - worldOffset.x, geoFix.y - worldOffset.y);
+  setStatus(
+    "現在地を表示しました(第" + geoGuess.zone + "系と判定)。" + NL +
+    "測位の誤差は約" + Math.round(accuracy) + "m。データ中心からの距離は約" +
+    (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + "。" + NL +
+    "石の特定には使えません。区画の見当を付けるための目安です。");
+}
+
+function onGeoError(err) {
+  geoBusy = false;
+  const NL = String.fromCharCode(10);
+  const msg = {
+    1: "位置情報の利用が許可されませんでした。ブラウザの許可設定を確認してください。",
+    2: "現在地を取得できませんでした(電波の届かない場所では取得できないことがあります)。",
+    3: "現在地の取得に時間がかかりすぎました。屋外で、もう一度試してください。",
+  }[err.code] || "現在地を取得できませんでした。";
+  setStatus(msg + NL + "(" + (err.message || "") + ")", true);
+}
+
+/* 俯瞰図を描く。北を上にする。
+   北がデータのどちら向きかは、系の判定と同時に決まっている(swap) */
+function drawMinimap() {
+  const ctx = mmCanvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = mmCanvas.clientWidth || 176, cssH = mmCanvas.clientHeight || 176;
+  if (mmCanvas.width !== cssW * dpr) {
+    mmCanvas.width = cssW * dpr;
+    mmCanvas.height = cssH * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  // 石の重心(データ座標)を集める
+  const pts = [];
+  const box = new THREE.Box3();
+  const c = new THREE.Vector3();
+  for (const { mesh } of meshes) {
+    if (!mesh.visible || mesh.userData.filtered) continue;
+    let v = mesh.userData.centerV;
+    if (!v) {
+      box.setFromObject(mesh);
+      if (box.isEmpty()) continue;
+      v = new THREE.Vector3();
+      box.getCenter(v);
+      mesh.userData.centerV = v;
+    }
+    pts.push(threeToDataXY(v));
+  }
+  if (pts.length === 0) return;
+
+  // 地図座標(東=右、北=上)へ。swapで北の向きが決まる
+  const toMap = (p) => (geoGuess && geoGuess.swap)
+    ? { u: p.x, v: p.y }     // x=東, y=北
+    : { u: p.y, v: p.x };    // x=北, y=東
+  const mapPts = pts.map(toMap);
+  const me = geoFix ? toMap(geoFix) : null;
+
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (const q of mapPts) {
+    if (q.u < minU) minU = q.u; if (q.u > maxU) maxU = q.u;
+    if (q.v < minV) minV = q.v; if (q.v > maxV) maxV = q.v;
+  }
+  // 収める範囲は「石の広がり + 現在地の点」まで。**精度円は入れない**。
+   // 誤差18mに対して壁が8mといった場合、円まで収めると壁が豆粒になり
+   // 位置関係が読めなくなる。円は枠からはみ出させ、見えている分で伝える
+  if (me) {
+    minU = Math.min(minU, me.u); maxU = Math.max(maxU, me.u);
+    minV = Math.min(minV, me.v); maxV = Math.max(maxV, me.v);
+  }
+  const pad = 14;
+  const spanU = Math.max(maxU - minU, 1), spanV = Math.max(maxV - minV, 1);
+  const scale = Math.min((cssW - pad * 2) / spanU, (cssH - pad * 2) / spanV);
+  const midU = (minU + maxU) / 2, midV = (minV + maxV) / 2;
+  const sx = (q) => cssW / 2 + (q.u - midU) * scale;
+  const sy = (q) => cssH / 2 - (q.v - midV) * scale;   // 北が上
+
+  // 石
+  ctx.fillStyle = isLightTheme ? "rgba(60,70,80,.55)" : "rgba(200,215,230,.55)";
+  const dot = Math.max(1, Math.min(3, scale * 0.4));
+  for (const q of mapPts) ctx.fillRect(sx(q) - dot / 2, sy(q) - dot / 2, dot, dot);
+
+  if (me) {
+    // 精度円(石と同じ縮尺。これが「どれだけ曖昧か」そのもの)。
+    // 枠をはみ出すことがあるので、canvasの内側で切る
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cssW, cssH);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.arc(sx(me), sy(me), Math.max(2, geoFix.acc * scale), 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,160,40,.14)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,160,40,.8)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    // 現在地
+    ctx.beginPath();
+    ctx.arc(sx(me), sy(me), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffa028";
+    ctx.fill();
+  }
+
+  // 方位(北)とスケールバー
+  ctx.strokeStyle = ctx.fillStyle = isLightTheme ? "#444" : "#aab";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cssW - 12, 20); ctx.lineTo(cssW - 12, 6);
+  ctx.moveTo(cssW - 15, 10); ctx.lineTo(cssW - 12, 6); ctx.lineTo(cssW - 9, 10);
+  ctx.stroke();
+  ctx.font = "9px sans-serif";
+  ctx.fillText("N", cssW - 15, 30);
+
+  const barM = niceScaleLength(spanU * 0.4);
+  const barPx = barM * scale;
+  ctx.beginPath();
+  ctx.moveTo(8, cssH - 8); ctx.lineTo(8 + barPx, cssH - 8);
+  ctx.moveTo(8, cssH - 11); ctx.lineTo(8, cssH - 5);
+  ctx.moveTo(8 + barPx, cssH - 11); ctx.lineTo(8 + barPx, cssH - 5);
+  ctx.stroke();
+  ctx.fillText(barM >= 1000 ? (barM / 1000) + "km" : barM + "m", 8, cssH - 13);
+
+  mmInfo.textContent = geoFix
+    ? "誤差 約" + Math.round(geoFix.acc) + "m / 第" + geoGuess.zone + "系"
+    : "";
+}
+
+/* スケールバーの長さを 1・2・5 系列に丸める */
+function niceScaleLength(m) {
+  const p = Math.pow(10, Math.floor(Math.log10(Math.max(m, 1))));
+  const r = m / p;
+  return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
+}
+
+/* 現在地に最も近い石へ視点を寄せる。**自動では動かさない**。
+   GPSは数秒ごとに数十m跳ねるため、自動追従にすると作業中に視点が飛ぶ */
+function gotoNearestObject() {
+  if (!geoFix) return;
+  let best = null, bestD = Infinity;
+  const box = new THREE.Box3(), c = new THREE.Vector3();
+  for (const { mesh } of meshes) {
+    if (!mesh.visible || mesh.userData.filtered) continue;
+    let v = mesh.userData.centerV;
+    if (!v) {
+      box.setFromObject(mesh);
+      if (box.isEmpty()) continue;
+      v = new THREE.Vector3(); box.getCenter(v); mesh.userData.centerV = v;
+    }
+    const p = threeToDataXY(v);
+    const d = Math.hypot(p.x - geoFix.x, p.y - geoFix.y);
+    if (d < bestD) { bestD = d; best = { mesh, v }; }
+  }
+  if (!best) return;
+  orbit.target.copy(best.v);   // 向きと距離は保ったまま、中心だけ移す
+  orbit.update();
+  const NL = String.fromCharCode(10);
+  setStatus("現在地に最も近いオブジェクト(約" + Math.round(bestD) + "m)を中心にしました。" + NL +
+            "誤差 約" + Math.round(geoFix.acc) + "m のため、隣の区画の可能性があります。");
+}
+
+document.getElementById("geo-btn").addEventListener("click", requestLocation);
+document.getElementById("mm-goto").addEventListener("click", gotoNearestObject);
+document.getElementById("mm-close").addEventListener("click", () => {
+  minimap.style.display = "none";
+  document.getElementById("viewport-wrap").classList.remove("mm-open");
+});
 
 /* ============================================================
    分類の列(手入力)

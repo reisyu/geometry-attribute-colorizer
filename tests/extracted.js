@@ -50,6 +50,20 @@ const ATTR_INFO = {
   Dataset: { jp: "データ名", desc: "書き出し時に付与されるデータセット識別名。複数データの横断分析での由来識別に使う" },
 };
 
+const JP_ZONES = {
+  1:  [33, 129.5],      2:  [33, 131],        3:  [36, 132 + 10 / 60],
+  4:  [33, 133.5],      5:  [36, 134 + 20 / 60], 6:  [36, 136],
+  7:  [36, 137 + 10 / 60], 8:  [36, 138.5],    9:  [36, 139 + 50 / 60],
+  10: [40, 140 + 50 / 60], 11: [44, 140.25],   12: [44, 142.25],
+  13: [44, 144.25],     14: [26, 142],        15: [26, 127.5],
+  16: [26, 124],        17: [26, 131],        18: [20, 136],
+  19: [26, 154],
+};
+
+const GEO_ACCEPT_M = 5000;
+
+const GEO_MARGIN = 3;
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -719,4 +733,67 @@ function isReservedColumn(name, idCol) {
   return false;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn };
+function latLonToJPRect(lat, lon, zone) {
+  const o = JP_ZONES[zone];
+  if (!o) return null;
+  const rad = Math.PI / 180;
+  const phi = lat * rad, lam = lon * rad;
+  const phi0 = o[0] * rad, lam0 = o[1] * rad;
+
+  const a = 6378137, F = 298.257222101, m0 = 0.9999;   // GRS80
+  const n = 1 / (2 * F - 1);
+  const n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n;
+
+  const A0 = 1 + n2 / 4 + n4 / 64;
+  const A1 = -(3 / 2) * (n - n3 / 8 - n5 / 64);
+  const A2 = (15 / 16) * (n2 - n4 / 4);
+  const A3 = -(35 / 48) * (n3 - (5 / 16) * n5);
+  const A4 = (315 / 512) * n4;
+  const A5 = -(693 / 1280) * n5;
+
+  const al = [
+    (1 / 2) * n - (2 / 3) * n2 + (5 / 16) * n3 + (41 / 180) * n4 - (127 / 288) * n5,
+    (13 / 48) * n2 - (3 / 5) * n3 + (557 / 1440) * n4 + (281 / 630) * n5,
+    (61 / 240) * n3 - (103 / 140) * n4 + (15061 / 26880) * n5,
+    (49561 / 161280) * n4 - (179 / 168) * n5,
+    (34729 / 80640) * n5,
+  ];
+
+  const Abar = ((m0 * a) / (1 + n)) * A0;
+  const Sbar = ((m0 * a) / (1 + n)) *
+    (A0 * phi0 + A1 * Math.sin(2 * phi0) + A2 * Math.sin(4 * phi0) +
+     A3 * Math.sin(6 * phi0) + A4 * Math.sin(8 * phi0) + A5 * Math.sin(10 * phi0));
+
+  const lamc = lam - lam0;
+  const k = (2 * Math.sqrt(n)) / (1 + n);
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - k * Math.atanh(k * Math.sin(phi)));
+  const tb = Math.sqrt(1 + t * t);
+  const xi = Math.atan2(t, Math.cos(lamc));
+  const eta = Math.atanh(Math.sin(lamc) / tb);
+
+  let sx = 0, sy = 0;
+  for (let j = 1; j <= 5; j++) {
+    sx += al[j - 1] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
+    sy += al[j - 1] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+  }
+  return { x: Abar * (xi + sx) - Sbar, y: Abar * (eta + sy) };
+}
+
+function estimateJPZone(lat, lon, cx, cy) {
+  const cands = [];
+  for (const z of Object.keys(JP_ZONES)) {
+    const p = latLonToJPRect(lat, lon, Number(z));
+    if (!p) continue;
+    // swap=false: CADのx=北(X), y=東(Y)   swap=true: CADのx=東(Y), y=北(X)
+    cands.push({ zone: Number(z), swap: false, dist: Math.hypot(p.x - cx, p.y - cy) });
+    cands.push({ zone: Number(z), swap: true, dist: Math.hypot(p.y - cx, p.x - cy) });
+  }
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => a.dist - b.dist);
+  const best = cands[0], second = cands[1];
+  if (best.dist > GEO_ACCEPT_M) return null;
+  if (second && second.dist < best.dist * GEO_MARGIN) return null;
+  return best;
+}
+
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone };

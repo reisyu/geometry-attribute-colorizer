@@ -231,6 +231,7 @@
     <a href="#note" class="section">メモを書く</a>
     <a href="#multi" class="section">まとめて選ぶ</a>
     <a href="#classify" class="section">分類を付ける</a>
+    <a href="#geo" class="section">現在地を確認する</a>
     <a href="#data" class="section">データの準備</a>
     <a href="#export" class="section">書き出しの使い分け</a>
     <a href="#settings" class="section">設定は覚えられる？</a>
@@ -311,6 +312,8 @@
       <li><strong>平行投影 / 透視投影</strong> — 3Dビューの投影方式を切り替えます。平行投影は遠近感（パース）
         がなく、奥行きによる見かけの大きさの違いが出ないため、寸法の比較や実測図的な見え方の確認に向いています。
         今見ている向き・ズームを保ったまま切り替わります。</li>
+      <li><strong>現在地</strong> — いま立っている場所の目安を俯瞰図に表示します
+        (<a href="#geo">現在地を確認する</a>を参照)。</li>
       <li><strong>選択モード</strong> — なぞって複数のオブジェクトを選ぶモードに切り替えます
         (<a href="#multi">まとめて選ぶ</a>を参照)。</li>
       <li><strong>☀ ライト / 🌙 ダーク</strong> — 背景色を切り替えます。投影や印刷、スクリーンショット向け。</li>
@@ -667,6 +670,50 @@
       次の調査では、そのCSVを読み込めば分類も選択肢も戻ります。
     </div>
 
+    <!-- ============ 現在地 ============ -->
+    <h2 id="geo">現在地を確認する</h2>
+    <p>
+      ビュー右上の<strong>「現在地」</strong>を押すと、いま立っている場所の目安が
+      <strong>俯瞰図（上から見た図）</strong>に表示されます。石垣のどのあたりにいるかを確かめ、
+      その区画を画面で開くための機能です。
+    </p>
+    <div class="note">
+      <strong>石を特定することはできません。</strong> スマホのGPSの誤差は屋外で5〜20m、
+      石垣の際では遮蔽や反射で20〜50mまで落ちます。表示される<strong>オレンジの円が誤差の範囲</strong>で、
+      円が壁の半分を覆っていれば、それが実際の精度です。円の中のどの石か、までは分かりません。
+    </div>
+
+    <h3>使える条件</h3>
+    <ul>
+      <li><strong>実際の測量座標が入ったDXF</strong>（平面直角座標系）を読み込んでいること。
+        座標系は自動で判定します</li>
+      <li><strong>インターネット経由で開いていること。</strong> オフライン版（ファイルを直接開く形）では、
+        ブラウザが位置情報を許可しないため使えません</li>
+      <li>ブラウザの位置情報の許可</li>
+    </ul>
+    <p>
+      条件を満たさないときや、現在地がデータから遠すぎて座標系を判定できないときは、
+      <strong>何も表示せずに理由を出します</strong>。当てずっぽうの位置は出しません。
+    </p>
+
+    <h3>俯瞰図の見かた</h3>
+    <ul>
+      <li><strong>細かい点</strong> — 石を上から見た位置。壁は上から見ると細長い線になります</li>
+      <li><strong>オレンジの点</strong> — 現在地の推定位置</li>
+      <li><strong>オレンジの円</strong> — 測位の誤差。枠からはみ出すこともあります</li>
+      <li>右上の矢印が<strong>北</strong>、左下が<strong>距離の目盛り</strong>です</li>
+    </ul>
+    <p>
+      <strong>「近くの区画を見る」</strong>を押すと、現在地に最も近いオブジェクトを中心に3Dビューが動きます。
+      視点が<strong>勝手に動くことはありません</strong>（GPSは数秒ごとに数十m跳ねるため、
+      作業中に視点が飛ばないようにしています）。
+    </p>
+
+    <div class="note">
+      <strong>位置は記録されません。</strong> 端末の中だけで使い、外部に送信することも、
+      CSVに書き出すこともありません。
+    </div>
+
     <!-- ============ データの準備 ============ -->
     <h2 id="data">データの準備</h2>
 
@@ -875,7 +922,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.23.4";
+  const HELP_VERSION = "1.24.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

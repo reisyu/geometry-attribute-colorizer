@@ -44,10 +44,12 @@ const FUNCS = [
   "distToSegmentSq",
   "normalizeClassValue",
   "isReservedColumn",
+  "latLonToJPRect",
+  "estimateJPZone",
 ];
 
 // 抽出対象の定数
-const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO"];
+const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN"];
 
 const root = __dirname;
 const htmlPath = path.join(root, "index.html");
