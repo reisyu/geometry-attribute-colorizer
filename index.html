@@ -1516,7 +1516,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.22.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.22.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -5082,13 +5082,23 @@ function buildBrushCandidates() {
   return list;
 }
 
+/* 押した時点では**塗らない**。ここで1個拾うと、指を離したときのタップ処理が
+   「もう選ばれている」と見て外しにかかり、押している間だけ選ばれて離すと
+   戻る、という自己衝突になる(実際にそうなっていた)。
+   塗りは最初の移動から始める。押した位置は始点として残るので取りこぼさない */
 function beginBrushStroke(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const x = clientX - rect.left, y = clientY - rect.top;
-  pushSelectionUndo();
-  brushStroke = { x, y, cands: buildBrushCandidates() };
-  paintSegment(x, y, x, y);
-  paintUnderCursor(clientX, clientY);
+  brushStroke = { x, y, cands: buildBrushCandidates(), undoPushed: false };
+}
+
+/* 控えは「最初の1個を足す直前」に1回だけ取る。押すたびに取ると、
+   何も塗らなかったストロークで取り消しが1回分空振りする */
+function ensureStrokeUndo() {
+  if (brushStroke && !brushStroke.undoPushed) {
+    pushSelectionUndo();
+    brushStroke.undoPushed = true;
+  }
 }
 
 function paintTo(clientX, clientY) {
@@ -5114,12 +5124,19 @@ function paintUnderCursor(clientX, clientY) {
   const mesh = hits[0].object;
   if (selection.has(mesh)) return;
   const prevSize = selection.size;
+  ensureStrokeUndo();
   selection.add(mesh);
   setMeshSelectionAppearance(mesh);
   afterSelectionChange(prevSize);
 }
 
+/* このストロークで実際に拾ったかどうかを、指を離した後のタップ処理へ渡す。
+   マウスは数pxの揺れが必ず出るため、「動いていないから足し引き」と
+   「動いたから塗り」の境目で両方が走ると、足したものをすぐ外してしまう */
+let lastStrokePainted = false;
+
 function endBrushStroke() {
+  if (brushStroke && brushStroke.undoPushed) lastStrokePainted = true;
   brushStroke = null;
 }
 
@@ -5137,6 +5154,7 @@ function paintSegment(x0, y0, x1, y1) {
     const px = (_brushProj.x + 1) / 2 * w;
     const py = (-_brushProj.y + 1) / 2 * h;
     if (distToSegmentSq(px, py, x0, y0, x1, y1) > r2) continue;
+    ensureStrokeUndo();
     selection.add(item.mesh);
     setMeshSelectionAppearance(item.mesh);
   }
@@ -5276,7 +5294,15 @@ function updateSelectionUI() {
     group.style.display = "none";
     table.style.display = "";
     single.style.display = "";
-    if (n === 1) showInspectorFor([...selection][0]);
+    if (n === 1) { showInspectorFor([...selection][0]); return; }
+    // 選択モードで0個に戻ったら、単票側も畳む。残しておくと
+    // 「0個選択中なのに1個光っていて、その属性表とメモ欄が開いている」
+    // という、2つの選択が同時に見えている状態になる
+    if (selectMode) {
+      setHighlight(null);
+      bindNoteEditor(null);
+      document.getElementById("inspector").style.display = "none";
+    }
     return;
   }
 
@@ -5356,6 +5382,11 @@ let lastTapTime = 0, lastTapPos = null;
 
 canvas.addEventListener("pointerdown", (e) => { downPos = [e.clientX, e.clientY]; });
 canvas.addEventListener("pointerup", (e) => {
+  // 直前のストロークが塗ったかどうかは、この1回のpointerupでだけ意味を持つ。
+  // どの経路を通っても持ち越さないよう、先頭で読んで消す
+  const painted = lastStrokePainted;
+  lastStrokePainted = false;
+
   // ドラッグ(カメラ操作)とクリックを区別する
   if (!downPos) return;
   const moved = Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]);
@@ -5382,12 +5413,17 @@ canvas.addEventListener("pointerup", (e) => {
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(meshes.map((m) => m.mesh), false);
+  // Three.js r128のレイキャストは visible=false を無視して当たりを返す(実測)。
+  // 落としておかないと、フィルタで消したはずのものが選べてしまい、
+  // 画面に出ないまま件数だけ増える。ブラシ側の規則とも食い違う
+  const hits = raycaster.intersectObjects(meshes.map((m) => m.mesh), false)
+    .filter((h) => h.object.visible && !h.object.userData.filtered);
 
   // 選択モードのタップは1個ずつの足し引き。空きをタップしても全解除しない
   // (時間をかけて選んだものが、押し間違い1回で消えるのを避ける)
   if (selectMode) {
-    if (hits.length) toggleSelected(hits[0].object);
+    // わずかに動いてブラシが拾っていた場合は、ここで外しにかかってはいけない
+    if (!painted && hits.length) toggleSelected(hits[0].object);
     return;
   }
 
