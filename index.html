@@ -1571,7 +1571,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.23.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.23.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3833,6 +3833,7 @@ function loadCSVText(text, displayName) {
       noteBackupWarned = false;   // データが変わったら控えの可否を改めて知らせる
       // 手入力の記録は前のデータのもの。持ち越すと関係のない列を控えてしまう
       manualCols.clear();
+      categoryOrders.clear();   // カテゴリの色の並びも、そのデータに固有のもの
       if (csvColumns.length < 2) {
         setStatus("CSVにはID列と属性列の少なくとも2列が必要です。", true);
         return;
@@ -4033,6 +4034,17 @@ function categoryColorByIndex(i) {
 }
 let categoryColorCache = {};
 let categoryOthers = new Set();  // 「その他」に集約されたカテゴリ名
+
+/* 属性ごとに「どの値にどの色番号を割り当てたか」を覚えておく(値の並び=色番号)。
+
+   出現数の多い順に色を付け直すと、**値を1つ足しただけで既存の色が入れ替わる**。
+   花崗岩だけのときは花崗岩が赤、そこに砂岩を足すと砂岩が赤・花崗岩が青、
+   というように、手を加えていない石の色が勝手に変わってしまう(実際に起きた)。
+   分類は塗りながら値が増えていく作業なので、ここが動くと作業にならない。
+
+   そこで**使い始めた順に色を固定**し、新しい値は末尾に足す。
+   一度消えた値も並びから外さない(戻ってきたときに同じ色に戻る) */
+const categoryOrders = new Map();
 function textToColor(category) {
   if (!(category in categoryColorCache)) {
     categoryColorCache[category] = categoryColorByIndex(Object.keys(categoryColorCache).length);
@@ -4148,8 +4160,12 @@ function applyColorize() {
       if (v === "") continue;
       counts[v] = (counts[v] || 0) + 1;
     }
-    let sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    // 初めて見る値は出現数の多い順に並べる(最初の1回だけ。以降は末尾に足す)
+    const sortedByCount = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    let sorted = sortedByCount;
     const topOnly = document.getElementById("cat-top-only").checked;
+    // 「上位のみ色分け」の上位は**出現数**で決める(色番号とは別の基準)
+    const topSet = new Set(sortedByCount.slice(0, 7));
 
     // メモの有無だけは配色を固定する。
     // 出現数順に色を割り当てる既定のままだと、大多数を占める「なし」に
@@ -4167,9 +4183,18 @@ function applyColorize() {
       }
     }
 
-    sorted.forEach((cat, i) => {
+    // 色番号は「使い始めた順」。既に覚えている並びを引き継ぎ、新しい値だけ末尾に足す
+    const order = categoryOrders.get(attr) || [];
+    const known = new Set(order);
+    for (const cat of sorted) {
+      if (!known.has(cat)) { order.push(cat); known.add(cat); }
+    }
+    categoryOrders.set(attr, order);
+
+    order.forEach((cat, i) => {
+      if (!(cat in counts)) return;            // いま存在しない値。色番号は空けたままにする
       if (cat in categoryColorCache) return;   // 固定色を割り当て済み
-      if (topOnly && i >= 7) {
+      if (topOnly && !topSet.has(cat)) {
         categoryColorCache[cat] = OTHER_COLOR;
         categoryOthers.add(cat);
       } else {
@@ -5023,8 +5048,9 @@ function disposeModel() {
   bindNoteEditor(null);
   setUnsavedNotes(false);
 
-  // 手入力の記録・選択は別のモデルへ持ち越さない
+  // 手入力の記録・選択・カテゴリ色の並びは別のモデルへ持ち越さない
   manualCols.clear();
+  categoryOrders.clear();
   selection.clear();
   selectionUndo.length = 0;
   selectionOutlineDirty = true;
