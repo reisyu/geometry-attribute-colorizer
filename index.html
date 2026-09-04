@@ -1583,6 +1583,10 @@ const selection = new Set();
 
 function resize() {
   const w = wrap.clientWidth, h = wrap.clientHeight;
+  // 隠れたタブやレイアウト前は 0 になる。そのまま進めると aspect が Infinity になり、
+  // **カメラ位置→クォータニオンへNaNが伝播して3D表示が空白になる**
+  // (次にリサイズされるまで戻らない)。触らずに帰る
+  if (w === 0 || h === 0) return;
   renderer.setSize(w, h, false);
   perspCamera.aspect = w / h;
   perspCamera.updateProjectionMatrix();
@@ -1611,7 +1615,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.24.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.24.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -5999,10 +6003,14 @@ function gotoNearestObject() {
     if (d < bestD) { bestD = d; best = { mesh, v }; }
   }
   if (!best) return;
-  orbit.target.copy(best.v);   // 向きと距離は保ったまま、中心だけ移す
+  // 壁の**表**から見る向きに揃える。今どちらを向いていても裏へ回り込まない。
+  // 距離(ズーム)は利用者が決めたものなので変えない
+  const N = wallFrontDirection();
+  orbit.spherical.setFromVector3(N.multiplyScalar(orbit.spherical.radius));
+  orbit.target.copy(best.v);
   orbit.update();
   const NL = String.fromCharCode(10);
-  setStatus("現在地に最も近いオブジェクト(約" + Math.round(bestD) + "m)を中心にしました。" + NL +
+  setStatus("現在地に最も近いオブジェクト(約" + Math.round(bestD) + "m)を、正面から見ています。" + NL +
             "誤差 約" + Math.round(geoFix.acc) + "m のため、隣の区画の可能性があります。");
 }
 
@@ -6401,6 +6409,10 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     clearTimeout(saveNotesTimer);
     saveNotes();
+  } else {
+    // 隠れている間に読み込まれた場合、起動時のリサイズは 0×0 で見送られている。
+    // 表に戻った時点で採り直す(利用者がリサイズ操作をするまで待たせない)
+    resize();
   }
 });
 
@@ -7180,27 +7192,18 @@ document.getElementById("theme-toggle").addEventListener("click", () => applyThe
      SVG書き出し前の目視確認に使う
    ・全体: モデル全体が収まるようにフィットする
 ============================================================ */
+/* 壁の表を向いた水平方向(=カメラを置く側)。立面図SVG・傾きラインと同じ
+   平均法線から作る。「正面」ボタンと「近くの区画を見る」で共有する */
+function wallFrontDirection() {
+  const g = wallAverageNormal();
+  const N = new THREE.Vector3(g.x, 0, g.z);   // 上下成分を落として水平化
+  if (N.lengthSq() < 1e-9) N.set(0, 0, 1);
+  return N.normalize();
+}
+
 function viewFront() {
   if (meshes.length === 0) return;
-  // 傾きライン・SVGと同じルールで壁の表方向を求める
-  const globalN = new THREE.Vector3();
-  const tmpN = new THREE.Vector3();
-  let refN = null;
-  for (const { mesh } of meshes) {
-    const rl = mesh.userData.rectLine;
-    if (!rl || !rl.n) continue;
-    tmpN.set(rl.n[0], rl.n[2], -rl.n[1]);
-    if (Math.abs(tmpN.y) > 0.05) {
-      if (tmpN.y < 0) tmpN.negate();
-    } else if (refN && tmpN.dot(refN) < 0) {
-      tmpN.negate();
-    }
-    if (refN === null) refN = tmpN.clone();
-    globalN.add(tmpN);
-  }
-  const N = new THREE.Vector3(globalN.x, 0, globalN.z);
-  if (N.lengthSq() < 1e-9) N.set(0, 0, 1);
-  N.normalize();
+  const N = wallFrontDirection();
 
   const box = new THREE.Box3();
   if (modelRoot) box.expandByObject(modelRoot);

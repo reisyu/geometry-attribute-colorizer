@@ -704,7 +704,8 @@
       <li>右上の矢印が<strong>北</strong>、左下が<strong>距離の目盛り</strong>です</li>
     </ul>
     <p>
-      <strong>「近くの区画を見る」</strong>を押すと、現在地に最も近いオブジェクトを中心に3Dビューが動きます。
+      <strong>「近くの区画を見る」</strong>を押すと、現在地に最も近いオブジェクトを中心に、
+      <strong>壁の正面から見る向き</strong>で3Dビューが動きます（裏側に回り込みません）。拡大の度合いはそのままです。
       視点が<strong>勝手に動くことはありません</strong>（GPSは数秒ごとに数十m跳ねるため、
       作業中に視点が飛ばないようにしています）。
     </p>
@@ -922,7 +923,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.24.0";
+  const HELP_VERSION = "1.24.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
