@@ -41,6 +41,7 @@ const TESTS = [
   ["test_selection.js", "ブラシ選択の当たり判定"],
   ["test_classify.js", "分類の列(手入力)"],
   ["test_geoloc.js", "現在地(平面直角座標)"],
+  ["test_minimap.js", "俯瞰ミニマップ"],
   ["integration_test.js", "実データ統合"],
 ];
 

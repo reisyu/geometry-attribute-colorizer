@@ -1705,6 +1705,7 @@ function resize() {
   perspCamera.updateProjectionMatrix();
   updateOrthoFrustum();
   updateHighlightUniforms();   // 選択の輪郭線はpx指定なので画面サイズを渡し直す
+  refreshMinimap();            // 端末の解像度が変わるとcanvasの実寸も変わる
 }
 window.addEventListener("resize", resize);
 resize();
@@ -1728,7 +1729,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.24.3";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.24.4";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4895,6 +4896,7 @@ function applyFilter() {
   }
   rebuildLabels();
   rebuildRectLines();  // フィルタ状態を傾きラインにも反映
+  refreshMinimap();    // 俯瞰図も「いま表示している石」に合わせる
   updateStepSummaries();
 }
 
@@ -6004,12 +6006,22 @@ function onGeoError(err) {
   setStatus(msg + NL + "(" + (err.message || "") + ")", true);
 }
 
+/* データ座標(x, y)を地図座標(u=東, v=北)へ。
+   平面直角座標系はX=北・Y=東だが、CADのデータはこれを入れ替えて
+   持っていることが多い。どちらなのかは系の判定と同時に決まっている(swap)。
+   ここを取り違えると俯瞰図が90度回り、現在地が別の区画を指す */
+function toMapXY(p, swap) {
+  return swap
+    ? { u: p.x, v: p.y }     // x=東, y=北
+    : { u: p.y, v: p.x };    // x=北, y=東
+}
+
 /* 俯瞰図を描く。北を上にする。
    北がデータのどちら向きかは、系の判定と同時に決まっている(swap) */
 function drawMinimap() {
   const ctx = mmCanvas.getContext("2d");
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cssW = mmCanvas.clientWidth || 176, cssH = mmCanvas.clientHeight || 176;
+  const cssW = mmCanvas.clientWidth || 184, cssH = mmCanvas.clientHeight || 184;
   if (mmCanvas.width !== cssW * dpr) {
     mmCanvas.width = cssW * dpr;
     mmCanvas.height = cssH * dpr;
@@ -6036,11 +6048,9 @@ function drawMinimap() {
   if (pts.length === 0) return;
 
   // 地図座標(東=右、北=上)へ。swapで北の向きが決まる
-  const toMap = (p) => (geoGuess && geoGuess.swap)
-    ? { u: p.x, v: p.y }     // x=東, y=北
-    : { u: p.y, v: p.x };    // x=北, y=東
-  const mapPts = pts.map(toMap);
-  const me = geoFix ? toMap(geoFix) : null;
+  const swap = !!(geoGuess && geoGuess.swap);
+  const mapPts = pts.map((p) => toMapXY(p, swap));
+  const me = geoFix ? toMapXY(geoFix, swap) : null;
 
   let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
   for (const q of mapPts) {
@@ -6109,6 +6119,16 @@ function drawMinimap() {
   mmInfo.textContent = geoFix
     ? "誤差 約" + Math.round(geoFix.acc) + "m / 第" + geoGuess.zone + "系"
     : "";
+}
+
+/* 開いている間だけ描き直す。俯瞰図は「いま表示している石」を描いており、
+   フィルタ・テーマ・大きさが変わっても描き直さないと、前の絵が残る
+   (除外した石が地図にだけ残る、ライトテーマにすると点が見えなくなる)。
+   閉じているときは何もしない(起動直後に呼ばれても安全) */
+function refreshMinimap() {
+  const el = document.getElementById("minimap");
+  if (!el || el.style.display !== "block") return;
+  drawMinimap();
 }
 
 /* スケールバーの長さを 1・2・5 系列に丸める */
@@ -7321,6 +7341,7 @@ function applyTheme(light) {
   tb.textContent = light ? "🌙" : "☀";
   tb.title = light ? "背景色を切り替える(現在: ライト)" : "背景色を切り替える(現在: ダーク)";
   layoutOverlays();
+  refreshMinimap();   // 俯瞰図は背景色に合わせて点の色を変えている
   scheduleSaveSettings();
 }
 document.getElementById("theme-toggle").addEventListener("click", () => applyTheme(!isLightTheme));

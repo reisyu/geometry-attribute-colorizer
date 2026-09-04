@@ -46,6 +46,8 @@ const FUNCS = [
   "isReservedColumn",
   "latLonToJPRect",
   "estimateJPZone",
+  "toMapXY",
+  "niceScaleLength",
 ];
 
 // 抽出対象の定数

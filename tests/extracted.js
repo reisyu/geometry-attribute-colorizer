@@ -796,4 +796,16 @@ function estimateJPZone(lat, lon, cx, cy) {
   return best;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone };
+function toMapXY(p, swap) {
+  return swap
+    ? { u: p.x, v: p.y }     // x=東, y=北
+    : { u: p.y, v: p.x };    // x=北, y=東
+}
+
+function niceScaleLength(m) {
+  const p = Math.pow(10, Math.floor(Math.log10(Math.max(m, 1))));
+  const r = m / p;
+  return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
+}
+
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };

@@ -4,3 +4,6 @@ dist/
 
 # 配布用ZIP(GitHub Releaseに添付するもの)もリポジトリには入れない
 *.zip
+
+# Claude Code のローカル設定(プレビュー用サーバの定義など)
+.claude/

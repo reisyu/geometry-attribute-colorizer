@@ -317,11 +317,11 @@
       <li><strong>平行投影 / 透視投影</strong> — 3Dビューの投影方式を切り替えます。平行投影は遠近感（パース）
         がなく、奥行きによる見かけの大きさの違いが出ないため、寸法の比較や実測図的な見え方の確認に向いています。
         今見ている向き・ズームを保ったまま切り替わります。</li>
+      <li><strong>☀ / 🌙</strong> — 背景色を切り替えます。投影や印刷、スクリーンショット向け。</li>
       <li><strong>現在地</strong> — いま立っている場所の目安を俯瞰図に表示します
         (<a href="#geo">現在地を確認する</a>を参照)。</li>
-      <li><strong>選択モード</strong> — なぞって複数のオブジェクトを選ぶモードに切り替えます
+      <li><strong>選択</strong> — なぞって複数のオブジェクトを選ぶ<strong>選択モード</strong>に切り替えます
         (<a href="#multi">まとめて選ぶ</a>を参照)。</li>
-      <li><strong>☀ / 🌙</strong> — 背景色を切り替えます。投影や印刷、スクリーンショット向け。</li>
     </ul>
     <h3>左パネルを閉じる</h3>
     <p>
@@ -716,7 +716,8 @@
 
     <h3>俯瞰図の見かた</h3>
     <ul>
-      <li><strong>細かい点</strong> — 石を上から見た位置。壁は上から見ると細長い線になります</li>
+      <li><strong>細かい点</strong> — 石を上から見た位置。壁は上から見ると細長い線になります。
+        フィルタで除外した石は<strong>俯瞰図からも消えます</strong>（画面と同じものが載ります）</li>
       <li><strong>オレンジの点</strong> — 現在地の推定位置</li>
       <li><strong>オレンジの円</strong> — 測位の誤差。枠からはみ出すこともあります</li>
       <li>右上の矢印が<strong>北</strong>、左下が<strong>距離の目盛り</strong>です</li>
@@ -868,7 +869,8 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
     <p>
       <strong>見た目の設定は、次に開いたときも引き継がれます。</strong>
       背景モデルと輪郭モデルの不透明度、傾きラインの色と太さ、
-      ラベルの文字サイズ、SVG書き出しで含める要素、ライト/ダーク、投影方式などです。
+      ラベルの文字サイズ、SVG書き出しで含める要素、ライト/ダーク、投影方式、
+      左パネルを閉じているかどうか、などです。
       毎回チェックを入れ直す手間がなくなります。
     </p>
     <p>
@@ -941,7 +943,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.24.3";
+  const HELP_VERSION = "1.24.4";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
