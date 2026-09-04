@@ -781,6 +781,25 @@
       <code>elevation.svg</code> のような既定の名前になります。
     </div>
 
+    <h3>iPad・スマホでは「送る」になります</h3>
+    <p>
+      指で操作する端末では、書き出しのボタンが<strong>「〜で送る」</strong>という表示になり、
+      押すと<strong>共有シート</strong>が開きます。メール・LINE・Slack・AirDropに
+      その場で渡せるので、ファイルAppを開いて探す必要がありません。
+      シートには<strong>「ファイルに保存」も並ぶ</strong>ので、端末に残したいときもここから選べます。
+    </p>
+    <ul>
+      <li><strong>キャンセルしても大丈夫です。</strong> 送らずにシートを閉じた場合、
+        メモや分類の<strong>「未保存」の表示は消えません</strong>。送れていないのに
+        保存済みに見えることがないようにしています</li>
+      <li><strong>まとめてZIPだけは2回押します。</strong> 1回目で図を作り
+        （属性ごとに色分けし直すため数秒かかります）、
+        ボタンが「まとめた図を送る (N枚)」に変わったら2回目で送ります。
+        作るのに時間がかかると、そのままでは共有シートを開けないためです</li>
+      <li>パソコンではこれまでどおり<strong>「保存」</strong>（ダウンロード）です。
+        ダウンロードしてからメールに添付するほうが速いためです</li>
+    </ul>
+
     <h3>CSV — データ分析用</h3>
     <p>
       計算した全属性を表形式で書き出します（Excel・BIツール・Pythonで開けます）。
@@ -943,7 +962,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.24.4";
+  const HELP_VERSION = "1.25.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

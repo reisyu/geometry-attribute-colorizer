@@ -1729,7 +1729,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.24.4";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.25.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2779,12 +2779,10 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
     cols.map((c) => csvEscape(c === "Dataset" ? dsName : row[c] ?? "")).join(",")
   ).join("\n");
   const blob = new Blob(["\uFEFF" + header + "\n" + body], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = exportFileName("attributes.csv");
-  a.click();
-  setUnsavedNotes(false);
-  URL.revokeObjectURL(a.href);
+  // \u672A\u4FDD\u5B58\u306E\u89E3\u9664\u306F\u300C\u78BA\u304B\u306B\u6E21\u305B\u305F\u300D\u3068\u304D\u3060\u3051(\u5171\u6709\u30B7\u30FC\u30C8\u306F\u30AD\u30E3\u30F3\u30BB\u30EB\u3067\u304D\u308B)
+  deliverBlob(blob, exportFileName("attributes.csv"),
+    `\u5C5E\u6027\u3092CSV\u3067\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F: ${csvRows.length} \u884C`,
+    () => setUnsavedNotes(false));
 });
 
 /* 三角形の巻き順を反転する (a,b,c) -> (a,c,b)。法線の向きを揃えるために使う。
@@ -2939,12 +2937,8 @@ function exportGLB() {
   new Uint8Array(out, p, binChunk.byteLength).set(binChunk);
 
   const blob = new Blob([out], { type: "model/gltf-binary" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = exportFileName("model_with_ids.glb");
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setStatus(`ID付きGLBを書き出しました: ${meshes.length} オブジェクト`);
+  deliverBlob(blob, exportFileName("model_with_ids.glb"),
+    `ID付きGLBを書き出しました: ${meshes.length} オブジェクト`);
 }
 
 document.getElementById("export-glb-btn").addEventListener("click", exportGLB);
@@ -3182,8 +3176,71 @@ function downloadBlob(blob, filename, message) {
   setStatus(message);
 }
 
+/* ============================================================
+   書き出したファイルの渡し先(保存 / 送る)
+
+   iPadの現場では、書き出したCSVをその場でメールやチャットに渡したい。
+   ブラウザのダウンロードに落とすと「ファイルAppを開く→ダウンロードを
+   探す→共有→送り先を選ぶ」の4手になり、アプリを離れることになる。
+
+   共有シートを開ければ1手で済む。シートには「ファイルに保存」も並ぶので、
+   保存の道を塞ぐことにはならない。使えない端末(PCのブラウザ・オフライン版)
+   では、これまでどおりダウンロードする。
+============================================================ */
+
+/* このファイルを共有シートに渡せるか。形式によって拒まれることがあるので
+   (.glb や .zip はブラウザ側の対象外になりうる)、決め打ちせず毎回訊く */
+function canShareFile(blob, filename) {
+  try {
+    if (!navigator.share || !navigator.canShare) return false;
+    return navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] });
+  } catch (e) {
+    return false;                    // 判定自体が失敗する環境は「使えない」扱い
+  }
+}
+
+/* 共有シートを使う端末かどうか。**指で触る端末に限る**。
+   PCではダウンロードのほうが速く、そこからメールに添付する手順も
+   慣れたものになっている。共有シートが要るのは、ファイルAppを経由しないと
+   何もできないiPad・スマホのほう。UA文字列は見ずに、入力装置で判断する */
+function shareAvailable() {
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  if (!coarse) return false;
+  return canShareFile(new Blob([""], { type: "text/csv" }), "a.csv");
+}
+
+/* 保存する。共有が使える端末では共有シートを開く。
+
+   onDelivered は**確かに渡せたときだけ**呼ぶ。共有シートはキャンセルできる
+   ため、押した時点で「保存済み」にすると、送れていないのに未保存の表示が
+   消える。メモと分類は計算し直せない唯一のデータ(§5.1.2)なので、
+   ここを取り違えてはいけない。
+
+   navigator.share は**利用者の操作の直後**でしか開けない(transient
+   activation)。この関数より前に await を挟むと権利が切れて失敗するので、
+   呼び出し側は押された流れのまま呼ぶこと(ZIPだけは間に合わないため2段構え) */
+async function deliverBlob(blob, filename, message, onDelivered) {
+  if (shareAvailable() && canShareFile(blob, filename)) {
+    try {
+      await navigator.share({ files: [new File([blob], filename, { type: blob.type })] });
+      if (onDelivered) onDelivered();
+      setStatus(filename + " を送りました。");
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        // 送り先を選ばずに閉じた。渡せていないので未保存のままにする
+        setStatus("送信をやめました。もう一度押すとやり直せます。");
+        return;
+      }
+      /* それ以外(形式が対象外など)は保存に落とす */
+    }
+  }
+  downloadBlob(blob, filename, message);
+  if (onDelivered) onDelivered();
+}
+
 function downloadSVG(svgText, filename, message) {
-  downloadBlob(new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }), filename, message);
+  deliverBlob(new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }), filename, message);
 }
 
 /* ============================================================
@@ -3526,10 +3583,43 @@ async function exportBatchSVG() {
     msg += NL + `範囲が成立しないため飛ばした属性: ${skipped.join("・")}` +
       NL + "(最小値が最大値を上回っています。範囲を見直すか、チェックを外してください)";
   }
-  downloadBlob(zip, exportFileName("elevation.zip"), msg);
+  const name = exportFileName("elevation.zip");
+
+  /* ZIPだけは2段に分ける。共有シートは**押された直後**でしか開けないが、
+     ここに来るまでに属性ごとの色分けとdeflateで数秒かかっており、
+     その権利は既に切れている。作るところで一旦止め、次の一押しで送る */
+  if (shareAvailable()) {
+    pendingZip = { blob: zip, name, count: entries.length };
+    updateBatchButton();
+    setStatus(msg + NL + "もう一度ボタンを押すと、メールやチャットに送れます。");
+    return;
+  }
+  downloadBlob(zip, name, msg);
+}
+
+/* 作ったZIPの控え。共有シートを開くには次の一押しが要るため、
+   それまで持っておく(キャンセルされても押し直せるように消さない) */
+let pendingZip = null;
+
+function updateBatchButton() {
+  const b = document.getElementById("batch-export-btn");
+  if (pendingZip) {
+    b.textContent = `まとめた図を送る (${pendingZip.count}枚)`;
+    b.title = "共有シートを開きます(メール・チャットのほか「ファイルに保存」も選べます)";
+  } else {
+    b.textContent = shareAvailable() ? "まとめてZIPを作る" : "まとめてZIPで保存";
+    b.title = "";
+  }
 }
 
 document.getElementById("batch-export-btn").addEventListener("click", () => {
+  if (pendingZip) {
+    // 作ってあるので、押された流れのまま共有シートを開く(前に await を挟まない)
+    const z = pendingZip;
+    deliverBlob(z.blob, z.name, `${z.count} 枚の図のZIPを保存しました`,
+      () => { pendingZip = null; updateBatchButton(); });
+    return;
+  }
   exportBatchSVG().catch((e) => {
     hideProgress();
     setStatus("まとめ書き出しに失敗しました: " + (e && e.message ? e.message : e), true);
@@ -5246,6 +5336,8 @@ function disposeModel() {
   categoryOrders.clear();
   geoGuess = null;
   geoFix = null;
+  pendingZip = null;          // 前のモデルで作ったZIPを次のモデルの操作で送らせない
+  updateBatchButton();
   if (minimap) {
     minimap.style.display = "none";
     document.getElementById("viewport-wrap").classList.remove("mm-open");
@@ -7607,10 +7699,30 @@ for (const [id] of SAVED_SETTINGS) {
   el.addEventListener("input", scheduleSaveSettings);
 }
 
+/* 共有シートを開ける端末では、書き出しボタンの文言を「送る」にする。
+   シートには「ファイルに保存」も並ぶので、保存の道は塞がない。
+   使えない端末では文言も動きもこれまでどおり */
+function applyShareLabels() {
+  updateBatchButton();                 // ZIPは2段構えなので別に決める
+  if (!shareAvailable()) return;
+  const tip = "共有シートを開きます(メール・チャットのほか「ファイルに保存」も選べます)";
+  const labels = {
+    "download-csv-btn": "属性をCSVで送る",
+    "export-glb-btn": "ID付きGLBで送る",
+    "export-svg-btn": "立面図をSVGで送る",
+    "export-current-view-svg-btn": "現在のビューをSVGで送る",
+  };
+  for (const id of Object.keys(labels)) {
+    const b = document.getElementById(id);
+    if (b) { b.textContent = labels[id]; b.title = tip; }
+  }
+}
+
 /* ============================================================
    起動: 全ての宣言が終わったここでレンダリングループを開始する
 ============================================================ */
 restoreSettings();
+applyShareLabels();
 animate();
 loadSampleData();
 
