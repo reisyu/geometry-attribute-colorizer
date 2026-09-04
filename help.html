@@ -800,11 +800,14 @@
         ダウンロードしてからメールに添付するほうが速いためです</li>
     </ul>
     <div class="note">
-      <strong>送り先のアプリに出てこない・添付されないときは。</strong>
-      受け取る側のアプリが、ファイルの種類によって受け取りを断ることがあります
-      （Teamsは以前、SVGとZIPを受け取れませんでした）。
-      そのときは共有シートの<strong>「ファイルに保存」</strong>で端末に保存してから、
-      アプリ側の添付ボタンで選んでください。確実に渡せます。
+      <strong>アプリによっては受け取れない形式があります。</strong>
+      送り先が何を受け取るかは、こちら側では決められません。
+      <strong>Microsoft Teams</strong>で確認したところ、<strong>CSVは送れますが、
+      SVG・ZIP・GLBは送れません</strong>（Teamsの共有シートはテキストと画像しか
+      受け取らないためです。SVGは送り先には出ますが、チャットには何も添付されません）。
+      <br>
+      <strong>メールは形式を問わず添付できます。</strong> 図やモデルを渡すときはメールを使うか、
+      共有シートの「ファイルに保存」で端末に保存してから、アプリ側の添付ボタンで選んでください。
     </div>
 
     <h3>CSV — データ分析用</h3>
@@ -969,7 +972,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.25.1";
+  const HELP_VERSION = "1.25.2";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
