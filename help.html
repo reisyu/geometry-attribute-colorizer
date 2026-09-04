@@ -799,6 +799,13 @@
       <li>パソコンではこれまでどおり<strong>「保存」</strong>（ダウンロード）です。
         ダウンロードしてからメールに添付するほうが速いためです</li>
     </ul>
+    <div class="note">
+      <strong>送り先のアプリに出てこない・添付されないときは。</strong>
+      受け取る側のアプリが、ファイルの種類によって受け取りを断ることがあります
+      （Teamsは以前、SVGとZIPを受け取れませんでした）。
+      そのときは共有シートの<strong>「ファイルに保存」</strong>で端末に保存してから、
+      アプリ側の添付ボタンで選んでください。確実に渡せます。
+    </div>
 
     <h3>CSV — データ分析用</h3>
     <p>
@@ -962,7 +969,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.25.0";
+  const HELP_VERSION = "1.25.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

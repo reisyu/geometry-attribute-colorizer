@@ -1729,7 +1729,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.25.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.25.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3190,10 +3190,32 @@ function downloadBlob(blob, filename, message) {
 
 /* このファイルを共有シートに渡せるか。形式によって拒まれることがあるので
    (.glb や .zip はブラウザ側の対象外になりうる)、決め打ちせず毎回訊く */
+/* 共有シートに渡すときの種類。iPad + Teams で実測した結果に基づく。
+
+     CSV  (text/csv)          チャットに添付できた
+     SVG  (image/svg+xml)     Teamsは「画像」として扱うらしく、何も添付されない
+     ZIP  (application/zip)   そもそも送り先にTeamsが出てこない
+
+   受け取る側が種類ごとに可否を決めているため、**画像・書庫として名乗らず、
+   ただの添付ファイルとして渡す**。拡張子はファイル名に残るので、受け取った
+   側で開けなくなることはない。実績のあるCSVは触らない。
+   ダウンロードで保存するときの種類(Blob側)は変えていない */
+const SHARE_TYPE = {
+  ".svg": "application/octet-stream",
+  ".zip": "application/octet-stream",
+  ".glb": "application/octet-stream",
+};
+
+function shareFileOf(blob, filename) {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot < 0 ? "" : filename.slice(dot).toLowerCase();
+  return new File([blob], filename, { type: SHARE_TYPE[ext] || blob.type });
+}
+
 function canShareFile(blob, filename) {
   try {
     if (!navigator.share || !navigator.canShare) return false;
-    return navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] });
+    return navigator.canShare({ files: [shareFileOf(blob, filename)] });
   } catch (e) {
     return false;                    // 判定自体が失敗する環境は「使えない」扱い
   }
@@ -3222,7 +3244,7 @@ function shareAvailable() {
 async function deliverBlob(blob, filename, message, onDelivered) {
   if (shareAvailable() && canShareFile(blob, filename)) {
     try {
-      await navigator.share({ files: [new File([blob], filename, { type: blob.type })] });
+      await navigator.share({ files: [shareFileOf(blob, filename)] });
       if (onDelivered) onDelivered();
       setStatus(filename + " を送りました。");
       return;
