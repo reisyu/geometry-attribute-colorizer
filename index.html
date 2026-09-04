@@ -391,7 +391,56 @@
     align-items: flex-start;
     gap: 6px;
     pointer-events: none;
+    max-width: calc(100% - 32px);
   }
+  /* ツールバーと重なる幅のときは、バッジをツールバーの下から始める */
+  #viewport-wrap.tb-wrapped #viewport-badges { top: calc(22px + var(--tb-h, 28px)); }
+
+  /* パネルを畳んでいる間の通知。アプリの知らせは全て左パネルの #status に
+     出ているため、畳むと**声が丸ごと消える**。同じ文言をここに出す */
+  #toast {
+    display: none;
+    background: rgba(33, 36, 42, 0.94);
+    border: 1px solid var(--panel-edge);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ink);
+    white-space: pre-line;      /* 知らせは改行を含む */
+    max-width: min(420px, 70vw);
+    pointer-events: none;
+  }
+  #toast.show { display: block; }
+  #toast.warn { border-left-color: var(--warn); }
+  body.light #toast { background: rgba(255, 255, 255, 0.95); }
+
+  /* 左パネルの開閉つまみ。ツールバーに足すと今混んでいる所をさらに混ませるので、
+     パネルがある側(ビューポートの左端)に置く。縦積みでは上端に回す */
+  #panel-toggle {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 64px;
+    padding: 0;
+    background: rgba(33, 36, 42, 0.9);
+    border: 1px solid var(--panel-edge);
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    color: var(--ink-dim);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 6;
+  }
+  #panel-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  body.light #panel-toggle { background: rgba(255, 255, 255, 0.92); }
+  #panel-toggle::before { content: "‹"; }
+  body.panel-collapsed #panel-toggle::before { content: "›"; }
+  body.panel-collapsed #sidebar { display: none; }
   #sample-badge {
     background: rgba(33, 36, 42, 0.88);
     border: 1px solid var(--accent-dim);
@@ -406,14 +455,28 @@
   #sample-badge.active { display: block; }
 
   /* 視点プリセットとテーマ切替は右上に横並びでまとめる(インスペクタはこの下に出る) */
+  /* ボタンは役割ごとに3つのまとまりにする(視点 / 見え方 / 道具)。
+     7個を等間隔に並べると、押すと何が起きるかの種類が読めない。
+     入りきらない画面では折り返す。iPad縦(ビューポート468px)では
+     1行に収まらず、**左端が画面外に出てボタンが押せなくなっていた** */
   #view-toolbar {
     position: absolute;
     right: 16px;
     top: 16px;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-start;
     gap: 6px;
+    max-width: calc(100% - 32px);
     z-index: 5;
   }
+  /* まとまりの中は枠を共有して1部品に見せる(同じ種類だと分かる+幅も詰まる) */
+  .tb-group { display: flex; }
+  .tb-group button { border-radius: 0; margin-left: -1px; }
+  .tb-group button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .tb-group button:last-child { border-radius: 0 6px 6px 0; }
+  .tb-group button:only-child { border-radius: 6px; }
   #view-toolbar button {
     background: rgba(33, 36, 42, 0.88);
     border: 1px solid var(--panel-edge);
@@ -691,7 +754,9 @@
   #inspector {
     position: absolute;
     right: 16px;
-    top: 54px;            /* 右上のツールバーと重ならない位置 */
+    /* ツールバーの実際の高さから決める。折り返して2行になっても重ならない
+       (54px固定にしていたため、狭い画面で折り返すとボタンに被っていた) */
+    top: calc(26px + var(--tb-h, 28px));
     background: rgba(33,36,42,.94);
     border: 1px solid var(--panel-edge);
     border-radius: 6px;
@@ -788,6 +853,18 @@
     body { flex-direction: column; }
     #sidebar { width: 100%; min-width: 0; height: 45%; border-right: none; border-bottom: 1px solid var(--panel-edge); }
     #viewport-wrap { height: 55%; }
+    /* 縦積みではパネルが上にあるので、つまみも上端に回す */
+    #panel-toggle {
+      left: 50%; top: 0;
+      transform: translateX(-50%);
+      width: 64px; height: 18px;
+      border: 1px solid var(--panel-edge);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+    }
+    #panel-toggle::before { content: "⌃"; }
+    body.panel-collapsed #panel-toggle::before { content: "⌄"; }
+    body.panel-collapsed #viewport-wrap { height: 100%; }
   }
 </style>
 </head>
@@ -1103,14 +1180,22 @@
   <div id="brush-cursor"></div>
 
   <div id="view-toolbar">
-    <button id="view-front" title="モデルの正面(立面図SVGと同じ向き)から見る">正面</button>
-    <button id="view-top" title="モデルの真上から見る">上面</button>
-    <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
-    <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
-    <button id="geo-btn" title="現在地の目安を俯瞰図に示す(オンラインのみ・石の特定には使えません)">現在地</button>
-    <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択モード</button>
-    <button id="theme-toggle" title="背景色の切り替え">☀ ライト</button>
+    <div class="tb-group">
+      <button id="view-front" title="モデルの正面(立面図SVGと同じ向き)から見る">正面</button>
+      <button id="view-top" title="モデルの真上から見る">上面</button>
+      <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
+    </div>
+    <div class="tb-group">
+      <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
+      <button id="theme-toggle" title="背景色を切り替える">☀</button>
+    </div>
+    <div class="tb-group">
+      <button id="geo-btn" title="現在地の目安を俯瞰図に示す(オンラインのみ・石の特定には使えません)">現在地</button>
+      <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択</button>
+    </div>
   </div>
+
+  <button id="panel-toggle" title="左のパネルを開く/閉じる"></button>
 
   <!-- 左上のバッジ。縦に積んで重ならないようにする(右下の軸ギズモと同じ作り)。
        未保存の警告を先頭に置くのは、サンプル表示中かどうかで位置が動かないため。
@@ -1119,6 +1204,8 @@
     <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
     <div id="select-badge">選択モード</div>
     <div id="sample-badge">サンプルデータを表示中</div>
+    <!-- 知らせは最後に置く。手前に置くと、出るたびに下のバッジが動いてしまう -->
+    <div id="toast"></div>
   </div>
 
   <div id="minimap">
@@ -1581,7 +1668,22 @@ let highlightMaterial = null;
 let selectMode = false;
 const selection = new Set();
 
+/* ツールバーの実際の高さを、ビューポート上の重なり計算に配る。
+   折り返して2行になる画面があるため、固定値では足りない */
+function layoutOverlays() {
+  const tb = document.getElementById("view-toolbar");
+  const badges = document.getElementById("viewport-badges");
+  if (!tb || !badges) return;
+  const r = tb.getBoundingClientRect();
+  wrap.style.setProperty("--tb-h", Math.round(r.height) + "px");
+  // 狭い画面ではツールバーが左まで伸び、左上のバッジと重なる。
+  // 実際に重なるときだけバッジをツールバーの下へ逃がす(位置で判断する。
+  // 画面幅で決め打ちにすると、サイドバーを畳んだ分の広さを拾えない)
+  wrap.classList.toggle("tb-wrapped", r.left < badges.getBoundingClientRect().right + 8);
+}
+
 function resize() {
+  layoutOverlays();
   const w = wrap.clientWidth, h = wrap.clientHeight;
   // 隠れたタブやレイアウト前は 0 になる。そのまま進めると aspect が Infinity になり、
   // **カメラ位置→クォータニオンへNaNが伝播して3D表示が空白になる**
@@ -1615,7 +1717,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.24.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.24.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1660,9 +1762,30 @@ function beginLoading() {
 function endLoading() { isLoading = false; }
 const statusEl = document.getElementById("status");
 
+/* 知らせは左パネルの #status に出る。パネルを畳んでいる間は見えないので、
+   同じ文言をビューポート上にも出す。畳んだ瞬間にアプリの声が消えるのを防ぐ */
+let toastTimer = null;
+function showToast(text, warn) {
+  const t = document.getElementById("toast");
+  if (!t) return;
+  t.textContent = text;
+  t.classList.toggle("warn", warn);
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  // 警告は次の知らせまで残す。消えると何が起きたのか分からなくなる
+  if (!warn) toastTimer = setTimeout(() => t.classList.remove("show"), 7000);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  const t = document.getElementById("toast");
+  if (t) t.classList.remove("show");
+}
+
 function setStatus(text, warn = false) {
   statusEl.textContent = text;
   statusEl.classList.toggle("warn", warn);
+  if (document.body.classList.contains("panel-collapsed")) showToast(text, warn);
 }
 
 /* ============================================================
@@ -7181,10 +7304,34 @@ function applyTheme(light) {
     : new THREE.GridHelper(20, 20, 0x33373f, 0x24272d);
   grid.position.y = gridY;
   bgScene.add(grid);
-  document.getElementById("theme-toggle").textContent = light ? "🌙 ダーク" : "☀ ライト";
+  // 文字は入れずマークだけにする(ツールバーの幅を詰めるため)。
+  // 何をするボタンかは説明(title)で補う
+  const tb = document.getElementById("theme-toggle");
+  tb.textContent = light ? "🌙" : "☀";
+  tb.title = light ? "背景色を切り替える(現在: ライト)" : "背景色を切り替える(現在: ダーク)";
+  layoutOverlays();
   scheduleSaveSettings();
 }
 document.getElementById("theme-toggle").addEventListener("click", () => applyTheme(!isLightTheme));
+
+/* 左パネルの開閉。現場では読み込み・色分けが済めばパネルはほとんど使わず、
+   使うのは3D表示・インスペクタ・ミニマップ・ツールバー(すべてビュー上)になる。
+   畳むとiPad縦で 468 → 768px、横で 724 → 1024px まで広がる */
+function setPanelCollapsed(on) {
+  document.body.classList.toggle("panel-collapsed", on);
+  if (!on) hideToast();          // パネルが見えるなら二重に出さない
+  resize();                      // ビューポートの大きさが変わる
+  scheduleSaveSettings();
+}
+document.getElementById("panel-toggle").addEventListener("click", () => {
+  setPanelCollapsed(!document.body.classList.contains("panel-collapsed"));
+});
+
+/* ツールバーは画面幅で折り返す。高さが変わったら、下に出るインスペクタの
+   位置も追従させる(重なりを固定値で避けない) */
+if (window.ResizeObserver) {
+  new ResizeObserver(layoutOverlays).observe(document.getElementById("view-toolbar"));
+}
 
 /* ============================================================
    視点プリセット
@@ -7366,7 +7513,13 @@ let saveSettingsTimer = null;
 
 function saveSettings() {
   try {
-    const data = { theme: isLightTheme ? "light" : "dark", projection: projectionMode };
+    const data = {
+      theme: isLightTheme ? "light" : "dark",
+      projection: projectionMode,
+      // パネルの開閉は作業環境の好み(データに紐づかない)なので保存する。
+      // つまみは常に見えるので、畳んだまま開いても戻せる
+      panelCollapsed: document.body.classList.contains("panel-collapsed"),
+    };
     for (const [id, kind] of SAVED_SETTINGS) {
       const el = document.getElementById(id);
       if (el) data[id] = (kind === "check") ? el.checked : el.value;
@@ -7402,6 +7555,7 @@ function restoreSettings() {
     }
     if (data.theme === "light") applyTheme(true);
     if (data.projection === "ortho") setProjection("ortho");
+    if (data.panelCollapsed) setPanelCollapsed(true);
   }
 
   // 「塗りつぶしなし」と凡例は両立しない。保存された値を尊重しつつ、

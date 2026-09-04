@@ -305,6 +305,11 @@
       <tr><td>ダブルタップ</td><td>その位置にフォーカス</td></tr>
     </table>
     <h3>ビュー右上のボタン</h3>
+    <p>
+      性質ごとに3つのまとまりに分かれています。左から<strong>視点</strong>（正面・上面・全体）、
+      <strong>見え方</strong>（投影方式・背景色）、<strong>道具</strong>（現在地・選択）です。
+      画面が狭いときは2行に折り返します。
+    </p>
     <ul>
       <li><strong>正面</strong> — 立面図SVGと同じ向き（壁の正面）から見ます。書き出し前の構図確認に便利です。</li>
       <li><strong>上面</strong> — モデルの真上から見下ろします。段の並び方や平面的な配置を確認するのに便利です。</li>
@@ -316,8 +321,21 @@
         (<a href="#geo">現在地を確認する</a>を参照)。</li>
       <li><strong>選択モード</strong> — なぞって複数のオブジェクトを選ぶモードに切り替えます
         (<a href="#multi">まとめて選ぶ</a>を参照)。</li>
-      <li><strong>☀ ライト / 🌙 ダーク</strong> — 背景色を切り替えます。投影や印刷、スクリーンショット向け。</li>
+      <li><strong>☀ / 🌙</strong> — 背景色を切り替えます。投影や印刷、スクリーンショット向け。</li>
     </ul>
+    <h3>左パネルを閉じる</h3>
+    <p>
+      3D表示の<strong>左端にある細いつまみ</strong>（<code>‹</code>）を押すと、左のパネルを閉じて
+      3D表示を広げられます。もう一度押すと戻ります。読み込みと色分けが済んだ後の現場作業では、
+      使うのは3D表示・属性パネル・ミニマップ・上のボタンだけなので、閉じたほうが見やすくなります。
+    </p>
+    <ul>
+      <li>iPad（縦）で <strong>468px → 768px</strong>、横で <strong>724px → 1024px</strong> まで広がります</li>
+      <li>スマホなど縦に並ぶ画面では、つまみは<strong>上端</strong>に出ます</li>
+      <li>閉じている間、アプリからの知らせは<strong>画面左上に表示</strong>されます</li>
+      <li>閉じたかどうかは次に開いたときも引き継がれます</li>
+    </ul>
+
     <h3>右下の軸ギズモ・投影方式インジケータ</h3>
     <p>
       ビュー右下の円い表示は、読み込んだデータのX/Y/Z軸が現在の視点でどちらを
@@ -562,7 +580,7 @@
 
     <h3>選択モードに切り替える</h3>
     <p>
-      ビュー右上の<strong>「選択モード」</strong>を押します。ボタンが点灯し、画面左上に状態が出ます。
+      ビュー右上の<strong>「選択」</strong>を押します。ボタンが点灯し、画面左上に状態が出ます。
       解除はもう一度押すか <kbd>Esc</kbd> です。
     </p>
     <table>
@@ -923,7 +941,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.24.1";
+  const HELP_VERSION = "1.24.2";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
