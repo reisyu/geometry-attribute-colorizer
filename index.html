@@ -423,21 +423,31 @@
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 18px;
-    height: 64px;
+    width: 26px;
+    height: 92px;
     padding: 0;
-    background: rgba(33, 36, 42, 0.9);
-    border: 1px solid var(--panel-edge);
+    /* 背景と同系色にすると3D表示に溶けて見つからない。アクセント色で
+       「押せるもの」だと分かるようにする */
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
     border-left: none;
-    border-radius: 0 6px 6px 0;
-    color: var(--ink-dim);
-    font-size: 13px;
+    border-radius: 0 8px 8px 0;
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 700;
     line-height: 1;
     cursor: pointer;
     z-index: 6;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   }
-  #panel-toggle:hover { color: var(--accent); border-color: var(--accent); }
-  body.light #panel-toggle { background: rgba(255, 255, 255, 0.92); }
+  /* 見た目は細いままで、指で押せる範囲だけ広げる(上下8px・右16px) */
+  #panel-toggle::after {
+    content: "";
+    position: absolute;
+    left: 0; right: -16px; top: -8px; bottom: -8px;
+  }
+  #panel-toggle:hover { background: var(--accent); color: #16181b; }
+  body.light #panel-toggle { color: #17323a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
   #panel-toggle::before { content: "‹"; }
   body.panel-collapsed #panel-toggle::before { content: "›"; }
   body.panel-collapsed #sidebar { display: none; }
@@ -857,11 +867,12 @@
     #panel-toggle {
       left: 50%; top: 0;
       transform: translateX(-50%);
-      width: 64px; height: 18px;
-      border: 1px solid var(--panel-edge);
+      width: 92px; height: 26px;
+      border: 1px solid var(--accent);
       border-top: none;
-      border-radius: 0 0 6px 6px;
+      border-radius: 0 0 8px 8px;
     }
+    #panel-toggle::after { left: -8px; right: -8px; top: 0; bottom: -16px; }
     #panel-toggle::before { content: "⌃"; }
     body.panel-collapsed #panel-toggle::before { content: "⌄"; }
     body.panel-collapsed #viewport-wrap { height: 100%; }
@@ -1717,7 +1728,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.24.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.24.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
