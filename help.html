@@ -806,9 +806,9 @@
         <tr><th></th><th>メール</th><th>Microsoft Teams</th></tr>
         <tr><td>CSV</td><td>添付される</td><td><strong>添付される</strong></td></tr>
         <tr><td>SVG</td><td><strong>添付される</strong></td><td>添付されない</td></tr>
-        <tr><td>ZIP / GLB</td><td>未確認</td><td>送り先に出てこない</td></tr>
+        <tr><td>ZIP / GLB</td><td><strong>添付される</strong></td><td>送り先に出てこない</td></tr>
       </table>
-      <strong>図やモデルを渡すときはメールを使ってください。</strong>
+      <strong>図やモデルを渡すときはメールを使ってください。</strong>メールなら4形式とも届きます。
       Teamsに渡したい場合は、メールで送るか、いったん保存してからTeams側の添付ボタンで選んでください。
       <br>
       SVG・GLBは<strong>資料作成でそのまま再利用できる形式</strong>なので、
@@ -982,7 +982,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.25.4";
+  const HELP_VERSION = "1.25.5";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
