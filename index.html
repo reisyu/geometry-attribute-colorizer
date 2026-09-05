@@ -652,11 +652,20 @@
   }
 
   /* ---------- 凡例 ---------- */
-  /* 現在地の俯瞰ミニマップ。開いている間は凡例を上へ逃がす */
+  /* 現在地の俯瞰ミニマップ。
+
+     置き場所は**右下(軸ギズモの上)**。左下は凡例が使っており、そこに積むと
+     地図を開くたびに凡例が280px跳ね上がる(色分けを見ている最中に、見ていた
+     ものが動く)。右側は属性パネルの下が空いており、iPad縦の実測で667pxある。
+
+     軸ギズモと並ぶのは役割の面でも自然で、どちらも「どこにいるか・どちらを
+     向いているか」を答える。凡例と属性パネルの「これは何か」とは性質が違う。
+     結果として四隅が1つずつになる(左上=知らせ / 右上=ツールバーと属性パネル /
+     左下=凡例 / 右下=ミニマップと軸ギズモ) */
   #minimap {
     position: absolute;
-    left: 16px;
-    bottom: 16px;
+    right: 16px;
+    bottom: 104px;          /* 軸ギズモ(80px)の上に8px空ける */
     width: 200px;
     background: rgba(33,36,42,.94);
     border: 1px solid var(--panel-edge);
@@ -679,7 +688,13 @@
   body.light #mm-canvas { background: rgba(0,0,0,.05); }
   #minimap .mm-info { color: var(--ink-dim); margin: 6px 0; }
   #minimap button.ghost { width: 100%; margin-top: 0; font-size: 11px; padding: 5px; }
-  #viewport-wrap.mm-open #legend { bottom: 296px; }
+  /* 地図を開いている間は、属性パネルが下へ伸びて地図に届かないようにする。
+     パネルはメモが長いと `100% - 70px` まで伸びる。凡例に対して以前やっていた
+     手当てと同じことを、今度は右側で行う。
+     376px = 地図の下端104px + 地図の高さ272px、+8pxは間隔 */
+  #viewport-wrap.mm-open #inspector {
+    max-height: calc(100% - 26px - var(--tb-h, 28px) - 384px);
+  }
 
   #legend {
     position: absolute;
@@ -876,6 +891,12 @@
     #panel-toggle::before { content: "⌃"; }
     body.panel-collapsed #panel-toggle::before { content: "⌄"; }
     body.panel-collapsed #viewport-wrap { height: 100%; }
+
+    /* 狭い画面では右下に置くと凡例と横に重なる(375px幅で実測)。
+       縦に積むほうが破綻しないので、ここだけ左下に戻す */
+    #minimap { left: 16px; right: auto; bottom: 16px; }
+    #viewport-wrap.mm-open #legend { bottom: 296px; }
+    #viewport-wrap.mm-open #inspector { max-height: calc(100% - 70px); }
   }
 </style>
 </head>
@@ -1750,7 +1771,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.26.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.26.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
