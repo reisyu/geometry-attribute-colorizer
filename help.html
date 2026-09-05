@@ -800,17 +800,24 @@
         ダウンロードしてからメールに添付するほうが速いためです</li>
     </ul>
     <div class="note">
-      <strong>送れる形式は、ブラウザ側で決められています。</strong>
-      おおむね テキスト（CSVなど）・画像・PDF は送れますが、<strong>ZIPとGLBは対象外</strong>です。
-      アプリ側では変えられません。
+      <strong>受け取れる形式は、送り先のアプリによって違います。</strong>
+      iPadで確認した結果は次のとおりです。
+      <table>
+        <tr><th></th><th>メール</th><th>Microsoft Teams</th></tr>
+        <tr><td>CSV</td><td>添付される</td><td><strong>添付される</strong></td></tr>
+        <tr><td>SVG</td><td><strong>添付される</strong></td><td>添付されない</td></tr>
+        <tr><td>ZIP / GLB</td><td>未確認</td><td>送り先に出てこない</td></tr>
+      </table>
+      <strong>図やモデルを渡すときはメールを使ってください。</strong>
+      Teamsに渡したい場合は、メールで送るか、いったん保存してからTeams側の添付ボタンで選んでください。
       <br>
-      <strong>この端末で何が送れるかは、「7. 書き出す」の先頭に表示しています。</strong>
-      送れない形式のボタンは「保存」のままになり、押すと保存したことをお知らせします
-      （送ったつもりで終わらないようにするためです）。
-      <br>
-      送れない形式を渡すときは、いったん保存してから、アプリ側の添付ボタンで選んでください。
-      手数は増えますが、SVG・GLBは<strong>資料作成でそのまま再利用できる形式</strong>なので、
-      送れる形式（画像やPDF）に置き換える書き出しは用意していません。
+      SVG・GLBは<strong>資料作成でそのまま再利用できる形式</strong>なので、
+      Teamsが受け取る形式（画像やPDF）に置き換える書き出しは用意していません。
+    </div>
+    <div class="note">
+      <strong>送った後、相手側に付いているか確かめてください。</strong>
+      iOSのメールやTeamsは、<strong>作成中の画面に添付を表示しないことがあります</strong>。
+      実際には付いていることも、付いていないこともあります。送信前の画面では判断できません。
     </div>
 
     <h3>CSV — データ分析用</h3>
@@ -975,7 +982,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.25.3";
+  const HELP_VERSION = "1.25.4";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

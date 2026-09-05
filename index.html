@@ -1731,7 +1731,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.25.3";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.25.4";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -7762,9 +7762,13 @@ function applyShareLabels() {
     b.title = tip;
   }
 
-  /* この端末で何を送れるのかを、押す前に見えるところへ出す。
-     送れる形式はブラウザ側の許可リストで決まっており、こちらでは動かせない。
-     「押してみないと分からない」状態にしないための表示 */
+  /* この端末で何を共有シートに渡せるのかを、押す前に見えるところへ出す。
+
+     **これはブラウザの答えであって、届く保証ではない。** 渡した後、
+     受け取り側のアプリが形式で弾くことがあり、そこはアプリ側から見えない
+     (実測: SVGはメールには添付されるが、Teamsには添付されない)。
+     ここを「送れます」と言い切ると、送ったつもりで終わる人が出るため、
+     **どこまでが保証でどこからが相手次第か**を分けて書く */
   const hint = document.getElementById("share-support");
   if (!hint) return;
   const NAMES = { csv: "CSV", svg: "SVG", glb: "GLB", zip: "ZIP" };
@@ -7772,9 +7776,10 @@ function applyShareLabels() {
   for (const kind of Object.keys(NAMES)) (canShareKind(kind) ? yes : no).push(NAMES[kind]);
   hint.style.display = "";
   hint.textContent =
-    "この端末でメール・チャットに送れるのは " + (yes.length ? yes.join("・") : "なし") + " です。" +
-    (no.length ? no.join("・") + " は送れないため保存になります(ブラウザ側の制限で、" +
-                 "保存してからアプリの添付で選ぶ必要があります)。" : "");
+    "この端末が共有シートに渡せるのは " + (yes.length ? yes.join("・") : "なし") + " です" +
+    (no.length ? "(" + no.join("・") + " は渡せないため保存になります)" : "") + "。" +
+    "受け取れるかは送り先のアプリ次第で、メールはどれも添付できますが、" +
+    "Teamsは CSV しか受け取りません(実測)。送った後、相手側に付いているか確かめてください。";
 }
 
 /* ============================================================
