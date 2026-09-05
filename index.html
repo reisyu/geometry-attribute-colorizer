@@ -499,7 +499,7 @@
   }
   #view-toolbar button:hover { color: var(--ink); border-color: var(--accent-dim); }
   body.light #view-toolbar button { background: rgba(255, 255, 255, 0.88); }
-  /* 状態が続くボタン(選択モード)は、押している間ずっと点いていることを面色で示す */
+  /* 状態が続くボタン(選択モード・位置情報モード)は、点いていることを面色で示す */
   #view-toolbar button.on,
   body.light #view-toolbar button.on {
     background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700;
@@ -1203,7 +1203,7 @@
       <button id="theme-toggle" title="背景色を切り替える">☀</button>
     </div>
     <div class="tb-group">
-      <button id="geo-btn" title="現在地の目安を俯瞰図に示す(オンラインのみ・石の特定には使えません)">現在地</button>
+      <button id="geo-btn" title="位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)">現在地</button>
       <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択</button>
     </div>
   </div>
@@ -1720,6 +1720,25 @@ function animate() {
   renderer.clearDepth();             // 深度だけ捨て、以降を必ず手前に描く
   renderer.render(scene, camera);    // 手前のパス
   updateLabels();
+  minimapFollowCamera();             // 「映っている石」は視点が動くたびに変わる
+}
+
+/* 俯瞰図の「映っている石」を視点に追従させる。
+
+   毎フレーム描き直すと、石が多いとき(2500個)に無駄が大きい。視点が実際に
+   動いたときだけ、1秒に10回までに抑えて描き直す。
+   §6.9の「描き直さないと前の絵が残る」を、視点についても守るための処理 */
+let mmLastDraw = 0, mmLastSig = "";
+function minimapFollowCamera() {
+  if (!geoMode || !geoFix) return;
+  const now = performance.now();
+  if (now - mmLastDraw < 100) return;
+  const p = camera.position, t = orbit.target;
+  const sig = [p.x, p.y, p.z, t.x, t.y, t.z].map((v) => v.toFixed(1)).join(",");
+  if (sig === mmLastSig) return;
+  mmLastSig = sig;
+  mmLastDraw = now;
+  drawMinimap();
 }
 // 注意: animate()の開始はスクリプトの最後で行う(全ての変数宣言が終わってから)
 
@@ -1731,7 +1750,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.25.5";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.26.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -5377,13 +5396,10 @@ function disposeModel() {
   manualCols.clear();
   categoryOrders.clear();
   geoGuess = null;
-  geoFix = null;
   pendingZip = null;          // 前のモデルで作ったZIPを次のモデルの操作で送らせない
   updateBatchButton();
-  if (minimap) {
-    minimap.style.display = "none";
-    document.getElementById("viewport-wrap").classList.remove("mm-open");
-  }
+  // 別の現場のデータを開いたら位置情報モードは切る(前の系のまま追い続けない)
+  if (minimap) setGeoMode(false);
   selection.clear();
   selectionUndo.length = 0;
   selectionOutlineDirty = true;
@@ -6058,7 +6074,10 @@ function estimateJPZone(lat, lon, cx, cy) {
 
 let geoGuess = null;        // 推定した系。データごとに1回だけ決める
 let geoFix = null;          // { x, y, acc } データ座標系での現在地と精度(m)
-let geoBusy = false;
+let geoMode = false;        // 位置情報モードの入り切り
+let geoWatchId = null;      // watchPositionの番号。切るときに必ず止める
+let geoFirstFix = true;     // 説明の知らせは最初の1回だけ
+let geoErrorShown = false;  // 同じ失敗を繰り返し知らせない
 
 const minimap = document.getElementById("minimap");
 const mmCanvas = document.getElementById("mm-canvas");
@@ -6083,33 +6102,62 @@ function geoUnavailableReason() {
   return null;
 }
 
-function requestLocation() {
-  const reason = geoUnavailableReason();
-  if (reason) { setStatus(reason, true); return; }
-  if (geoBusy) return;
-  geoBusy = true;
-  setStatus("現在地を取得しています...");
-  navigator.geolocation.getCurrentPosition(onGeoOk, onGeoError, {
-    enableHighAccuracy: true,
-    timeout: 15000,
-    maximumAge: 0,      // 押したときの位置を取る(古い測位を使わない)
-  });
+/* 位置情報モードの入り切り。
+
+   **地図は追従し、視点は追従しない**。GPSは数秒ごとに数十m跳ねるため、
+   視点まで追わせると色分けを見ている最中やブラシで選んでいる最中に
+   画面が飛ぶ(§6.9)。地図の上でマーカーが跳ねる分には作業を邪魔せず、
+   むしろ**跳ねる様子そのものが誤差の実態**を伝える。
+
+   入り切りにしているのは電池のため。`enableHighAccuracy` を出しっぱなしに
+   すると消費が大きいので、切ったら必ず `clearWatch` で止める。
+   ミニマップを閉じる操作も切る操作に揃える(見えないところでGPSが動き続けて
+   いる状態を作らない) */
+function setGeoMode(on) {
+  if (on) {
+    const reason = geoUnavailableReason();
+    if (reason) { setStatus(reason, true); return; }   // 入れずに理由を出す
+    if (geoWatchId !== null) return;
+    geoFirstFix = true;
+    geoErrorShown = false;
+    setStatus("現在地を取得しています...");
+    geoWatchId = navigator.geolocation.watchPosition(onGeoOk, onGeoError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  } else {
+    if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+    geoFix = null;
+    minimap.style.display = "none";
+    document.getElementById("viewport-wrap").classList.remove("mm-open");
+    layoutOverlays();
+  }
+  geoMode = on;
+  document.getElementById("geo-btn").classList.toggle("on", on);
 }
 
 function onGeoOk(pos) {
-  geoBusy = false;
   const { latitude, longitude, accuracy } = pos.coords;
   const NL = String.fromCharCode(10);
 
+  /* 系はデータごとに1回だけ決める。歩くたびに系が変わるのは論外(§6.9)。
+     判定できなかったときの知らせは**1回だけ**。追従中に出し続けると、
+     数秒ごとに同じ警告が画面を埋める(畳んでいるときはトーストが出続ける)。
+     屋外に出て測位が良くなれば、黙って復帰する */
   if (!geoGuess) {
     geoGuess = estimateJPZone(latitude, longitude, worldOffset.x, worldOffset.y);
     if (!geoGuess) {
-      setStatus(
-        "このデータの座標系を判定できませんでした。" + NL +
-        "現在地から遠すぎるか、平面直角座標系ではないデータです。" + NL +
-        "別の場所のデータを開いている場合は、その場所で試してください。", true);
+      if (!geoErrorShown) {
+        geoErrorShown = true;
+        setStatus(
+          "このデータの座標系を判定できませんでした。" + NL +
+          "現在地から遠すぎるか、平面直角座標系ではないデータです。" + NL +
+          "別の場所のデータを開いている場合は、その場所で試してください。", true);
+      }
       return;
     }
+    geoErrorShown = false;
   }
 
   const p = latLonToJPRect(latitude, longitude, geoGuess.zone);
@@ -6119,25 +6167,35 @@ function onGeoOk(pos) {
 
   minimap.style.display = "block";
   document.getElementById("viewport-wrap").classList.add("mm-open");
+  layoutOverlays();
   drawMinimap();
 
-  const d = Math.hypot(geoFix.x - worldOffset.x, geoFix.y - worldOffset.y);
-  setStatus(
-    "現在地を表示しました(第" + geoGuess.zone + "系と判定)。" + NL +
-    "測位の誤差は約" + Math.round(accuracy) + "m。データ中心からの距離は約" +
-    (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + "。" + NL +
-    "石の特定には使えません。区画の見当を付けるための目安です。");
+  /* 説明は最初の1回だけ。以後は黙って地図を動かす。
+     更新のたびに知らせを出すと、読む前に次が来る */
+  if (geoFirstFix) {
+    geoFirstFix = false;
+    const d = Math.hypot(geoFix.x - worldOffset.x, geoFix.y - worldOffset.y);
+    setStatus(
+      "現在地を表示しました(第" + geoGuess.zone + "系と判定)。" + NL +
+      "測位の誤差は約" + Math.round(accuracy) + "m。データ中心からの距離は約" +
+      (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + "。" + NL +
+      "石の特定には使えません。区画の見当を付けるための目安です。");
+  }
 }
 
 function onGeoError(err) {
-  geoBusy = false;
   const NL = String.fromCharCode(10);
   const msg = {
     1: "位置情報の利用が許可されませんでした。ブラウザの許可設定を確認してください。",
     2: "現在地を取得できませんでした(電波の届かない場所では取得できないことがあります)。",
     3: "現在地の取得に時間がかかりすぎました。屋外で、もう一度試してください。",
   }[err.code] || "現在地を取得できませんでした。";
+  // 追従中は同じ失敗が繰り返し届く。知らせるのは1回だけにする
+  if (geoErrorShown) return;
+  geoErrorShown = true;
   setStatus(msg + NL + "(" + (err.message || "") + ")", true);
+  // 許可されていないなら、続けても無駄なので切る
+  if (err.code === 1) setGeoMode(false);
 }
 
 /* データ座標(x, y)を地図座標(u=東, v=北)へ。
@@ -6163,10 +6221,21 @@ function drawMinimap() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
 
-  // 石の重心(データ座標)を集める
-  const pts = [];
+  /* 石の重心(データ座標)と、いま画面に映っているかを集める。
+     「映っている石」は、自分が立っている場所と、いま編集しようとしている
+     場所がずれていないかを、利用者自身が確かめるためのもの(§6.9)。
+     カメラの向きは描かない。壁は上から見ると線なので、矢印はいつ見ても
+     壁に直角を指すだけになり、上面ビューでは潰れる */
+  const frustum = new THREE.Frustum();
+  camera.updateMatrixWorld();
+  // 逆行列は自分で作る。camera.matrixWorldInverse はレンダラが描くときに
+  // 更新するもので、描画前にここへ来ると1フレーム古い値を掴む
+  frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(
+    camera.projectionMatrix, new THREE.Matrix4().copy(camera.matrixWorld).invert()));
+
+  let meOutside = false;      // 現在地が枠の外か(下の説明行で使う)
+  const pts = [], inView = [];
   const box = new THREE.Box3();
-  const c = new THREE.Vector3();
   for (const { mesh } of meshes) {
     if (!mesh.visible || mesh.userData.filtered) continue;
     let v = mesh.userData.centerV;
@@ -6178,6 +6247,7 @@ function drawMinimap() {
       mesh.userData.centerV = v;
     }
     pts.push(threeToDataXY(v));
+    inView.push(frustum.containsPoint(v));
   }
   if (pts.length === 0) return;
 
@@ -6186,17 +6256,16 @@ function drawMinimap() {
   const mapPts = pts.map((p) => toMapXY(p, swap));
   const me = geoFix ? toMapXY(geoFix, swap) : null;
 
+  /* 収める範囲は**石の広がりだけ**。現在地も精度円も入れない。
+
+     現在地を入れると、GPSが跳ねるたびに縮尺が変わり、**石のほうが動いて
+     見える**。追従させる以上、動いてよいのはマーカーだけにする。
+     精度円を入れないのは、誤差18mに対して壁が8mといった場合に壁が豆粒に
+     なるため。どちらも枠からはみ出させ、見えている分で伝える */
   let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
   for (const q of mapPts) {
     if (q.u < minU) minU = q.u; if (q.u > maxU) maxU = q.u;
     if (q.v < minV) minV = q.v; if (q.v > maxV) maxV = q.v;
-  }
-  // 収める範囲は「石の広がり + 現在地の点」まで。**精度円は入れない**。
-   // 誤差18mに対して壁が8mといった場合、円まで収めると壁が豆粒になり
-   // 位置関係が読めなくなる。円は枠からはみ出させ、見えている分で伝える
-  if (me) {
-    minU = Math.min(minU, me.u); maxU = Math.max(maxU, me.u);
-    minV = Math.min(minV, me.v); maxV = Math.max(maxV, me.v);
   }
   const pad = 14;
   const spanU = Math.max(maxU - minU, 1), spanV = Math.max(maxV - minV, 1);
@@ -6205,10 +6274,16 @@ function drawMinimap() {
   const sx = (q) => cssW / 2 + (q.u - midU) * scale;
   const sy = (q) => cssH / 2 - (q.v - midV) * scale;   // 北が上
 
-  // 石
-  ctx.fillStyle = isLightTheme ? "rgba(60,70,80,.55)" : "rgba(200,215,230,.55)";
+  // 石。画面に映っているものはアクセント色で少し大きく描く
+  const dim = isLightTheme ? "rgba(60,70,80,.55)" : "rgba(200,215,230,.55)";
+  const lit = isLightTheme ? "#1f8a7d" : "#57c7b8";
   const dot = Math.max(1, Math.min(3, scale * 0.4));
-  for (const q of mapPts) ctx.fillRect(sx(q) - dot / 2, sy(q) - dot / 2, dot, dot);
+  const litDot = dot + 1.5;
+  mapPts.forEach((q, i) => {
+    const d = inView[i] ? litDot : dot;
+    ctx.fillStyle = inView[i] ? lit : dim;
+    ctx.fillRect(sx(q) - d / 2, sy(q) - d / 2, d, d);
+  });
 
   if (me) {
     // 精度円(石と同じ縮尺。これが「どれだけ曖昧か」そのもの)。
@@ -6225,11 +6300,24 @@ function drawMinimap() {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
-    // 現在地
+
+    /* 現在地。範囲を石だけで決めているので、離れた場所にいると枠の外に出る。
+       消してしまうと「現在地が出ない」と読めてしまうため、**枠際に寄せて**
+       描き、外にいることが分かる形(中抜き)にする。距離は下の行で伝える */
+    const mx = sx(me), my = sy(me);
+    meOutside = mx < 3 || my < 3 || mx > cssW - 3 || my > cssH - 3;
+    const cx = Math.max(4, Math.min(cssW - 4, mx));
+    const cy = Math.max(4, Math.min(cssH - 4, my));
     ctx.beginPath();
-    ctx.arc(sx(me), sy(me), 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffa028";
-    ctx.fill();
+    ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+    if (meOutside) {
+      ctx.strokeStyle = "#ffa028";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#ffa028";
+      ctx.fill();
+    }
   }
 
   // 方位(北)とスケールバー
@@ -6250,8 +6338,14 @@ function drawMinimap() {
   ctx.stroke();
   ctx.fillText(barM >= 1000 ? (barM / 1000) + "km" : barM + "m", 8, cssH - 13);
 
+  // 枠の外にいるときは、寄せて描いた点を実際の位置と読ませないために距離を出す
+  let extra = "";
+  if (geoFix && meOutside) {
+    const d = Math.hypot(geoFix.x - worldOffset.x, geoFix.y - worldOffset.y);
+    extra = " / 図の外(約" + (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + ")";
+  }
   mmInfo.textContent = geoFix
-    ? "誤差 約" + Math.round(geoFix.acc) + "m / 第" + geoGuess.zone + "系"
+    ? "誤差 約" + Math.round(geoFix.acc) + "m / 第" + geoGuess.zone + "系" + extra
     : "";
 }
 
@@ -6302,12 +6396,10 @@ function gotoNearestObject() {
             "誤差 約" + Math.round(geoFix.acc) + "m のため、隣の区画の可能性があります。");
 }
 
-document.getElementById("geo-btn").addEventListener("click", requestLocation);
+document.getElementById("geo-btn").addEventListener("click", () => setGeoMode(!geoMode));
 document.getElementById("mm-goto").addEventListener("click", gotoNearestObject);
-document.getElementById("mm-close").addEventListener("click", () => {
-  minimap.style.display = "none";
-  document.getElementById("viewport-wrap").classList.remove("mm-open");
-});
+// 閉じる = モードを切る。見えないところでGPSが動き続ける状態を作らない
+document.getElementById("mm-close").addEventListener("click", () => setGeoMode(false));
 
 /* ============================================================
    分類の列(手入力)
