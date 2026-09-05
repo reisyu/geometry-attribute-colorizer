@@ -1119,6 +1119,8 @@
   <div class="step">
     <div class="step-label">7. 書き出す</div>
 
+    <div class="row hint" id="share-support" style="display:none"></div>
+
     <div class="sub-header">データ</div>
     <div class="row">
       <button class="ghost" id="download-csv-btn" disabled style="margin-top:0">属性をCSVで保存</button>
@@ -1729,7 +1731,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.25.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.25.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -3220,6 +3222,27 @@ function shareAvailable() {
   return canShareFile(new Blob([""], { type: "text/csv" }), "a.csv");
 }
 
+/* **形式ごとに**共有できるかを訊く。
+   共有できる形式はブラウザ側の許可リストで決まっており、そこから外れた形式は
+   `canShare` が偽を返す。CSVで代表させると、送れない形式のボタンまで「送る」と
+   表示してしまう(実際にはダウンロードしているのに、送ったつもりにさせる)。
+
+   何が許可されるかは端末とブラウザの版で変わる。決め打ちの一覧を持たず、
+   **その端末に訊いた結果をそのままボタンに出す**。画面の文言が、その端末で
+   何が送れるかの答えになる */
+const SHARE_PROBE = {
+  csv: ["text/csv", "a.csv"],
+  svg: ["image/svg+xml", "a.svg"],
+  glb: ["model/gltf-binary", "a.glb"],
+  zip: ["application/zip", "a.zip"],
+};
+
+function canShareKind(kind) {
+  if (!shareAvailable()) return false;
+  const p = SHARE_PROBE[kind];
+  return !!p && canShareFile(new Blob([""], { type: p[0] }), p[1]);
+}
+
 /* 保存する。共有が使える端末では共有シートを開く。
 
    onDelivered は**確かに渡せたときだけ**呼ぶ。共有シートはキャンセルできる
@@ -3245,6 +3268,13 @@ async function deliverBlob(blob, filename, message, onDelivered) {
       }
       /* それ以外(形式が対象外など)は保存に落とす */
     }
+  } else if (shareAvailable()) {
+    // 送れる端末なのに、この形式だけ送れない。**黙って保存しない**。
+    // 「送ったつもり」で終わらせないために、保存したことを必ず言う
+    downloadBlob(blob, filename, message + String.fromCharCode(10) +
+      "(この形式はこの端末では送れないため、保存しました)");
+    if (onDelivered) onDelivered();
+    return;
   }
   downloadBlob(blob, filename, message);
   if (onDelivered) onDelivered();
@@ -3618,7 +3648,8 @@ function updateBatchButton() {
     b.textContent = `まとめた図を送る (${pendingZip.count}枚)`;
     b.title = "共有シートを開きます(メール・チャットのほか「ファイルに保存」も選べます)";
   } else {
-    b.textContent = shareAvailable() ? "まとめてZIPを作る" : "まとめてZIPで保存";
+    // ZIPを送れない端末で2段構えにしても、2回押させたあげく保存するだけになる
+    b.textContent = canShareKind("zip") ? "まとめてZIPを作る" : "まとめてZIPで保存";
     b.title = "";
   }
 }
@@ -7717,16 +7748,33 @@ function applyShareLabels() {
   updateBatchButton();                 // ZIPは2段構えなので別に決める
   if (!shareAvailable()) return;
   const tip = "共有シートを開きます(メール・チャットのほか「ファイルに保存」も選べます)";
-  const labels = {
-    "download-csv-btn": "属性をCSVで送る",
-    "export-glb-btn": "ID付きGLBで送る",
-    "export-svg-btn": "立面図をSVGで送る",
-    "export-current-view-svg-btn": "現在のビューをSVGで送る",
-  };
-  for (const id of Object.keys(labels)) {
+  // [ボタン, 形式, 送れるときの文言]。**送れる形式だけ**「送る」に変える
+  const rows = [
+    ["download-csv-btn", "csv", "属性をCSVで送る"],
+    ["export-glb-btn", "glb", "ID付きGLBで送る"],
+    ["export-svg-btn", "svg", "立面図をSVGで送る"],
+    ["export-current-view-svg-btn", "svg", "現在のビューをSVGで送る"],
+  ];
+  for (const [id, kind, label] of rows) {
     const b = document.getElementById(id);
-    if (b) { b.textContent = labels[id]; b.title = tip; }
+    if (!b || !canShareKind(kind)) continue;   // 送れない形式は「保存」のまま
+    b.textContent = label;
+    b.title = tip;
   }
+
+  /* この端末で何を送れるのかを、押す前に見えるところへ出す。
+     送れる形式はブラウザ側の許可リストで決まっており、こちらでは動かせない。
+     「押してみないと分からない」状態にしないための表示 */
+  const hint = document.getElementById("share-support");
+  if (!hint) return;
+  const NAMES = { csv: "CSV", svg: "SVG", glb: "GLB", zip: "ZIP" };
+  const yes = [], no = [];
+  for (const kind of Object.keys(NAMES)) (canShareKind(kind) ? yes : no).push(NAMES[kind]);
+  hint.style.display = "";
+  hint.textContent =
+    "この端末でメール・チャットに送れるのは " + (yes.length ? yes.join("・") : "なし") + " です。" +
+    (no.length ? no.join("・") + " は送れないため保存になります(ブラウザ側の制限で、" +
+                 "保存してからアプリの添付で選ぶ必要があります)。" : "");
 }
 
 /* ============================================================
