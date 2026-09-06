@@ -1771,7 +1771,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.26.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.26.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -1836,10 +1836,31 @@ function hideToast() {
   if (t) t.classList.remove("show");
 }
 
+/* 知らせが実際に読める位置に出ているか。
+
+   パネルを畳んでいるとき(§10.8)だけを見ていたが、**開いていても、
+   スクロールで知らせが上に流れていれば見えない**。知らせはパネルの
+   いちばん上にあり、ステップ5や7を開いて作業している間はまさにその状態で、
+   そこで出た知らせに気づけなかった。
+
+   畳んでいるかどうかではなく、**見えているかどうか**で決める */
+function statusVisible() {
+  if (document.body.classList.contains("panel-collapsed")) return false;
+  const panel = document.getElementById("sidebar");
+  if (!panel) return true;
+  const p = panel.getBoundingClientRect();
+  if (p.height === 0) return true;     // 起動直後などレイアウト前。出さない側に倒す
+  const s = statusEl.getBoundingClientRect();
+  const top = Math.max(s.top, p.top), bottom = Math.min(s.bottom, p.bottom);
+  return bottom - top > 12;            // 端が数px覗いているだけでは読めない
+}
+
 function setStatus(text, warn = false) {
   statusEl.textContent = text;
   statusEl.classList.toggle("warn", warn);
-  if (document.body.classList.contains("panel-collapsed")) showToast(text, warn);
+  // 見えていないならビュー上に出す。見えているなら、残っている分を消す
+  if (statusVisible()) hideToast();
+  else showToast(text, warn);
 }
 
 /* ============================================================
@@ -7597,7 +7618,8 @@ document.getElementById("theme-toggle").addEventListener("click", () => applyThe
    畳むとiPad縦で 468 → 768px、横で 724 → 1024px まで広がる */
 function setPanelCollapsed(on) {
   document.body.classList.toggle("panel-collapsed", on);
-  if (!on) hideToast();          // パネルが見えるなら二重に出さない
+  // 開いても、知らせがスクロールで隠れている位置なら消さない(消すと気づけない)
+  if (!on && statusVisible()) hideToast();
   resize();                      // ビューポートの大きさが変わる
   scheduleSaveSettings();
 }

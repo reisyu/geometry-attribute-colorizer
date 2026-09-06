@@ -332,7 +332,7 @@
     <ul>
       <li>iPad（縦）で <strong>468px → 768px</strong>、横で <strong>724px → 1024px</strong> まで広がります</li>
       <li>スマホなど縦に並ぶ画面では、つまみは<strong>上端</strong>に出ます</li>
-      <li>閉じている間、アプリからの知らせは<strong>画面左上に表示</strong>されます</li>
+      <li>アプリからの知らせは、パネルで読めないとき（閉じているとき、スクロールで上に流れているとき）<strong>画面左上にも表示</strong>されます</li>
       <li>閉じたかどうかは次に開いたときも引き継がれます</li>
     </ul>
 
@@ -994,7 +994,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.26.2";
+  const HELP_VERSION = "1.26.3";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
