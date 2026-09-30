@@ -843,6 +843,12 @@
   }
   #inspector .cls-chip:hover { border-color: var(--accent); color: var(--accent); }
   #inspector .cls-chip.on { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
+  /* 前回の記述。今回の入力欄と間違えないよう、書けないものとして沈めて見せる */
+  #insp-note-prev {
+    font-size: 11px; line-height: 1.6; color: var(--ink-dim);
+    background: rgba(127, 138, 150, 0.12); border-left: 2px solid var(--ink-dim);
+    padding: 4px 8px; margin-bottom: 5px; white-space: pre-wrap;
+  }
   #inspector .cls-chip .cls-n { opacity: .65; margin-left: 4px; }
   #insp-classify .cls-new { display: flex; gap: 6px; }
   #insp-classify .cls-new input { flex: 1; min-width: 0; }
@@ -991,6 +997,22 @@
       <button class="ghost" id="add-class-col" style="margin-top:0">列を作る</button>
     </div>
     <div class="row" id="class-col-list"></div>
+
+    <div class="sub-header">前回までの記録(参考)</div>
+    <div class="row hint">
+      前回の調査で書き出したCSVを読むと、「前回:」の付いた列が増えます。
+      色分け・フィルタ・ラベルに使えるので、<b>前回メモの付いた石だけを光らせる</b>ことができます
+    </div>
+    <div class="row">
+      <label class="filebtn" id="ref-btn" for="ref-input">クリックして前回の .csv を選択</label>
+      <input type="file" id="ref-input">
+    </div>
+    <div class="row hint" id="ref-state">
+      読み込んだ内容は編集できません。書き出すCSVにも入りません(今回の記録だけを残すため)
+    </div>
+    <div class="row">
+      <button class="ghost" id="ref-clear" style="margin-top:0; display:none">参考を外す</button>
+    </div>
   </div>
 
   <!-- STEP 3: 色分け -->
@@ -1315,6 +1337,7 @@
     </div>
     <div id="insp-note-box">
       <label class="insp-note-label" for="insp-note">メモ</label>
+      <div id="insp-note-prev" style="display:none"></div>
       <!-- input ではなく textarea にしている。複数行が書けるだけでなく、
            iOS/Androidの標準キーボードの音声入力が使えるため(現場では打つより速い) -->
       <textarea id="insp-note" rows="3" placeholder="点検の所見などを記入"></textarea>
@@ -1771,7 +1794,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.26.3";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.27.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2835,7 +2858,8 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
   // データ名が入力されていれば、全行にDataset列として付与する
   // (複数の調査データをBIツールやpandasで結合したとき、どのデータ由来かを識別する列)
   const dsName = document.getElementById("dataset-name").value.trim();
-  const cols = csvColumns.slice();
+  // 前回分は今回の記録ではないので書き出さない(§5.1.4)
+  const cols = csvColumns.filter((c) => !c.startsWith(REF_PREFIX));
   if (dsName && !cols.includes("Dataset")) cols.push("Dataset");
   const header = cols.map(csvEscape).join(",");
   const body = csvRows.map((row) =>
@@ -4247,6 +4271,7 @@ function loadCSVText(text, displayName) {
       // インスペクタが古い属性を出すだけでなく、その状態で書いたメモは
       // 捨てられる行に入り、画面には出ているのに書き出しにも控えにも残らない
       buildAttributeMap();
+      applyReference();   // 行が入れ替わったので、前回分も重ね直す
       refreshAttributeOptions();
       refreshLabelContentOptions();
       const droppedRules = refreshFilterRuleOptions();
@@ -4287,9 +4312,180 @@ const NOTE_COL = "Note";
 const NOTE_FLAG_COL = "HasNote";
 const NOTE_YES = "あり", NOTE_NO = "なし";
 
+/* ============================================================
+   前回までの記録を「参考」として重ねる(§5.1.4)
+
+   定期点検では、同じ石垣を数年おきに見る。そのとき現場で最初にやりたいのは
+   **前回の所見が付いている石を探すこと**で、次がその石の前回の記述を読むこと。
+   いまのアプリは1オブジェクト1値なので、前回のCSVを普通に読み込むと
+   「今回の値」になってしまい、上書きして消してしまう。
+
+   そこで、前回のCSVは**別の入口から読み、「前回:」を付けた列として重ねる**。
+   ・編集できない(今回の記録とは別物)
+   ・色分け・フィルタ・ラベルはそのまま使える → 前回メモのある石だけ光らせられる
+   ・書き出しには入れない(今回の記録だけを残す)
+
+   列として混ぜているのは、色分けやフィルタに追加の仕組みを作らずに済むため。
+============================================================ */
+const REF_PREFIX = "前回:";
+let refRows = [];        // 参考として読んだ行
+let refColumns = [];     // その列名(前回:を付ける前)
+let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファイル名)
+
+/* 重ねるのは**人が書いた列だけ**。
+
+   幾何属性は台紙から決まる固定値で、前回と今回で同じ値になる。並べても意味が
+   無いうえ、属性の選択肢を倍に増やして選びにくくする。調査日は行ごとに同じ値
+   なので、列にせず見出し(refLabel)として1回だけ出す。
+
+   メモと「メモの有無」はATTR_INFOに載っているが、**人が書くもの**なので重ねる。
+   ここを機械的にATTR_INFOで弾くと、いちばん運びたいメモが落ちる(実際に落とした) */
+const REF_KEEP = new Set([NOTE_COL, NOTE_FLAG_COL]);
+const REF_SKIP = new Set(["SurveyDate"]);
+
+function refIsCarried(c) {
+  if (REF_KEEP.has(c)) return true;
+  if (REF_SKIP.has(c)) return false;
+  return !Object.prototype.hasOwnProperty.call(ATTR_INFO, c);
+}
+
+function refIdColumn() {
+  const cur = document.getElementById("id-column").value;
+  if (cur && refColumns.includes(cur)) return cur;
+  const guess = refColumns.find((c) => c.trim().toLowerCase() === "id");
+  return guess || refColumns[0] || "";
+}
+
+function refCarriedColumns(idCol) {
+  return refColumns.filter((c) => c !== idCol && !c.startsWith(REF_PREFIX) && refIsCarried(c));
+}
+
+/* いまの行に「前回:」列を重ね直す。読み直しても古い値が残らないよう、毎回落としてから足す */
+function applyReference() {
+  csvColumns = csvColumns.filter((c) => !c.startsWith(REF_PREFIX));
+  for (const row of csvRows) {
+    for (const k of Object.keys(row)) if (k.startsWith(REF_PREFIX)) delete row[k];
+  }
+  if (refRows.length === 0 || meshes.length === 0 || csvRows.length === 0) {
+    return { matched: 0, stats: null };
+  }
+
+  const idCol = refIdColumn();
+  const cols = refCarriedColumns(idCol);
+  if (cols.length === 0) return { matched: 0, stats: null };
+
+  const lookup = makeRowLookup(refRows, refColumns, idCol);
+  let matched = 0;
+  for (const { mesh, matchName } of meshes) {
+    const cur = attributesByMesh.get(mesh.uuid);
+    if (!cur) continue;
+    const prev = lookup.find(mesh, matchName);
+    if (!prev) continue;
+    matched++;
+    for (const c of cols) cur[REF_PREFIX + c] = prev[c] ?? "";
+  }
+  for (const c of cols) {
+    const name = REF_PREFIX + c;
+    if (!csvColumns.includes(name)) csvColumns.push(name);
+  }
+
+  /* 「前回メモがあるか」は、この機能のいちばんの使いどころ(追うべき石の一覧になる)。
+     参考CSVがHasNote列を持っていなくても使えるよう、メモ本文から作り直す */
+  const prevNote = REF_PREFIX + NOTE_COL, prevFlag = REF_PREFIX + NOTE_FLAG_COL;
+  if (csvColumns.includes(prevNote)) {
+    for (const row of csvRows) {
+      row[prevFlag] = String(row[prevNote] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
+    }
+    if (!csvColumns.includes(prevFlag)) csvColumns.push(prevFlag);
+  }
+  return { matched, stats: lookup.stats };
+}
+
+/* 重ね直したあとの後始末。属性の選択肢・フィルタ・ラベル・画面を揃える */
+function afterReferenceChange(msgHead, res) {
+  refreshAttributeOptions();
+  refreshLabelContentOptions();
+  refreshFilterRuleOptions();
+  renderInspectorTable(noteTargetRow);
+  bindNoteEditor(noteTargetRow);
+  updateStepSummaries();
+  if (hasApplied) applyColorize();
+
+  const NL = String.fromCharCode(10);
+  if (refRows.length === 0) {
+    updateReferenceUI(null);
+    if (msgHead) setStatus(msgHead);
+    return;
+  }
+  updateReferenceUI(res);
+  const cols = csvColumns.filter((c) => c.startsWith(REF_PREFIX)).map((c) => c.slice(REF_PREFIX.length));
+  let msg = `${msgHead}${refLabel} / ${res.matched} 個に重なりました。` + NL +
+    `増えた列: ${cols.join("・")}` + NL +
+    "色分けの属性やフィルタから選べます。書き出すCSVには入りません。";
+  if (res.matched === 0) {
+    msg += NL + "※ 1つも重なりませんでした。IDの付き方が違う可能性があります。";
+  } else if (res.stats) {
+    msg += idShiftNotice(res.stats);
+  }
+  setStatus(msg, res.matched === 0);
+}
+
+/* 参考の読み込み状態を画面に映す。状態だけ消してボタンが残る、を防ぐため
+   モデルの読み直しからも呼ぶ */
+function updateReferenceUI(res) {
+  const btn = document.getElementById("ref-clear");
+  const state = document.getElementById("ref-state");
+  const file = document.getElementById("ref-btn");
+  if (!btn || !state || !file) return;
+  if (refRows.length === 0) {
+    btn.style.display = "none";
+    state.textContent = "読み込んだ内容は編集できません。書き出すCSVにも入りません(今回の記録だけを残すため)";
+    file.classList.remove("loaded");
+    file.textContent = "クリックして前回の .csv を選択";
+    return;
+  }
+  btn.style.display = "";
+  state.textContent = refLabel + " の記録を重ねています" +
+    (res ? " / 重なった数: " + res.matched + " / " + meshes.length : "");
+}
+
+function loadReferenceCSVText(text, displayName) {
+  Papa.parse(text, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (result) => {
+      const rows = result.data || [];
+      const cols = (result.meta.fields || []).filter((c) => !c.startsWith(REF_PREFIX));
+      if (rows.length === 0 || cols.length < 2) {
+        setStatus("前回の記録として読めませんでした(ID列と記録の列が必要です)。", true);
+        return;
+      }
+      refRows = rows;
+      refColumns = cols;
+      // いつの記録かを、データの中から拾う。無ければファイル名で代用する
+      const pick = (c) => cols.includes(c)
+        ? (rows.map((r) => String(r[c] ?? "").trim()).find((v) => v !== "") || "") : "";
+      refLabel = pick("SurveyDate") || pick("Dataset") || displayName.replace(/\.csv$/i, "");
+
+      document.getElementById("ref-btn").classList.add("loaded");
+      document.getElementById("ref-btn").textContent = displayName;
+      afterReferenceChange("前回の記録を重ねました: ", applyReference());
+    },
+    error: (err) => setStatus("前回の記録の読み込みに失敗しました: " + err.message, true),
+  });
+}
+
+function clearReference() {
+  refRows = []; refColumns = []; refLabel = "";
+  afterReferenceChange("前回の記録を外しました。", applyReference());
+}
+
 /* 色分け・まとめ書き出しに出す列(メモ本文を除く) */
 function visualizableColumns(idCol) {
-  return csvColumns.filter((c) => c !== idCol && c !== NOTE_COL);
+  // メモ本文は自由記述なので色分けの対象にしない。前回のメモも同じ扱いにする
+  // (色分けに出すのは「前回メモがあるか」のほう。そちらが追うべき石の一覧になる)
+  const skip = [idCol, NOTE_COL, REF_PREFIX + NOTE_COL];
+  return csvColumns.filter((c) => !skip.includes(c));
 }
 /* ラベルに出せる列(メモ本文も含む) */
 function labelableColumns(idCol) {
@@ -4339,6 +4535,20 @@ document.getElementById("csv-input").addEventListener("change", (e) => {
   e.target.value = "";
 });
 document.getElementById("id-column").addEventListener("change", refreshAttributeOptions);
+
+document.getElementById("ref-input").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".csv")) {
+    setStatus("前回の記録はCSVで選んでください: " + file.name, true); return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => loadReferenceCSVText(reader.result, file.name);
+  reader.onerror = () => setStatus("ファイルの読み取りに失敗しました。", true);
+  reader.readAsText(file);
+});
+document.getElementById("ref-clear").addEventListener("click", clearReference);
 
 function updateApplyEnabled() {
   const ok = meshes.length > 0 && csvRows.length > 0;
@@ -4554,7 +4764,9 @@ function applyColorize() {
     // 「なし」はグレー=「その他」と同じ色にする。このアプリでグレーは既に
     // 「注目対象外」を意味しており、語彙が揃う。
     // 並び順も「あり」を先にして、凡例の先頭に来るようにする。
-    if (attr === NOTE_FLAG_COL) {
+    // 前回の「メモの有無」も同じ扱いにする。むしろこちらのほうが偏りが強く
+    // (前回メモのある石は数個)、逆転すると追うべき石が赤の海に沈む
+    if (attr === NOTE_FLAG_COL || attr === REF_PREFIX + NOTE_FLAG_COL) {
       const fixed = { [NOTE_YES]: PALETTE[0], [NOTE_NO]: OTHER_COLOR };
       sorted = [NOTE_YES, NOTE_NO].filter((c) => c in counts)
         .concat(sorted.filter((c) => !(c in fixed)));   // 想定外の値は通常どおり扱う
@@ -4900,19 +5112,23 @@ function refreshFilterRuleOptions() {
    元IDは元データ由来なので、振り直しの影響を受けない。
 
    SrcID列を持たないCSV(外部で作った属性表など)では従来どおりIDで照合する。 */
-function makeRowLookup() {
-  const idCol = document.getElementById("id-column").value;
+/* 行の集まりを受け取れるようにしてある。既定はいまのデータだが、
+   前回の記録(§5.1.4)を重ねるときは、そちらの行と列を渡して同じ規則で照合する */
+function makeRowLookup(rows, columns, idColArg) {
+  rows = rows || csvRows;
+  columns = columns || csvColumns;
+  const idCol = idColArg || document.getElementById("id-column").value;
   const prefix = document.getElementById("id-prefix").value;
   const byId = new Map();
-  for (const row of csvRows) byId.set(normalizeId(row[idCol]), row);
+  for (const row of rows) byId.set(normalizeId(row[idCol]), row);
 
   // SrcID列があり、かつ値が一意なときだけ元IDでの照合を使う。
   // 重複があると別の石に付きうるので、その場合は使わない
   let bySrc = null;
-  if (csvColumns.includes("SrcID") && idCol !== "SrcID") {
+  if (columns.includes("SrcID") && idCol !== "SrcID") {
     const m = new Map();
     let dup = false;
-    for (const row of csvRows) {
+    for (const row of rows) {
       const k = normalizeId(row["SrcID"]);
       if (k === "") continue;
       if (m.has(k)) { dup = true; break; }
@@ -5438,6 +5654,8 @@ function disposeModel() {
   manualCols.clear();
   categoryOrders.clear();
   geoGuess = null;
+  refRows = []; refColumns = []; refLabel = "";   // 前の現場の記録を次の現場に重ねない
+  updateReferenceUI(null);                        // 状態だけ消してボタンが残るのを防ぐ
   pendingZip = null;          // 前のモデルで作ったZIPを次のモデルの操作で送らせない
   updateBatchButton();
   // 別の現場のデータを開いたら位置情報モードは切る(前の系のまま追い続けない)
@@ -6479,6 +6697,7 @@ function isReservedColumn(name, idCol) {
   if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
+  if (n.startsWith(REF_PREFIX)) return true;   // 前回の記録用に予約している(§5.1.4)
   return false;
 }
 
@@ -6743,6 +6962,16 @@ function bindNoteEditor(row) {
   // 掴んだ行が現在のデータのものでないときは、書けることにしない
   noteInput.placeholder = live ? "点検の所見などを記入"
     : "この行は現在のデータに含まれていません(色分けを実行し直してください)";
+
+  /* 前回の記述を、今回の入力欄の上に出す(§5.1.4)。
+     現場で見たいのは「前はどう書いたか」で、それが無いと同じことを書き直す */
+  const prevBox = document.getElementById("insp-note-prev");
+  if (prevBox) {
+    const prevCol = REF_PREFIX + NOTE_COL;
+    const prev = (row && csvColumns.includes(prevCol)) ? String(row[prevCol] ?? "").trim() : "";
+    prevBox.style.display = prev ? "" : "none";
+    prevBox.textContent = prev ? (refLabel ? "前回(" + refLabel + "): " + prev : "前回: " + prev) : "";
+  }
 }
 
 noteInput.addEventListener("input", () => {

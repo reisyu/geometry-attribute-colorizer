@@ -64,6 +64,8 @@ const GEO_ACCEPT_M = 5000;
 
 const GEO_MARGIN = 3;
 
+const REF_PREFIX = "前回:";
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -730,6 +732,7 @@ function isReservedColumn(name, idCol) {
   if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
+  if (n.startsWith(REF_PREFIX)) return true;   // 前回の記録用に予約している(§5.1.4)
   return false;
 }
 
@@ -808,4 +811,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };

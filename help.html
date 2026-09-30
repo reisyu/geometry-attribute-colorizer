@@ -231,6 +231,7 @@
     <a href="#note" class="section">メモを書く</a>
     <a href="#multi" class="section">まとめて選ぶ</a>
     <a href="#classify" class="section">分類を付ける</a>
+    <a href="#prev" class="section">前回の記録を見ながら書く</a>
     <a href="#geo" class="section">現在地を確認する</a>
     <a href="#data" class="section">データの準備</a>
     <a href="#export" class="section">書き出しの使い分け</a>
@@ -688,6 +689,37 @@
       次の調査では、そのCSVを読み込めば分類も選択肢も戻ります。
     </div>
 
+    <!-- ============ 前回の記録 ============ -->
+    <h2 id="prev">前回の記録を見ながら書く</h2>
+    <p>
+      前回の調査で書き出したCSVを「<strong>2. 属性データ</strong>」の
+      <strong>前回までの記録（参考）</strong>から読み込むと、
+      <strong>「前回:」の付いた列</strong>が増えます。
+    </p>
+    <ul>
+      <li><strong>石を選ぶと、メモ欄の上に前回の記述が出ます。</strong>
+        灰色の枠で表示され、書き換えることはできません</li>
+      <li><strong>「前回:メモの有無」で色分けすると、前回メモの付いた石だけが赤くなります。</strong>
+        残りは灰色です。今回追うべき石が、図の上で一目で分かります</li>
+      <li>「前回:石種」のように、前回付けた分類でも色分け・フィルタができます</li>
+      <li>前回のメモ本文は<strong>ラベル</strong>にも出せます</li>
+    </ul>
+    <div class="note">
+      <strong>書き出すCSVには入りません。</strong> 記録として残すのは今回の分だけです。
+      前回の記録はあくまで参考として重ねているだけで、編集もできません。
+    </div>
+    <h3>使うための前提</h3>
+    <p>
+      前回と今回で<strong>オブジェクトのIDが変わっていない</strong>ことが必要です。
+      DXFを読み込み直すとIDは振り直されるため、
+      <strong>一度だけ「ID付きGLB」を書き出し、以後はそれを読み込む</strong>運用にしてください。
+      GLBにはIDが焼き込まれるので、振り直されることがありません。
+    </p>
+    <p>
+      GLBは幾何属性（幅・高さなど）を持ちません。<strong>GLBと属性CSVは2つセットで</strong>お使いください。
+      重なった数は読み込んだときに表示されます。0個だった場合はIDの付き方が違っています。
+    </p>
+
     <!-- ============ 現在地 ============ -->
     <h2 id="geo">現在地を確認する</h2>
     <p>
@@ -994,7 +1026,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.26.3";
+  const HELP_VERSION = "1.27.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

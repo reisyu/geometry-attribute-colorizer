@@ -7,7 +7,7 @@
  *  ・自動計算される列と同じ名前を作らせないこと(読み直しで消えるため)
  * の2つが要になる。実コードから抽出した関数で確かめる。
  */
-const { normalizeClassValue, isReservedColumn, ATTR_INFO } = require("./extracted.js");
+const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n); };
@@ -46,6 +46,15 @@ ok(Object.keys(ATTR_INFO).every((k) => isReservedColumn(k, "")),
    "ATTR_INFOに載っている列はすべて予約(将来増えても取りこぼさない)");
 
 ok(isReservedColumn("id", ""), "小文字の id も使えない");
+
+/* 前回の記録(§9.2)は「前回:」を付けた列として重ねる。同じ名前で分類の列を
+   作れてしまうと、重ね直したときに手で入れた値が消える */
+ok(REF_PREFIX === "前回:", "前回の記録の接頭辞は「前回:」");
+ok(isReservedColumn(REF_PREFIX + "Note", ""), "前回の記録の列名は使えない: 前回:Note");
+ok(isReservedColumn(REF_PREFIX + "石種", ""), "前回の記録の列名は使えない: 前回:石種");
+ok(isReservedColumn(REF_PREFIX, ""), "接頭辞だけでも使えない");
+ok(!isReservedColumn("前回の所見", ""), "「前回」で始まるだけの名前は使える(接頭辞ではない)");
+ok(!isReservedColumn("石種", ""), "ふつうの名前は使える(対照)");
 ok(isReservedColumn("ID", ""), "大文字の ID も使えない");
 ok(isReservedColumn("", ""), "空の名前は使えない");
 ok(isReservedColumn("   ", ""), "空白だけの名前も使えない");

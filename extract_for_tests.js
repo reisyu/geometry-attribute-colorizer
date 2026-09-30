@@ -51,7 +51,7 @@ const FUNCS = [
 ];
 
 // 抽出対象の定数
-const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN"];
+const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN", "REF_PREFIX"];
 
 const root = __dirname;
 const htmlPath = path.join(root, "index.html");
