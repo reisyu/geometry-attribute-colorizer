@@ -708,6 +708,26 @@
       <strong>書き出すCSVには入りません。</strong> 記録として残すのは今回の分だけです。
       前回の記録はあくまで参考として重ねているだけで、編集もできません。
     </div>
+    <h3>現場一式（ZIP）で持ち運ぶ</h3>
+    <p>
+      「7. 書き出す」の<strong>一式をZIPで保存</strong>で、台紙・台帳・記録を1つにまとめられます。
+      次の点検は<strong>そのZIPを開くだけ</strong>で始められます（3つのファイルを開く必要がありません）。
+    </p>
+    <ul>
+      <li><strong>同じ日に開き直しても、書いた内容は消えません。</strong>
+        昼休みに保存して午後に再開する、という使い方ができます</li>
+      <li><strong>日付が変われば、前の回は自動的に「前回」になります。</strong>
+        操作は要りません</li>
+      <li><strong>複数人で点検したときは、それぞれのZIPから記録CSVを取り出して
+        1つのZIPに入れてください。</strong>開くと全部読み込まれ、統合されます。
+        同じ石に2人が書いていれば、<strong>両方とも残ります</strong></li>
+      <li>記録に入るのは<strong>何か書いた石だけ</strong>です。触っていない石の行は作りません</li>
+    </ul>
+    <p>
+      「1. モデルを読み込む」の<strong>調査日</strong>と<strong>調査者</strong>で記録を区別します。
+      調査日は今日が入っていますので、翌日に入力する場合などは打ち直してください。
+    </p>
+
     <h3>使うための前提</h3>
     <p>
       前回と今回で<strong>オブジェクトのIDが変わっていない</strong>ことが必要です。
@@ -1026,7 +1046,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.27.0";
+  const HELP_VERSION = "1.28.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

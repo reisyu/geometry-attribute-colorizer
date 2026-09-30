@@ -843,12 +843,17 @@
   }
   #inspector .cls-chip:hover { border-color: var(--accent); color: var(--accent); }
   #inspector .cls-chip.on { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
-  /* 前回の記述。今回の入力欄と間違えないよう、書けないものとして沈めて見せる */
+  /* これまでの記述。今回の入力欄と間違えないよう、書けないものとして沈めて見せる */
   #insp-note-prev {
-    font-size: 11px; line-height: 1.6; color: var(--ink-dim);
+    font-size: 11px; line-height: 1.55; color: var(--ink-dim);
     background: rgba(127, 138, 150, 0.12); border-left: 2px solid var(--ink-dim);
-    padding: 4px 8px; margin-bottom: 5px; white-space: pre-wrap;
+    padding: 5px 8px; margin-bottom: 5px; max-height: 108px; overflow-y: auto;
   }
+  #insp-note-prev .nl-item { padding: 2px 0; white-space: pre-wrap; }
+  #insp-note-prev .nl-item + .nl-item { border-top: 1px solid rgba(127, 138, 150, 0.22); }
+  #insp-note-prev .nl-head { color: var(--accent); margin-right: 6px; font-family: var(--mono); }
+  /* 同じ調査日の他の人の記述は、過去の回と区別が付くようにする */
+  #insp-note-prev .nl-same .nl-head::after { content: "（今回）"; color: var(--ink-dim); font-family: var(--sans); }
   #inspector .cls-chip .cls-n { opacity: .65; margin-left: 4px; }
   #insp-classify .cls-new { display: flex; gap: 6px; }
   #insp-classify .cls-new input { flex: 1; min-width: 0; }
@@ -1813,7 +1818,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.27.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.28.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4400,6 +4405,7 @@ function loadCSVTable(rows, columns, displayName) {
       // インスペクタが古い属性を出すだけでなく、その状態で書いたメモは
       // 捨てられる行に入り、画面には出ているのに書き出しにも控えにも残らない
       buildAttributeMap();
+      restoreWorldOffsetFromCSV();   // GLBで切れた測量座標との繋がりを戻す(§6.9)
       applyReference();   // 行が入れ替わったので、前回分も重ね直す
       refreshAttributeOptions();
       refreshLabelContentOptions();
@@ -4687,6 +4693,47 @@ function afterReferenceChange(msgHead, res) {
     msg += idShiftNotice(res.stats);
   }
   setStatus(msg, res.matched === 0);
+}
+
+/* その石の記録を、新しい順に並べて返す。自分の今回ぶん(編集中の欄そのもの)は除く。
+
+   他の人が同じ石に書いた記述と、過去の回の記述を、同じ並びに出す。
+   両方とも「自分では書き換えられない、読むためのもの」で性質が同じであり、
+   分けて置くと現場で目が行き来する。
+
+   記録の台帳が無い場合(CSVを直に読んだだけのとき)は、重ねてある
+   「前回:」の列から1件だけ組み立てる */
+function recordHistoryFor(row) {
+  if (!row) return [];
+  const idCol = document.getElementById("id-column").value;
+  const id = normalizeId(row[idCol]);
+  const today = surveyDateValue(), me = surveyorValue();
+  const skip = new Set(["ID", SURVEY_DATE_COL, SURVEYOR_COL]);
+
+  if (recordLog.length > 0) {
+    const out = [];
+    for (const r of recordLog) {
+      if (normalizeId(r.ID) !== id) continue;
+      const d = String(r[SURVEY_DATE_COL] ?? ""), who = String(r[SURVEYOR_COL] ?? "");
+      if (d === today && who === me) continue;          // 編集中の欄と同じもの
+      const parts = [];
+      const note = String(r[NOTE_COL] ?? "").trim();
+      if (note) parts.push(note);
+      for (const k of Object.keys(r)) {
+        if (skip.has(k) || k === NOTE_COL) continue;
+        const v = String(r[k] ?? "").trim();
+        if (v) parts.push(k + ": " + v);
+      }
+      if (parts.length === 0) continue;
+      out.push({ date: d, who, text: parts.join(" / "), same: d === today });
+    }
+    // 新しい順。同じ日なら名前順にして並びを安定させる
+    out.sort((a, b) => (a.date === b.date ? (a.who < b.who ? -1 : 1) : (a.date < b.date ? 1 : -1)));
+    return out;
+  }
+
+  const prev = String(row[REF_PREFIX + NOTE_COL] ?? "").trim();
+  return prev ? [{ date: refLabel || "前回", who: "", text: prev, same: false }] : [];
 }
 
 /* 行の配列をCSVの文字列にする(列は渡された順) */
@@ -5526,6 +5573,53 @@ function idShiftNotice(stats) {
   const nl = String.fromCharCode(10);
   return nl + `※ CSVのIDと現在の採番がずれています(${stats.differed} 個)。元ID(SrcID)で照合しました。` +
     nl + "  DXFを作り直すとIDは振り直されます。IDで突き合わせると別のオブジェクトに付きます。";
+}
+
+/* 台帳CSVから原点シフト量を取り戻す。
+
+   GLBには**原点をずらした後**の座標しか入っていない。そのため台紙GLBを
+   読むと実際の測量座標との繋がりが切れ、現在地(§6.9)が使えなくなる。
+   台帳CSVの X/Y/Z は「原点シフト前の元の座標値」なので、メッシュの位置と
+   突き合わせれば差がそのままシフト量になる。
+
+   §3の変換 (x,y,z) → (x-ox, z-oz, -(y-oy)) の逆から
+     ox = X - v.x,  oy = Y + v.z,  oz = Z - v.y
+
+   全部の石で同じ値になるはずなので、**ばらつきがあれば採らない**。
+   別のデータのCSVを重ねている可能性があり、当てずっぽうの原点で
+   現在地を出すほうが害が大きい */
+function restoreWorldOffsetFromCSV() {
+  if (worldOffset.set) return null;                     // DXFから決まっているなら触らない
+  if (!["X", "Y", "Z"].every((c) => csvColumns.includes(c))) return null;
+  const box = new THREE.Box3(), c = new THREE.Vector3();
+  const cand = [];
+  for (const { mesh } of meshes) {
+    const row = attributesByMesh.get(mesh.uuid);
+    if (!row) continue;
+    const X = Number(row.X), Y = Number(row.Y), Z = Number(row.Z);
+    if (!Number.isFinite(X) || !Number.isFinite(Y) || !Number.isFinite(Z)) continue;
+    let v = mesh.userData.centerV;
+    if (!v) {
+      box.setFromObject(mesh);
+      if (box.isEmpty()) continue;
+      v = new THREE.Vector3(); box.getCenter(v); mesh.userData.centerV = v;
+    }
+    cand.push([X - v.x, Y + v.z, Z - v.y]);
+    if (cand.length >= 50) break;                       // 50個も見れば十分
+  }
+  if (cand.length < 3) return null;
+  const mid = (i) => {
+    const a = cand.map((p) => p[i]).sort((x, y) => x - y);
+    return a[a.length >> 1];
+  };
+  const o = [mid(0), mid(1), mid(2)];
+  // ばらつきの確認。石1つ分(数m)を超えてずれるなら信用しない
+  let worst = 0;
+  for (const p of cand) for (let i = 0; i < 3; i++) worst = Math.max(worst, Math.abs(p[i] - o[i]));
+  if (worst > 5) return { ok: false, worst };
+  worldOffset.set = true;
+  worldOffset.x = o[0]; worldOffset.y = o[1]; worldOffset.z = o[2];
+  return { ok: true, worst, from: cand.length };
 }
 
 function buildAttributeMap() {
@@ -7325,14 +7419,24 @@ function bindNoteEditor(row) {
   noteInput.placeholder = live ? "点検の所見などを記入"
     : "この行は現在のデータに含まれていません(色分けを実行し直してください)";
 
-  /* 前回の記述を、今回の入力欄の上に出す(§5.1.4)。
-     現場で見たいのは「前はどう書いたか」で、それが無いと同じことを書き直す */
-  const prevBox = document.getElementById("insp-note-prev");
-  if (prevBox) {
-    const prevCol = REF_PREFIX + NOTE_COL;
-    const prev = (row && csvColumns.includes(prevCol)) ? String(row[prevCol] ?? "").trim() : "";
-    prevBox.style.display = prev ? "" : "none";
-    prevBox.textContent = prev ? (refLabel ? "前回(" + refLabel + "): " + prev : "前回: " + prev) : "";
+  /* これまでの記述を、今回の入力欄の上に出す(§5.1.4)。
+     現場で見たいのは「前はどう書いたか」「他の人は何と書いたか」で、
+     それが無いと同じことを書き直すか、見落とす */
+  const box = document.getElementById("insp-note-prev");
+  if (box) {
+    const hist = recordHistoryFor(row);
+    box.textContent = "";
+    box.style.display = hist.length ? "" : "none";
+    for (const h of hist) {
+      const line = document.createElement("div");
+      line.className = "nl-item" + (h.same ? " nl-same" : "");
+      const head = document.createElement("span");
+      head.className = "nl-head";
+      head.textContent = h.date + (h.who ? " " + h.who : "");
+      line.appendChild(head);
+      line.appendChild(document.createTextNode(h.text));
+      box.appendChild(line);
+    }
   }
 }
 
