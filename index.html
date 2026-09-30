@@ -2896,7 +2896,7 @@ document.getElementById("download-csv-btn").addEventListener("click", () => {
   // (複数の調査データをBIツールやpandasで結合したとき、どのデータ由来かを識別する列)
   const dsName = document.getElementById("dataset-name").value.trim();
   // 前回分は今回の記録ではないので書き出さない(§5.1.4)
-  const cols = csvColumns.filter((c) => !c.startsWith(REF_PREFIX));
+  const cols = csvColumns.filter((c) => !isDerivedColumn(c));
   if (dsName && !cols.includes("Dataset")) cols.push("Dataset");
   const header = cols.map(csvEscape).join(",");
   const body = csvRows.map((row) =>
@@ -4486,6 +4486,7 @@ let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファ
 const SURVEY_DATE_COL = "SurveyDate";
 const SURVEYOR_COL = "調査者";
 const ZIP_MODEL = "model.glb", ZIP_LEDGER = "台帳.csv", ZIP_RECORD = "記録.csv";
+const HIST_PREFIX = "履歴:";   // 記録の台帳から作る集計列
 
 let recordLog = [];        // 読み込んだ記録の全行(全調査日・全調査者)
 
@@ -4573,9 +4574,52 @@ function applyRecordLog() {
   } else {
     refRows = []; refColumns = []; refLabel = "";
   }
+  syncRecordDerived(cols);
   syncNoteDerived();
   const res = applyReference();
   return { restored, prevDate, prevRows: refRows.length, res };
+}
+
+/* 前々回より前を活かすための集計列。
+
+   世代ごとに「前々回:」「3回前:」と列を増やすのは筋が悪い。色分けの選択肢が
+   回数ぶん増えて選べなくなり、5年もやれば破綻する。個別の記述はインスペクタに
+   並べて読み、**全体を塗るときは履歴を1つの数にまとめたもの**を使う。
+
+   `履歴:記録回数` が効く。数値なのでグラデーションで塗れ、**何度も指摘されて
+   いる石が図の上で濃く浮かび上がる**。前回だけを見ていては出てこない情報で、
+   経年で追う意味そのものになる。
+
+   数えるのは**調査回数**であって行数ではない。同じ日に2人が書いた石は、
+   2回指摘されたのではなく1回の調査で挙がったもの */
+function syncRecordDerived(valueCols) {
+  const countCol = HIST_PREFIX + "記録回数", lastCol = HIST_PREFIX + "最終記録日";
+  csvColumns = csvColumns.filter((c) => !c.startsWith(HIST_PREFIX));
+  for (const row of csvRows) {
+    for (const k of Object.keys(row)) if (k.startsWith(HIST_PREFIX)) delete row[k];
+  }
+  if (recordLog.length === 0 || csvRows.length === 0) return;
+
+  const cols = valueCols || recordValueColumns();
+  const dates = new Map();   // ID -> 記録のあった調査日の集合
+  for (const r of recordLog) {
+    let any = false;
+    for (const c of cols) if (String(r[c] ?? "").trim() !== "") { any = true; break; }
+    if (!any) continue;                      // 中身の無い行は数えない
+    const d = String(r[SURVEY_DATE_COL] ?? "");
+    if (!d) continue;
+    const k = normalizeId(r.ID);
+    if (!dates.has(k)) dates.set(k, new Set());
+    dates.get(k).add(d);
+  }
+
+  const idCol = document.getElementById("id-column").value;
+  for (const row of csvRows) {
+    const set = dates.get(normalizeId(row[idCol]));
+    row[countCol] = set ? set.size : 0;
+    row[lastCol] = set ? [...set].sort().pop() : "";
+  }
+  csvColumns.push(countCol, lastCol);
 }
 
 /* いま画面にある入力から、今回ぶんの記録の行を作る。
@@ -4608,6 +4652,12 @@ function currentRecordRows() {
 const REF_KEEP = new Set([NOTE_COL, NOTE_FLAG_COL]);
 const REF_SKIP = new Set(["SurveyDate"]);
 
+/* 記録の台帳から作られる列。手で入れたものではないので、
+   書き出さず、分類の列の名前にも使わせない */
+function isDerivedColumn(c) {
+  return String(c).startsWith(REF_PREFIX) || String(c).startsWith(HIST_PREFIX);
+}
+
 function refIsCarried(c) {
   if (REF_KEEP.has(c)) return true;
   if (REF_SKIP.has(c)) return false;
@@ -4622,7 +4672,7 @@ function refIdColumn() {
 }
 
 function refCarriedColumns(idCol) {
-  return refColumns.filter((c) => c !== idCol && !c.startsWith(REF_PREFIX) && refIsCarried(c));
+  return refColumns.filter((c) => c !== idCol && !isDerivedColumn(c) && refIsCarried(c));
 }
 
 /* いまの行に「前回:」列を重ね直す。読み直しても古い値が残らないよう、毎回落としてから足す */
@@ -4769,7 +4819,7 @@ async function exportBundle() {
   // 台帳は幾何属性だけ。記録の列は入れない(どちらが正か分からなくなる)
   const manual = new Set(manualEditColumns());
   const ledgerCols = csvColumns.filter((c) =>
-    !c.startsWith(REF_PREFIX) && !manual.has(c) && c !== NOTE_FLAG_COL);
+    !isDerivedColumn(c) && !manual.has(c) && c !== NOTE_FLAG_COL);
 
   const zip = await buildZip([
     { name: ZIP_MODEL, bytes: new Uint8Array(glb) },
@@ -5215,7 +5265,13 @@ function applyColorize() {
 
     const raw = (row[attr] ?? "").toString();
     let rgb;
-    if (numericMode && raw.trim() !== "" && Number.isFinite(vmin)) {
+    /* 記録回数だけは0をグレーにする。大多数の石は一度も指摘されておらず(0)、
+       ふつうに塗ると**一度も指摘されていない石が図を埋める**。
+       このアプリでグレーは既に「注目対象外」を意味しており、語彙が揃う
+       (「メモの有無」の なし=グレー と同じ扱い。§5.1.5) */
+    if (attr === HIST_PREFIX + "記録回数" && Number(raw) === 0) {
+      rgb = OTHER_COLOR;   // 既に[r,g,b]の形。hexではない
+    } else if (numericMode && raw.trim() !== "" && Number.isFinite(vmin)) {
       rgb = numericToColor(Number(raw), vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
     } else if (numericMode) {
       rgb = [0.5, 0.5, 0.5];
@@ -7153,7 +7209,7 @@ function isReservedColumn(name, idCol) {
   if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
-  if (n.startsWith(REF_PREFIX)) return true;   // 前回の記録用に予約している(§5.1.4)
+  if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
   return false;
 }
 

@@ -7,7 +7,7 @@
  *  ・自動計算される列と同じ名前を作らせないこと(読み直しで消えるため)
  * の2つが要になる。実コードから抽出した関数で確かめる。
  */
-const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX } = require("./extracted.js");
+const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n); };
@@ -55,6 +55,13 @@ ok(isReservedColumn(REF_PREFIX + "石種", ""), "前回の記録の列名は使�
 ok(isReservedColumn(REF_PREFIX, ""), "接頭辞だけでも使えない");
 ok(!isReservedColumn("前回の所見", ""), "「前回」で始まるだけの名前は使える(接頭辞ではない)");
 ok(!isReservedColumn("石種", ""), "ふつうの名前は使える(対照)");
+
+/* 履歴の集計列(§5.1.5)も同じ理由で予約する。作り直すたびに消えるため、
+   同じ名前で分類の列を作ると手で入れた値が失われる */
+ok(HIST_PREFIX === "履歴:", "履歴の集計列の接頭辞は「履歴:」");
+ok(isReservedColumn(HIST_PREFIX + "記録回数", ""), "履歴の集計列名は使えない: 履歴:記録回数");
+ok(isReservedColumn(HIST_PREFIX + "最終記録日", ""), "履歴の集計列名は使えない: 履歴:最終記録日");
+ok(!isReservedColumn("履歴メモ", ""), "「履歴」で始まるだけの名前は使える(接頭辞ではない)");
 ok(isReservedColumn("ID", ""), "大文字の ID も使えない");
 ok(isReservedColumn("", ""), "空の名前は使えない");
 ok(isReservedColumn("   ", ""), "空白だけの名前も使えない");
