@@ -921,7 +921,7 @@
 
     <div class="sub-header">メインモデル</div>
     <div class="row">
-      <label class="filebtn" id="glb-btn" for="glb-input">クリックして .glb / .dxf を選択<br>(ビューポートへのドロップも可)</label>
+      <label class="filebtn" id="glb-btn" for="glb-input">クリックして .zip / .glb / .dxf を選択<br>(ビューポートへのドロップも可)</label>
       <input type="file" id="glb-input">
     </div>
     <div class="row hint">
@@ -933,6 +933,17 @@
     </div>
     <div class="row hint">
       書き出すCSVのDataset列に入ります
+    </div>
+    <div class="row">
+      <label class="small" for="survey-date">調査日</label>
+      <input type="date" id="survey-date">
+    </div>
+    <div class="row">
+      <label class="small" for="surveyor">調査者</label>
+      <input type="text" id="surveyor" placeholder="例: 山田">
+    </div>
+    <div class="row hint">
+      記録はこの2つで区別されます。<b>同じ石に複数人が書いても、両方とも残ります</b>
     </div>
 
     <div class="sub-header">背景モデル(任意)</div>
@@ -1163,6 +1174,14 @@
     <div class="step-label">7. 書き出す</div>
 
     <div class="row hint" id="share-support" style="display:none"></div>
+
+    <div class="sub-header">現場一式(ZIP)</div>
+    <div class="row">
+      <button class="ghost" id="export-bundle-btn" disabled style="margin-top:0">一式をZIPで保存</button>
+    </div>
+    <div class="row hint">
+      台紙・台帳・記録を1つにまとめます。<b>次の点検はこのZIPを開くだけ</b>で始められます
+    </div>
 
     <div class="sub-header">データ</div>
     <div class="row">
@@ -2069,7 +2088,23 @@ function loadGLBFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const { json, bin } = parseGLB(reader.result);
+      loadGLBBuffer(reader.result, file.name);
+    } catch (err) {
+      setStatus("GLBの読み込みに失敗しました: " + err.message, true);
+    } finally {
+      endLoading();  // GLBはプログレスバー非使用のため、ここで明示的に解除する
+    }
+  };
+  reader.onerror = () => { endLoading(); setStatus("ファイルの読み取りに失敗しました。", true); };
+  reader.readAsArrayBuffer(file);
+}
+
+/* バイト列からGLBを立てる。ファイル選択からも、ZIPの中からも使う。
+   失敗は例外で返す(呼び出し側が文脈に合った知らせを出せるように) */
+function loadGLBBuffer(buffer, displayName) {
+  {
+    {
+      const { json, bin } = parseGLB(buffer);
       if (!bin) throw new Error("BINチャンクが見つかりません(外部バッファ参照の.gltfは未対応です。.glb形式で書き出してください)");
 
       disposeModel();
@@ -2096,22 +2131,17 @@ function loadGLBFile(file) {
       document.getElementById("dropzone-hint").classList.add("hidden");
       document.getElementById("sample-badge").classList.remove("active");
       document.getElementById("glb-btn").classList.add("loaded");
-      document.getElementById("glb-btn").textContent = file.name;
+      document.getElementById("glb-btn").textContent = displayName;
       document.getElementById("export-glb-btn").disabled = false;
+      document.getElementById("export-bundle-btn").disabled = false;
       document.getElementById("export-svg-btn").disabled = false;
       document.getElementById("export-current-view-svg-btn").disabled = false;
-      setDatasetNameFromFile(file.name);
+      setDatasetNameFromFile(displayName);
       setStatus(`GLBを読み込みました: ${meshes.length} メッシュ`);
       updateStepSummaries();
       updateApplyEnabled();
-    } catch (err) {
-      setStatus("GLBの読み込みに失敗しました: " + err.message, true);
-    } finally {
-      endLoading();  // GLBはプログレスバー非使用のため、ここで明示的に解除する
     }
-  };
-  reader.onerror = () => { endLoading(); setStatus("ファイルの読み取りに失敗しました。", true); };
-  reader.readAsArrayBuffer(file);
+  }
 }
 
 /* 透視投影フィットの純粋部分(THREE・DOM非依存)。
@@ -2254,9 +2284,10 @@ document.getElementById("glb-input").addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const lower = file.name.toLowerCase();
-  if (lower.endsWith(".dxf")) loadDXFFile(file);
+  if (lower.endsWith(".zip")) loadBundle(file);
+  else if (lower.endsWith(".dxf")) loadDXFFile(file);
   else if (lower.endsWith(".glb") || lower.endsWith(".gltf")) loadGLBFile(file);
-  else setStatus(`対応していないファイル形式です: ${file.name}\n(.glb / .gltf / .dxf を選択してください)`, true);
+  else setStatus(`対応していないファイル形式です: ${file.name}\n(.zip / .glb / .gltf / .dxf を選択してください)`, true);
   e.target.value = ""; // 同じファイルの再読み込みを可能にする
 });
 
@@ -2821,6 +2852,7 @@ function loadDXFFile(file) {
       document.getElementById("glb-btn").classList.add("loaded");
       document.getElementById("glb-btn").textContent = file.name;
       document.getElementById("export-glb-btn").disabled = false;
+      document.getElementById("export-bundle-btn").disabled = false;
       document.getElementById("export-svg-btn").disabled = false;
       document.getElementById("export-current-view-svg-btn").disabled = false;
 
@@ -2889,7 +2921,16 @@ function flipTriangleWinding(srcArr) {
    表示中の全メッシュを、ノード名(=ID)を保持したGLB(glTF 2.0バイナリ)として書き出す。
    外部ライブラリを使わず、position/indexとノード名だけの最小構成のGLBを自前で組み立てる。 */
 function exportGLB() {
-  if (meshes.length === 0) return;
+  const out = buildGLBBytes();
+  if (!out) return;
+  deliverBlob(new Blob([out], { type: "model/gltf-binary" }), exportFileName("model_with_ids.glb"),
+    `ID付きGLBを書き出しました: ${meshes.length} オブジェクト`);
+}
+
+/* 表示中のメッシュをGLBのバイト列に組み立てる。
+   保存にもZIPへの同梱にも使うので、blobにするのは呼び出し側の仕事にしてある */
+function buildGLBBytes() {
+  if (meshes.length === 0) return null;
 
   // --- 法線の向きを壁全体で統一するための準備 ---
   // 各オブジェクトの面法線(傾きライン用に保存済み)を上向きルールで揃えて平均し、
@@ -3023,9 +3064,7 @@ function exportGLB() {
   dv.setUint32(p, 0x004e4942, true); p += 4; // "BIN"
   new Uint8Array(out, p, binChunk.byteLength).set(binChunk);
 
-  const blob = new Blob([out], { type: "model/gltf-binary" });
-  deliverBlob(blob, exportFileName("model_with_ids.glb"),
-    `ID付きGLBを書き出しました: ${meshes.length} オブジェクト`);
+  return out;
 }
 
 document.getElementById("export-glb-btn").addEventListener("click", exportGLB);
@@ -3405,7 +3444,86 @@ async function deflateRaw(bytes) {
   return new Uint8Array(await new Response(cs.readable).arrayBuffer());
 }
 
-/* entries: [{ name, text }] を1つのZIPのBlobにまとめる */
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === "undefined") return null;
+  const ds = new DecompressionStream("deflate-raw");
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+
+/* ZIPを読む。書く側(buildZip)と対になる最小の実装。
+
+   末尾の終端レコード(EOCD)を探し、中央ディレクトリを辿って各ファイルの
+   位置・圧縮方法・大きさを読む。ローカルヘッダは可変長なので、データの
+   開始位置はそこを読んでから決める(名前や拡張領域の長さが中央側と
+   食い違うZIPが実在するため、ローカル側の値を信じる)。
+
+   対応するのは無圧縮(0)とdeflate(8)だけ。それ以外は名前を添えて断る。
+   分割ZIPやZIP64は扱わない(この用途では出てこない大きさ) */
+async function readZipEntries(buf) {
+  const u8 = new Uint8Array(buf);
+  if (u8.length < 22) throw new Error("ファイルが小さすぎます");
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+  // EOCDは末尾にあるが、後ろにコメントが付くことがあるので遡って探す
+  let eocd = -1;
+  const from = Math.max(0, u8.length - 65557);
+  for (let i = u8.length - 22; i >= from; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("ZIPとして読めません(終端が見つかりません)");
+
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) {
+      throw new Error("ZIPの目次が壊れています");
+    }
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const rawSize = dv.getUint32(p + 24, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+
+    if (local + 30 > u8.length || dv.getUint32(local, true) !== 0x04034b50) {
+      throw new Error("ZIPの中身が壊れています: " + name);
+    }
+    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    if (start + compSize > u8.length) throw new Error("ZIPの中身が切れています: " + name);
+    out.push({ name, method, rawSize, data: u8.subarray(start, start + compSize) });
+  }
+  return out;
+}
+
+/* 展開まで済ませて [{ name, bytes }] を返す。フォルダの項目は落とす */
+async function unzip(buf) {
+  const out = [];
+  for (const e of await readZipEntries(buf)) {
+    if (e.name.endsWith("/")) continue;
+    let bytes;
+    if (e.method === 0) {
+      bytes = e.data;
+    } else if (e.method === 8) {
+      bytes = await inflateRaw(e.data);
+      if (!bytes) throw new Error("このブラウザは圧縮されたZIPを開けません。");
+    } else {
+      throw new Error("対応していない圧縮方法です(" + e.method + "): " + e.name);
+    }
+    out.push({ name: e.name, bytes });
+  }
+  return out;
+}
+
+/* entries: [{ name, text }] または [{ name, bytes }] を1つのZIPのBlobにまとめる。
+   GLBのような中身は文字列に直せないので、バイト列でも受け取れるようにしてある */
 async function buildZip(entries) {
   const enc = new TextEncoder();
   const body = [], central = [];
@@ -3417,7 +3535,7 @@ async function buildZip(entries) {
 
   for (const e of entries) {
     const nameBytes = enc.encode(e.name);
-    const raw = enc.encode(e.text);
+    const raw = e.bytes ? e.bytes : enc.encode(e.text);
     let data = await deflateRaw(raw);
     let method = 8;
     if (!data || data.length >= raw.length) { data = raw; method = 0; }  // 縮まないなら無圧縮
@@ -4217,7 +4335,8 @@ wrap.addEventListener("drop", (e) => {
   }
   const file = files[0];
   const lower = file.name.toLowerCase();
-  if (lower.endsWith(".glb") || lower.endsWith(".gltf")) loadGLBFile(file);
+  if (lower.endsWith(".zip")) loadBundle(file);
+  else if (lower.endsWith(".glb") || lower.endsWith(".gltf")) loadGLBFile(file);
   else if (lower.endsWith(".dxf")) loadDXFFile(file);
   else if (lower.endsWith(".csv")) loadCSVFile(file);
   else setStatus("対応していないファイル形式です: " + file.name, true);
@@ -4231,8 +4350,18 @@ function loadCSVText(text, displayName) {
     header: true,
     skipEmptyLines: true,
     complete: (result) => {
-      csvRows = result.data;
-      csvColumns = result.meta.fields || [];
+      loadCSVTable(result.data, result.meta.fields || [], displayName);
+    },
+    error: (err) => setStatus("CSVの読み込みに失敗しました: " + err.message, true),
+  });
+}
+
+/* 解析済みの行を属性として取り込む。ファイル選択からも、ZIPの中からも使う */
+function loadCSVTable(rows, columns, displayName) {
+  {
+    {
+      csvRows = rows;
+      csvColumns = columns;
       noteBackupWarned = false;   // データが変わったら控えの可否を改めて知らせる
       // 手入力の記録は前のデータのもの。持ち越すと関係のない列を控えてしまう
       manualCols.clear();
@@ -4287,9 +4416,8 @@ function loadCSVText(text, displayName) {
       }
       setStatus(loadMsg, droppedRules.length > 0);
       updateApplyEnabled();
-    },
-    error: (err) => setStatus("CSVの読み込みに失敗しました: " + err.message, true),
-  });
+    }
+  }
 }
 
 function loadCSVFile(file) {
@@ -4331,6 +4459,137 @@ const REF_PREFIX = "前回:";
 let refRows = [];        // 参考として読んだ行
 let refColumns = [];     // その列名(前回:を付ける前)
 let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファイル名)
+
+/* ============================================================
+   現場一式(ZIP)と、記録の台帳
+
+   ZIPの中身:
+     model.glb    台紙。形とID。一度作れば変わらない
+     台帳.csv     全石の幾何属性。変わらない
+     記録*.csv    触った石だけ。調査のたびに増える
+
+   記録は「1オブジェクト × 1調査日 × 1調査者 = 1行」の縦長。
+   鍵は (ID, 調査日, 調査者)。**同じ石に2人が書けば2行並ぶ**。
+   これがそのまま統合の仕組みになる: 持ち寄ったZIPの記録CSVを全部読み、
+   同じ鍵の行だけまとめれば、足すだけで統合できる。
+
+   触っていない石の行は書き出さない。全石を書き出すと、統合したときに
+   書いていない石が人数分重複する。加えて、空欄に「点検したが問題なし」
+   という意味を読ませてしまう(それは書き出しの都合で生まれた空欄にすぎない)。
+============================================================ */
+const SURVEY_DATE_COL = "SurveyDate";
+const SURVEYOR_COL = "調査者";
+const ZIP_MODEL = "model.glb", ZIP_LEDGER = "台帳.csv", ZIP_RECORD = "記録.csv";
+
+let recordLog = [];        // 読み込んだ記録の全行(全調査日・全調査者)
+
+function surveyDateValue() {
+  const el = document.getElementById("survey-date");
+  return el ? el.value.trim() : "";
+}
+function surveyorValue() {
+  const el = document.getElementById("surveyor");
+  return el ? el.value.trim() : "";
+}
+function recordKey(r) {
+  return normalizeId(r.ID) + "\u0000" + String(r[SURVEY_DATE_COL] ?? "") +
+         "\u0000" + String(r[SURVEYOR_COL] ?? "");
+}
+
+/* 記録の行を台帳に足す。同じ鍵は1つにまとめる。
+   持ち寄ったZIPには共通の過去分が重複して入っているため、ここで畳まないと
+   同じ記録が人数分並ぶ。鍵が同じで中身が違う場合だけ数えて知らせる */
+function mergeRecordRows(rows) {
+  const byKey = new Map();
+  for (const r of recordLog) byKey.set(recordKey(r), r);
+  let added = 0, differed = 0;
+  for (const r of rows) {
+    const k = recordKey(r);
+    const cur = byKey.get(k);
+    if (!cur) { byKey.set(k, r); added++; continue; }
+    if (JSON.stringify(cur) !== JSON.stringify(r)) differed++;
+  }
+  recordLog = [...byKey.values()];
+  return { added, differed, total: recordLog.length };
+}
+
+/* 台帳に載っている調査日を古い順に。空の日付は数えない */
+function recordDates() {
+  return [...new Set(recordLog.map((r) => String(r[SURVEY_DATE_COL] ?? "")).filter((d) => d))].sort();
+}
+
+/* 記録の列(ID・調査日・調査者を除いたもの)。人が書いた列がここに入る */
+function recordValueColumns() {
+  const skip = new Set(["ID", SURVEY_DATE_COL, SURVEYOR_COL]);
+  const cols = [];
+  for (const r of recordLog) {
+    for (const k of Object.keys(r)) if (!skip.has(k) && !cols.includes(k)) cols.push(k);
+  }
+  return cols;
+}
+
+/* 台帳から、今回の入力と「前回」を組み立てて画面に反映する。
+
+   今回  = 今日の日付 × 自分の行 → そのまま編集できる値として csvRows に戻す
+   前回  = 今日より前で、いちばん新しい調査日の行 → 「前回:」列として重ねる
+
+   昼に保存して午後に開き直しても、今日の行がそのまま戻るだけなので
+   午前中の記録は失われない。**開く操作は何も壊さない**(§5.1.4) */
+function applyRecordLog() {
+  const today = surveyDateValue(), me = surveyorValue();
+  const cols = recordValueColumns();
+
+  // 今回(自分)の記録を書き戻す
+  const mine = new Map();
+  for (const r of recordLog) {
+    if (String(r[SURVEY_DATE_COL] ?? "") !== today) continue;
+    if (String(r[SURVEYOR_COL] ?? "") !== me) continue;
+    mine.set(normalizeId(r.ID), r);
+  }
+  const idCol = document.getElementById("id-column").value;
+  let restored = 0;
+  for (const row of csvRows) {
+    const r = mine.get(normalizeId(row[idCol]));
+    if (!r) continue;
+    restored++;
+    for (const c of cols) if (String(r[c] ?? "") !== "") row[c] = r[c];
+  }
+  for (const c of cols) if (!csvColumns.includes(c)) csvColumns.push(c);
+  if (restored > 0) { manualCols.clear(); for (const c of cols) manualCols.add(c); }
+
+  // 前回 = 今日より前でいちばん新しい調査日
+  const before = recordDates().filter((d) => !today || d < today);
+  const prevDate = before.length ? before[before.length - 1] : "";
+  if (prevDate) {
+    refRows = recordLog.filter((r) => String(r[SURVEY_DATE_COL] ?? "") === prevDate);
+    refColumns = ["ID"].concat(cols);
+    refLabel = prevDate;
+  } else {
+    refRows = []; refColumns = []; refLabel = "";
+  }
+  syncNoteDerived();
+  const res = applyReference();
+  return { restored, prevDate, prevRows: refRows.length, res };
+}
+
+/* いま画面にある入力から、今回ぶんの記録の行を作る。
+   **何か書かれている石だけ**。空の行は作らない */
+function currentRecordRows() {
+  const today = surveyDateValue(), me = surveyorValue();
+  const idCol = document.getElementById("id-column").value;
+  const cols = manualEditColumns();
+  const out = [];
+  if (cols.length === 0) return out;
+  for (const row of csvRows) {
+    let any = false;
+    for (const c of cols) if (String(row[c] ?? "").trim() !== "") { any = true; break; }
+    if (!any) continue;
+    const r = { ID: row[idCol], [SURVEY_DATE_COL]: today, [SURVEYOR_COL]: me };
+    for (const c of cols) r[c] = row[c] ?? "";
+    out.push(r);
+  }
+  return out;
+}
 
 /* 重ねるのは**人が書いた列だけ**。
 
@@ -4428,6 +4687,99 @@ function afterReferenceChange(msgHead, res) {
     msg += idShiftNotice(res.stats);
   }
   setStatus(msg, res.matched === 0);
+}
+
+/* 行の配列をCSVの文字列にする(列は渡された順) */
+function rowsToCSV(rows, cols) {
+  const header = cols.map(csvEscape).join(",");
+  const body = rows.map((r) => cols.map((c) => csvEscape(r[c] ?? "")).join(",")).join("\n");
+  return "﻿" + header + "\n" + body + "\n";
+}
+
+/* 現場一式をZIP 1つにまとめる。台紙・台帳・記録の3つ。
+
+   記録には**台帳の全行**(過去の調査も他の人の分も)を入れる。次に開いたとき、
+   そのZIPだけで履歴がそろうようにするため。持ち寄って統合するときは、
+   それぞれのZIPの記録CSVを全部読めば、鍵が同じ行は畳まれて足し合わされる */
+async function exportBundle() {
+  if (meshes.length === 0) { setStatus("先にモデルを読み込んでください。", true); return; }
+  const NL = String.fromCharCode(10);
+  if (surveyDateValue() === "") { setStatus("調査日を入れてください。", true); return; }
+
+  const glb = buildGLBBytes();
+  if (!glb) { setStatus("モデルを書き出せませんでした。", true); return; }
+
+  // 今回ぶんを台帳に足してから書き出す(次に開いたとき続きから書ける)
+  const mineNow = currentRecordRows();
+  const before = recordLog.length;
+  // 自分の今日の行は入れ替える。消した内容が古い行として残らないように
+  const today = surveyDateValue(), me = surveyorValue();
+  recordLog = recordLog.filter((r) =>
+    !(String(r[SURVEY_DATE_COL] ?? "") === today && String(r[SURVEYOR_COL] ?? "") === me));
+  mergeRecordRows(mineNow);
+
+  const recCols = ["ID", SURVEY_DATE_COL, SURVEYOR_COL].concat(recordValueColumns());
+  // 台帳は幾何属性だけ。記録の列は入れない(どちらが正か分からなくなる)
+  const manual = new Set(manualEditColumns());
+  const ledgerCols = csvColumns.filter((c) =>
+    !c.startsWith(REF_PREFIX) && !manual.has(c) && c !== NOTE_FLAG_COL);
+
+  const zip = await buildZip([
+    { name: ZIP_MODEL, bytes: new Uint8Array(glb) },
+    { name: ZIP_LEDGER, text: rowsToCSV(csvRows, ledgerCols) },
+    { name: ZIP_RECORD, text: rowsToCSV(recordLog, recCols) },
+  ]);
+  deliverBlob(zip, exportFileName("bundle.zip"),
+    "現場一式をZIPにまとめました。" + NL +
+    "台紙 + 台帳(" + csvRows.length + "行) + 記録(" + recordLog.length + "行)。" + NL +
+    "今回の記録: " + mineNow.length + " 個" + (before === recordLog.length ? "" : ""),
+    () => setUnsavedNotes(false));
+}
+
+/* ZIP一式を開く。台紙・台帳・記録をまとめて戻す。
+   記録CSVは**何本入っていても全部読む**。持ち寄ったものを1つのZIPに
+   集めておけば、開くだけで統合される */
+async function loadBundle(file) {
+  const NL = String.fromCharCode(10);
+  let items;
+  try {
+    items = await unzip(await file.arrayBuffer());
+  } catch (e) {
+    setStatus("ZIPを開けませんでした: " + e.message, true);
+    return;
+  }
+  const base = (n) => n.slice(n.lastIndexOf("/") + 1);
+  const glb = items.find((e) => base(e.name).toLowerCase().endsWith(".glb"));
+  const csvs = items.filter((e) => base(e.name).toLowerCase().endsWith(".csv"));
+  if (!glb) { setStatus("ZIPに .glb が入っていません。", true); return; }
+  if (csvs.length === 0) { setStatus("ZIPに .csv が入っていません。", true); return; }
+
+  const dec = new TextDecoder();
+  const parse = (bytes) => {
+    const r = Papa.parse(dec.decode(bytes).replace(/^﻿/, ""), { header: true, skipEmptyLines: true });
+    return { rows: r.data || [], cols: (r.meta.fields || []) };
+  };
+  // 記録CSVは調査日の列を持つ。台帳はそれを持たない。中身で見分ける
+  const parsed = csvs.map((e) => ({ name: base(e.name), ...parse(e.bytes) }));
+  const ledger = parsed.find((p) => !p.cols.includes(SURVEY_DATE_COL));
+  const records = parsed.filter((p) => p.cols.includes(SURVEY_DATE_COL));
+  if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(調査日の列が無いCSV)。", true); return; }
+
+  loadGLBBuffer(glb.bytes.slice().buffer, base(glb.name));
+  loadCSVTable(ledger.rows, ledger.cols, base(ledger.name));
+
+  recordLog = [];
+  let differed = 0;
+  for (const p of records) differed += mergeRecordRows(p.rows).differed;
+  const info = applyRecordLog();
+  afterReferenceChange("", { matched: info.res.matched, stats: info.res.stats });
+
+  let msg = "一式を開きました: " + meshes.length + " オブジェクト" + NL +
+    "記録 " + recordLog.length + " 行 / " + records.length + " ファイル";
+  if (info.prevDate) msg += NL + "前回(" + info.prevDate + ")の記録 " + info.prevRows + " 件を参考に重ねました。";
+  if (info.restored) msg += NL + "今回(" + surveyDateValue() + ")のあなたの記録 " + info.restored + " 件を戻しました。";
+  if (differed) msg += NL + "※ 同じ石・同じ日・同じ人の行が " + differed + " 件食い違っていました(先に読んだほうを使っています)。";
+  setStatus(msg, differed > 0);
 }
 
 /* 参考の読み込み状態を画面に映す。状態だけ消してボタンが残る、を防ぐため
@@ -4549,6 +4901,16 @@ document.getElementById("ref-input").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 document.getElementById("ref-clear").addEventListener("click", clearReference);
+document.getElementById("export-bundle-btn").addEventListener("click", () => {
+  exportBundle().catch((e) => setStatus("一式の書き出しに失敗しました: " + (e && e.message ? e.message : e), true));
+});
+// 調査日は今日を既定にする。打ち直せるのは、翌日に入力する場合があるため
+{
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  document.getElementById("survey-date").value =
+    d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
 
 function updateApplyEnabled() {
   const ok = meshes.length > 0 && csvRows.length > 0;
@@ -7798,6 +8160,7 @@ function loadSampleData() {
   document.getElementById("sample-badge").classList.add("active");
   document.getElementById("sample-badge").textContent = `サンプルデータを表示中(${meshes.length} オブジェクト)`;
   document.getElementById("export-glb-btn").disabled = false;
+  document.getElementById("export-bundle-btn").disabled = false;
   document.getElementById("export-svg-btn").disabled = false;
   document.getElementById("export-current-view-svg-btn").disabled = false;
 

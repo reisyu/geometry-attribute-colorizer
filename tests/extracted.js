@@ -622,7 +622,7 @@ async function buildZip(entries) {
 
   for (const e of entries) {
     const nameBytes = enc.encode(e.name);
-    const raw = enc.encode(e.text);
+    const raw = e.bytes ? e.bytes : enc.encode(e.text);
     let data = await deflateRaw(raw);
     let method = 8;
     if (!data || data.length >= raw.length) { data = raw; method = 0; }  // 縮まないなら無圧縮
@@ -666,6 +666,74 @@ async function buildZip(entries) {
   end.setUint32(12, centralSize, true);
   end.setUint32(16, offset, true);      // 中央ディレクトリの開始位置
   return new Blob([...body, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+}
+
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === "undefined") return null;
+  const ds = new DecompressionStream("deflate-raw");
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+
+async function readZipEntries(buf) {
+  const u8 = new Uint8Array(buf);
+  if (u8.length < 22) throw new Error("ファイルが小さすぎます");
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+  // EOCDは末尾にあるが、後ろにコメントが付くことがあるので遡って探す
+  let eocd = -1;
+  const from = Math.max(0, u8.length - 65557);
+  for (let i = u8.length - 22; i >= from; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("ZIPとして読めません(終端が見つかりません)");
+
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) {
+      throw new Error("ZIPの目次が壊れています");
+    }
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const rawSize = dv.getUint32(p + 24, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+
+    if (local + 30 > u8.length || dv.getUint32(local, true) !== 0x04034b50) {
+      throw new Error("ZIPの中身が壊れています: " + name);
+    }
+    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    if (start + compSize > u8.length) throw new Error("ZIPの中身が切れています: " + name);
+    out.push({ name, method, rawSize, data: u8.subarray(start, start + compSize) });
+  }
+  return out;
+}
+
+async function unzip(buf) {
+  const out = [];
+  for (const e of await readZipEntries(buf)) {
+    if (e.name.endsWith("/")) continue;
+    let bytes;
+    if (e.method === 0) {
+      bytes = e.data;
+    } else if (e.method === 8) {
+      bytes = await inflateRaw(e.data);
+      if (!bytes) throw new Error("このブラウザは圧縮されたZIPを開けません。");
+    } else {
+      throw new Error("対応していない圧縮方法です(" + e.method + "): " + e.name);
+    }
+    out.push({ name: e.name, bytes });
+  }
+  return out;
 }
 
 function contourToSegments(p) {
@@ -811,4 +879,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };
