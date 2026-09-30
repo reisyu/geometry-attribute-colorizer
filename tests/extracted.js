@@ -856,7 +856,7 @@ function latLonToJPRect(lat, lon, zone) {
   return { x: Abar * (xi + sx) - Sbar, y: Abar * (eta + sy) };
 }
 
-function estimateJPZone(lat, lon, cx, cy) {
+function nearestJPZone(lat, lon, cx, cy) {
   const cands = [];
   for (const z of Object.keys(JP_ZONES)) {
     const p = latLonToJPRect(lat, lon, Number(z));
@@ -867,7 +867,13 @@ function estimateJPZone(lat, lon, cx, cy) {
   }
   if (cands.length === 0) return null;
   cands.sort((a, b) => a.dist - b.dist);
-  const best = cands[0], second = cands[1];
+  return { best: cands[0], second: cands[1] || null };
+}
+
+function estimateJPZone(lat, lon, cx, cy) {
+  const n = nearestJPZone(lat, lon, cx, cy);
+  if (!n) return null;
+  const { best, second } = n;
   if (best.dist > GEO_ACCEPT_M) return null;
   if (second && second.dist < best.dist * GEO_MARGIN) return null;
   return best;
@@ -885,4 +891,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

@@ -49,6 +49,7 @@ const FUNCS = [
   "isReservedColumn",
   "isDerivedColumn",
   "latLonToJPRect",
+  "nearestJPZone",
   "estimateJPZone",
   "toMapXY",
   "niceScaleLength",

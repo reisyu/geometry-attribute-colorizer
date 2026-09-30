@@ -843,6 +843,23 @@
   }
   #inspector .cls-chip:hover { border-color: var(--accent); color: var(--accent); }
   #inspector .cls-chip.on { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
+  /* 属性タブ / 調査タブ。狭い画面でも2つ並ぶよう、文字だけの切り替えにする */
+  .insp-tabs { display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid var(--panel-edge); }
+  .insp-tab {
+    flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--ink-dim); font-family: var(--sans); font-size: 12px;
+    padding: 6px 4px; margin: 0; cursor: pointer; min-height: 30px;
+  }
+  .insp-tab:hover { color: var(--ink); }
+  .insp-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  /* 調査日と調査者。書いている場所のすぐ上に置き、何が刻まれるかを見えるようにする */
+  .survey-head { display: flex; gap: 6px; margin-bottom: 8px; }
+  .survey-head input {
+    flex: 1 1 0; min-width: 0; margin: 0;
+    font-size: 11px; padding: 4px 6px;
+  }
+  .survey-head #survey-date { flex: 1.2 1 0; }
+
   /* これまでの記述。今回の入力欄と間違えないよう、書けないものとして沈めて見せる */
   #insp-note-prev {
     font-size: 11px; line-height: 1.55; color: var(--ink-dim);
@@ -938,17 +955,6 @@
     </div>
     <div class="row hint">
       書き出すCSVのDataset列に入ります
-    </div>
-    <div class="row">
-      <label class="small" for="survey-date">調査日</label>
-      <input type="date" id="survey-date">
-    </div>
-    <div class="row">
-      <label class="small" for="surveyor">調査者</label>
-      <input type="text" id="surveyor" placeholder="例: 山田">
-    </div>
-    <div class="row hint">
-      記録はこの2つで区別されます。<b>同じ石に複数人が書いても、両方とも残ります</b>
     </div>
 
     <div class="sub-header">背景モデル(任意)</div>
@@ -1180,12 +1186,12 @@
 
     <div class="row hint" id="share-support" style="display:none"></div>
 
-    <div class="sub-header">現場一式(ZIP)</div>
+    <div class="sub-header">点検データ</div>
     <div class="row">
-      <button class="ghost" id="export-bundle-btn" disabled style="margin-top:0">一式をZIPで保存</button>
+      <button class="ghost" id="export-bundle-btn" disabled style="margin-top:0">点検データをZIPで保存</button>
     </div>
     <div class="row hint">
-      台紙・台帳・記録を1つにまとめます。<b>次の点検はこのZIPを開くだけ</b>で始められます
+      モデル・属性・これまでの記録を1つのZIPにまとめます。<b>次の点検はこのZIPを開くだけ</b>で始められます
     </div>
 
     <div class="sub-header">データ</div>
@@ -1334,7 +1340,20 @@
 
   <div id="inspector">
     <div class="insp-name" id="insp-name"></div>
-    <table id="insp-table"></table>
+    <!-- 現場では属性表をほとんど見ず、デスクでは逆になる。役割で分けて、
+         最後に開いていたほうを次も開く(§10.9) -->
+    <div class="insp-tabs" role="tablist">
+      <button class="insp-tab" id="tab-attr" role="tab">属性</button>
+      <button class="insp-tab on" id="tab-survey" role="tab">調査</button>
+    </div>
+    <div id="insp-pane-attr">
+      <table id="insp-table"></table>
+    </div>
+    <div id="insp-pane-survey">
+    <div class="survey-head">
+      <input type="date" id="survey-date" title="この日付で記録されます">
+      <input type="text" id="surveyor" placeholder="調査者" title="記録はこの名前で残ります">
+    </div>
     <div id="insp-classify">
       <div class="cls-head">
         <label class="insp-note-label" for="insp-class-col">分類</label>
@@ -1365,6 +1384,7 @@
       <!-- input ではなく textarea にしている。複数行が書けるだけでなく、
            iOS/Androidの標準キーボードの音声入力が使えるため(現場では打つより速い) -->
       <textarea id="insp-note" rows="3" placeholder="点検の所見などを記入"></textarea>
+    </div>
     </div>
   </div>
 </div>
@@ -1818,7 +1838,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.28.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.29.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -2115,6 +2135,19 @@ function loadGLBBuffer(buffer, displayName) {
       disposeModel();
       setHighlight(null);
       originalMaterials.clear();
+
+      /* 前のモデルの原点シフト量を捨てる。**新しいモデルは新しい座標の文脈**。
+
+         GLBには原点をずらした後の座標しか入っていないので、実座標との
+         繋がりは台帳CSVから取り戻す(restoreWorldOffsetFromCSV)。ところが
+         その処理は「既に決まっているなら触らない」を守っており、ここで
+         捨てないと**起動時の内蔵サンプルの原点が残ったまま**になる。
+         結果、データは-109625付近にあるのにアプリは-1.45だと思い込み、
+         現在地が約110km離れた場所として計算されて判定が拒否されていた。
+         DXFは自分で無条件に上書きするので、この問題が起きなかった */
+      worldOffset.set = false;
+      worldOffset.x = 0; worldOffset.y = 0; worldOffset.z = 0;
+
       modelRoot = buildSceneFromGLTF(json, bin);
       scene.add(modelRoot);
 
@@ -4467,7 +4500,7 @@ let refColumns = [];     // その列名(前回:を付ける前)
 let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファイル名)
 
 /* ============================================================
-   現場一式(ZIP)と、記録の台帳
+   点検データ(ZIP)と、記録の台帳
 
    ZIPの中身:
      model.glb    台紙。形とID。一度作れば変わらない
@@ -4793,7 +4826,7 @@ function rowsToCSV(rows, cols) {
   return "﻿" + header + "\n" + body + "\n";
 }
 
-/* 現場一式をZIP 1つにまとめる。台紙・台帳・記録の3つ。
+/* 点検データをZIP 1つにまとめる。台紙・台帳・記録の3つ。
 
    記録には**台帳の全行**(過去の調査も他の人の分も)を入れる。次に開いたとき、
    そのZIPだけで履歴がそろうようにするため。持ち寄って統合するときは、
@@ -4826,14 +4859,14 @@ async function exportBundle() {
     { name: ZIP_LEDGER, text: rowsToCSV(csvRows, ledgerCols) },
     { name: ZIP_RECORD, text: rowsToCSV(recordLog, recCols) },
   ]);
-  deliverBlob(zip, exportFileName("bundle.zip"),
-    "現場一式をZIPにまとめました。" + NL +
+  deliverBlob(zip, exportFileName("点検データ.zip"),
+    "点検データをZIPにまとめました。" + NL +
     "台紙 + 台帳(" + csvRows.length + "行) + 記録(" + recordLog.length + "行)。" + NL +
     "今回の記録: " + mineNow.length + " 個" + (before === recordLog.length ? "" : ""),
     () => setUnsavedNotes(false));
 }
 
-/* ZIP一式を開く。台紙・台帳・記録をまとめて戻す。
+/* 点検データのZIPを開く。台紙・台帳・記録をまとめて戻す。
    記録CSVは**何本入っていても全部読む**。持ち寄ったものを1つのZIPに
    集めておけば、開くだけで統合される */
 async function loadBundle(file) {
@@ -4871,7 +4904,7 @@ async function loadBundle(file) {
   const info = applyRecordLog();
   afterReferenceChange("", { matched: info.res.matched, stats: info.res.stats });
 
-  let msg = "一式を開きました: " + meshes.length + " オブジェクト" + NL +
+  let msg = "点検データを開きました: " + meshes.length + " オブジェクト" + NL +
     "記録 " + recordLog.length + " 行 / " + records.length + " ファイル";
   if (info.prevDate) msg += NL + "前回(" + info.prevDate + ")の記録 " + info.prevRows + " 件を参考に重ねました。";
   if (info.restored) msg += NL + "今回(" + surveyDateValue() + ")のあなたの記録 " + info.restored + " 件を戻しました。";
@@ -4998,8 +5031,24 @@ document.getElementById("ref-input").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 document.getElementById("ref-clear").addEventListener("click", clearReference);
+/* インスペクタのタブ。現場では属性表をほとんど見ず、デスクでは逆になるので、
+   どちらを既定にするかは決め打ちせず**最後に開いていたほうを覚える** */
+let inspectorTab = "survey";
+function setInspectorTab(which) {
+  inspectorTab = (which === "attr") ? "attr" : "survey";
+  const attr = inspectorTab === "attr";
+  document.getElementById("tab-attr").classList.toggle("on", attr);
+  document.getElementById("tab-survey").classList.toggle("on", !attr);
+  document.getElementById("insp-pane-attr").style.display = attr ? "" : "none";
+  document.getElementById("insp-pane-survey").style.display = attr ? "none" : "";
+  scheduleSaveSettings();
+}
+document.getElementById("surveyor").addEventListener("input", scheduleSaveSettings);
+document.getElementById("tab-attr").addEventListener("click", () => setInspectorTab("attr"));
+document.getElementById("tab-survey").addEventListener("click", () => setInspectorTab("survey"));
+
 document.getElementById("export-bundle-btn").addEventListener("click", () => {
-  exportBundle().catch((e) => setStatus("一式の書き出しに失敗しました: " + (e && e.message ? e.message : e), true));
+  exportBundle().catch((e) => setStatus("点検データの書き出しに失敗しました: " + (e && e.message ? e.message : e), true));
 });
 // 調査日は今日を既定にする。打ち直せるのは、翌日に入力する場合があるため
 {
@@ -6825,7 +6874,13 @@ function latLonToJPRect(lat, lon, zone) {
 const GEO_ACCEPT_M = 5000;      // これより遠い候補は採らない
 const GEO_MARGIN = 3;           // 2番目の候補がこの倍率より近いと、曖昧として採らない
 
-function estimateJPZone(lat, lon, cx, cy) {
+/* 38候補(19系 × 軸の並び2通り)のうち、いちばん近いものを返す。採否は判定しない。
+
+   判定に失敗したとき、**どれくらい離れていたか**を知らせるために分けてある。
+   「判定できませんでした」だけでは、本当に遠いのか、原点が壊れているのかを
+   区別できない。実際に原点が壊れていた不具合を、この区別が無いために
+   見落とした(v1.28.1) */
+function nearestJPZone(lat, lon, cx, cy) {
   const cands = [];
   for (const z of Object.keys(JP_ZONES)) {
     const p = latLonToJPRect(lat, lon, Number(z));
@@ -6836,13 +6891,38 @@ function estimateJPZone(lat, lon, cx, cy) {
   }
   if (cands.length === 0) return null;
   cands.sort((a, b) => a.dist - b.dist);
-  const best = cands[0], second = cands[1];
+  return { best: cands[0], second: cands[1] || null };
+}
+
+function estimateJPZone(lat, lon, cx, cy) {
+  const n = nearestJPZone(lat, lon, cx, cy);
+  if (!n) return null;
+  const { best, second } = n;
   if (best.dist > GEO_ACCEPT_M) return null;
   if (second && second.dist < best.dist * GEO_MARGIN) return null;
   return best;
 }
 
 /* ---- ここから画面側 ---- */
+
+/* 判定に失敗した理由を、いちばん近かった候補との距離で説明する。
+
+   「遠すぎる」と「原点が壊れている」は、利用者から見ると同じ文面になる。
+   距離が出ていれば一目で分かる(現場50mで110kmと出れば、原点の側が
+   おかしいと即座に判断できる)。実際にその区別が無くて見落とした */
+function zoneFailureDetail(lat, lon) {
+  const n = nearestJPZone(lat, lon, worldOffset.x, worldOffset.y);
+  if (!n) return "現在地から遠すぎるか、平面直角座標系ではないデータです。";
+  const { best, second } = n;
+  if (best.dist > GEO_ACCEPT_M) {
+    return "いちばん近い候補(第" + best.zone + "系)でも、現在地はデータの中心から約" +
+      distanceText(best.dist) + "離れています。";
+  }
+  if (second) {
+    return "第" + best.zone + "系と第" + second.zone + "系のどちらとも取れる位置で、絞り込めません。";
+  }
+  return "現在地から遠すぎるか、平面直角座標系ではないデータです。";
+}
 
 let geoGuess = null;        // 推定した系。データごとに1回だけ決める
 let geoFix = null;          // { x, y, acc } データ座標系での現在地と精度(m)
@@ -6856,6 +6936,11 @@ const mmCanvas = document.getElementById("mm-canvas");
 const mmInfo = document.getElementById("mm-info");
 
 /* Three.js(Y-up)の座標を、元データ(Z-up)のXYへ戻す。§3の変換の逆 */
+/* 距離を読める長さにする。1km以上はkm、それ未満はm */
+function distanceText(m) {
+  return m >= 1000 ? (m / 1000).toFixed(1) + "km" : Math.round(m) + "m";
+}
+
 function threeToDataXY(v) {
   return { x: v.x + worldOffset.x, y: -v.z + worldOffset.y };
 }
@@ -6924,7 +7009,7 @@ function onGeoOk(pos) {
         geoErrorShown = true;
         setStatus(
           "このデータの座標系を判定できませんでした。" + NL +
-          "現在地から遠すぎるか、平面直角座標系ではないデータです。" + NL +
+          zoneFailureDetail(latitude, longitude) + NL +
           "別の場所のデータを開いている場合は、その場所で試してください。", true);
       }
       return;
@@ -6950,7 +7035,7 @@ function onGeoOk(pos) {
     setStatus(
       "現在地を表示しました(第" + geoGuess.zone + "系と判定)。" + NL +
       "測位の誤差は約" + Math.round(accuracy) + "m。データ中心からの距離は約" +
-      (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + "。");
+      distanceText(d) + "。");
   }
 }
 
@@ -7113,7 +7198,7 @@ function drawMinimap() {
   let extra = "";
   if (geoFix && meOutside) {
     const d = Math.hypot(geoFix.x - worldOffset.x, geoFix.y - worldOffset.y);
-    extra = " / 図の外(約" + (d >= 1000 ? (d / 1000).toFixed(1) + "km" : Math.round(d) + "m") + ")";
+    extra = " / 図の外(約" + distanceText(d) + ")";
   }
   mmInfo.textContent = geoFix
     ? "誤差 約" + Math.round(geoFix.acc) + "m / 第" + geoGuess.zone + "系" + extra
@@ -8571,6 +8656,9 @@ function saveSettings() {
       // パネルの開閉は作業環境の好み(データに紐づかない)なので保存する。
       // つまみは常に見えるので、畳んだまま開いても戻せる
       panelCollapsed: document.body.classList.contains("panel-collapsed"),
+      // 調査者は人に紐づくもので、データには紐づかない。毎回打ち直させない
+      surveyor: document.getElementById("surveyor").value,
+      inspectorTab,
     };
     for (const [id, kind] of SAVED_SETTINGS) {
       const el = document.getElementById(id);
@@ -8608,6 +8696,8 @@ function restoreSettings() {
     if (data.theme === "light") applyTheme(true);
     if (data.projection === "ortho") setProjection("ortho");
     if (data.panelCollapsed) setPanelCollapsed(true);
+    if (typeof data.surveyor === "string") document.getElementById("surveyor").value = data.surveyor;
+    setInspectorTab(data.inspectorTab === "attr" ? "attr" : "survey");
   }
 
   // 「塗りつぶしなし」と凡例は両立しない。保存された値を尊重しつつ、
