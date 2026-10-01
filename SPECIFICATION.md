@@ -1924,7 +1924,8 @@ CHANGELOG.md 冒頭に記載。
 7. **公開が確認できたら、リリース文をその場で用意する**(下記§12.3)。
    依頼を待たない。**確認できた直後が、何を直したかが最も揃っている時点**であり、
    後から書くと拾い漏れる。タイトルはその場で示し、本文はファイルで渡す
-8. **GitHubでReleaseを作成する**(作者が手動で行う。§12.3)
+8. **GitHubでReleaseを作成する**(§12.3)。PC上のセッションなら `gh release create`
+   で作れる。**公開物なので、作成・編集は毎回確認を取ってから**
 
 #### タグを打てない環境がある
 
@@ -1996,7 +1997,17 @@ Releaseにすると、説明文・配布用ZIPのリンクが付き、
    CHANGELOGを整形して貼るほうが読みやすい)
 5. **Set as the latest release** にチェックが入っていることを確認して **Publish release**
 
-`gh` CLI があれば `gh release create v1.3.0 --notes-file ...` でも作れる。
+**`gh` CLI はPCに入っていて認証済み**(reisyu・スコープ `repo`。2026-10-02確認)。
+画面を開かずに作成・編集できる。
+
+```bash
+gh release create v1.3.0 --title "v1.3.0 要約" --notes-file release_v1.3.0.md
+gh release edit   v1.3.0 --title "v1.3.0 要約"     # 表題だけ直す
+gh release view   v1.3.0 --json tagName,name        # 結果を確かめる
+```
+
+認証は**このPCのkeyringにある**ので、クラウド上のセッションからは使えないはず
+(未実測。タグをpushできないのと同じ事情。下記)。
 
 #### 複数の版を1本にまとめるとき
 
