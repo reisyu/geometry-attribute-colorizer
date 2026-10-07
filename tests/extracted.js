@@ -68,6 +68,10 @@ const REF_PREFIX = "前回:";
 
 const HIST_PREFIX = "履歴:";
 
+const FILENAME_NG = '/:*?"<>|' + String.fromCharCode(92);
+
+const FILENAME_TRIM = '._ ' + String.fromCharCode(0x3000);
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -509,6 +513,41 @@ function csvEscape(v) {
   return s;
 }
 
+function rowsToCSV(rows, cols, fixed) {
+  const header = cols.map(csvEscape).join(",");
+  const body = rows.map((r) => cols.map((c) => csvEscape(
+    fixed && Object.prototype.hasOwnProperty.call(fixed, c) ? fixed[c] : (r[c] ?? "")
+  )).join(",")).join("\n");
+  return "﻿" + header + "\n" + body + "\n";
+}
+
+function ledgerCSV(rows, cols, datasetName) {
+  const ds = String(datasetName == null ? "" : datasetName).trim();
+  if (!ds) return rowsToCSV(rows, cols);
+  const out = cols.includes("Dataset") ? cols : cols.concat("Dataset");
+  return rowsToCSV(rows, out, { Dataset: ds });
+}
+
+function safeFileNamePart(text) {
+  let out = '';
+  for (const ch of String(text)) {
+    if (ch.charCodeAt(0) < 0x20) continue;                       // 制御文字
+    out += (FILENAME_NG.indexOf(ch) >= 0 || ch === ' ') ? '_' : ch;
+  }
+  while (out.length && FILENAME_TRIM.indexOf(out[0]) >= 0) out = out.slice(1);
+  while (out.length && FILENAME_TRIM.indexOf(out[out.length - 1]) >= 0) out = out.slice(0, -1);
+  return out.slice(0, 80);
+}
+
+function recordFileName(date, who) {
+  const parts = ["記録"];
+  const d = safeFileNamePart(String(date == null ? "" : date));
+  const w = safeFileNamePart(String(who == null ? "" : who));
+  if (d) parts.push(d);
+  if (w) parts.push(w);
+  return parts.join("_") + ".csv";
+}
+
 function formatValue(v) {
   const n = Number(v);
   return (String(v).trim() !== "" && Number.isFinite(n)) ? String(Number(n.toPrecision(5))) : String(v);
@@ -891,4 +930,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, FILENAME_NG, FILENAME_TRIM, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
