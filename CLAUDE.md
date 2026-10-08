@@ -41,7 +41,7 @@
 **`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node tests/run_all.js       # 抽出 + 全テストを一括実行（20ファイル・403件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（20ファイル・408件）
 ```
 
 抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
@@ -65,7 +65,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（20ファイ
 | `test_aspect.js` | アスペクト比 | 16 |
 | `test_zip.js` | ZIP書き出し(CRC32・ZIP構造) | 19 |
 | `test_unzip.js` | ZIP読み込み(自分で書いたものを読み戻す往復) | 19 |
-| `test_bundlecsv.js` | 点検データのCSV(データ名・記録のファイル名) | 26 |
+| `test_bundlecsv.js` | 点検データのCSV(データ名・記録のファイル名・開いた直後の図) | 31 |
 | `test_thickline.js` | 選択の輪郭線(太線の板の組み立て) | 23 |
 | `test_selection.js` | ブラシ選択の当たり判定 | 15 |
 | `test_classify.js` | 分類の列(正規化・予約列名) | 53 |

@@ -11,7 +11,7 @@
  * 持ち寄って1つのZIPにまとめるとき、全員が「記録.csv」だと重なって
  * 入れられない。日と人を名前に入れて重ならないようにする。
  */
-const { ledgerCSV, recordFileName, rowsToCSV } = require("./extracted.js");
+const { ledgerCSV, recordFileName, rowsToCSV, openingAttribute, REF_PREFIX, NOTE_FLAG_COL } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n, extra) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n + (extra ? "  " + extra : "")); };
@@ -101,6 +101,22 @@ ok(/\.csv$/.test(recordFileName("2026-10-09", "山田")), "拡張子は.csv");
   // 末尾のピリオドはWindowsで落とされるため safeFileNamePart が削る
   const n = recordFileName("2026-10-09", "山田.");
   ok(!/\.\.csv$/.test(n), "末尾のピリオドが二重にならない", n);
+}
+
+/* ---------- 開いた直後に見せる図 ---------- */
+/* 点検のために開いたのだから、点検の図で始める。
+   ただし初回の点検(前回の記録が無い)では何も変えない */
+{
+  const ref = REF_PREFIX + NOTE_FLAG_COL;
+  ok(openingAttribute(["ID", "Width", NOTE_FLAG_COL]) === NOTE_FLAG_COL,
+     "「メモの有無」で開く(書いた石からその場で色が変わる)", openingAttribute(["ID", "Width", NOTE_FLAG_COL]));
+  ok(openingAttribute(["ID", "Width", NOTE_FLAG_COL, ref]) === NOTE_FLAG_COL,
+     "**前回の記録があっても今回の進捗を出す**(前回の色は書いても動かないため)");
+  ok(openingAttribute(["ID", "Width"]) === "",
+     "メモの列が無ければ何も変えない(存在しない属性を選ばない)");
+  ok(openingAttribute([]) === "", "列が空でも落ちない");
+  ok(openingAttribute(["ID", "履歴:記録回数"]) === "",
+     "履歴の列だけでは切り替えない");
 }
 
 console.log("");

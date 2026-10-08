@@ -68,6 +68,8 @@ const REF_PREFIX = "前回:";
 
 const HIST_PREFIX = "履歴:";
 
+const NOTE_FLAG_COL = "HasNote";
+
 const FILENAME_NG = '/:*?"<>|' + String.fromCharCode(92);
 
 const FILENAME_TRIM = '._ ' + String.fromCharCode(0x3000);
@@ -548,6 +550,10 @@ function recordFileName(date, who) {
   return parts.join("_") + ".csv";
 }
 
+function openingAttribute(columns) {
+  return columns.includes(NOTE_FLAG_COL) ? NOTE_FLAG_COL : "";
+}
+
 function formatValue(v) {
   const n = Number(v);
   return (String(v).trim() !== "" && Number.isFinite(n)) ? String(Number(n.toPrecision(5))) : String(v);
@@ -930,4 +936,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, FILENAME_NG, FILENAME_TRIM, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, FILENAME_NG, FILENAME_TRIM, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

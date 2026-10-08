@@ -1848,7 +1848,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.29.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.29.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 let labelEntries = [];           // ラベル { el, worldPos } の配列(定義はラベルセクション)
 let modelSize = 10;              // モデル全体のサイズ(距離カリングの基準に使う)
@@ -4935,18 +4935,62 @@ async function loadBundle(file) {
   loadGLBBuffer(glb.bytes.slice().buffer, base(glb.name));
   loadCSVTable(ledger.rows, ledger.cols, base(ledger.name));
 
+  /* メモの列を空のまま先に作る。**初回の点検では台帳にメモの列が無い**ので、
+     最初の1件を書くまで「メモの有無」が選択肢に出てこなかった。
+     書いた石から色が変わる図で始めるために、器を先に用意する。
+     空の行は記録にも未保存の数にも入らない(どちらも中身で数えている) */
+  if (!csvColumns.includes(NOTE_COL)) csvColumns.push(NOTE_COL);
+
   recordLog = [];
   let differed = 0;
   for (const p of records) differed += mergeRecordRows(p.rows).differed;
   const info = applyRecordLog();
   afterReferenceChange("", { matched: info.res.matched, stats: info.res.stats });
 
+  // 今回書いた石が見える図で始める
+  const opening = openingAttribute(csvColumns);
+  let switched = false;
+  if (opening) {
+    const sel = document.getElementById("attribute");
+    if ([...sel.options].some((o) => o.value === opening)) {
+      sel.value = opening;
+      hasApplied = true;
+      applyColorize();
+      switched = true;
+    }
+  }
+
   let msg = "点検データを開きました: " + meshes.length + " オブジェクト" + NL +
     "記録 " + recordLog.length + " 行 / " + records.length + " ファイル";
   if (info.prevDate) msg += NL + "前回(" + info.prevDate + ")の記録 " + info.prevRows + " 件を参考に重ねました。";
   if (info.restored) msg += NL + "今回(" + surveyDateValue() + ")のあなたの記録 " + info.restored + " 件を戻しました。";
+  if (switched) {
+    const done = csvRows.filter((r) => String(r[NOTE_FLAG_COL] ?? "") === NOTE_YES).length;
+    msg += NL + "色分けを「メモの有無」にしました。記録を書いた石から赤くなります" +
+      (done ? "(いま " + done + " 個)。" : "(いまは全部グレーです)。");
+    if (refRows.length > 0) {
+      msg += NL + "前回メモのある石は「3. 色分けする」の「前回:メモの有無」で見られます。";
+    }
+  }
   if (differed) msg += NL + "※ 同じ石・同じ日・同じ人の行が " + differed + " 件食い違っていました(先に読んだほうを使っています)。";
   setStatus(msg, differed > 0);
+}
+
+/* 点検データを開いた直後、どの属性で色分けして見せるかを決める。
+
+   **今回書いた石が見える図で始める。** 点検は「書きながら回る」作業なので、
+   どこまで書いたかが図で分かることがいちばん効く。メモを書くとその石は
+   その場で色が変わる(この応答は「メモの有無」が選ばれているときだけ起きる)。
+
+   前回の記録は `前回:メモの有無` で見られるが、**開いた直後にそちらを出すと
+   書いても図が変わらない**。前回の列は今回の記入では動かないため、
+   「書いたのに何も起きない」という最初の体験になってしまう。
+
+   これまでは幅(Width)のまま開き、記録があることは知らせの文字でしか
+   伝わらなかった。変えたときは知らせに必ず書く。黙って変えると、
+   利用者は自分が選んだ色だと思い込む(§6.1と同じ型) */
+function openingAttribute(columns) {
+  return columns.includes(NOTE_FLAG_COL) ? NOTE_FLAG_COL : "";
 }
 
 /* 参考の読み込み状態を画面に映す。状態だけ消してボタンが残る、を防ぐため
