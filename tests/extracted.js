@@ -92,6 +92,14 @@ const SURVEY_DATE_COL = "SurveyDate";
 
 const SURVEYOR_COL = "調査者";
 
+const HIT_COL = "該当項目";
+
+const HIT_MULTI = "複数";
+
+const HIT_NONE = "なし";
+
+const SURVEY_MISS = ["なし", "無", "無し", "非該当", "該当なし"];
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -576,12 +584,13 @@ function recordHeaderColumns(columnLists) {
 function ledgerColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
   return (columns || []).filter((c) =>
-    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && !survey.has(c));
+    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && c !== HIT_COL &&
+    !survey.has(c));
 }
 
 function surveyValueColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
-  return (columns || []).filter((c) => survey.has(c) || c === NOTE_COL);
+  return (columns || []).filter((c) => (survey.has(c) || c === NOTE_COL) && c !== HIT_COL);
 }
 
 function surveyVisualColumns(columns, surveySet) {
@@ -590,12 +599,25 @@ function surveyVisualColumns(columns, surveySet) {
     survey.has(c) ||
     c.startsWith(HIST_PREFIX) ||
     (c.startsWith(REF_PREFIX) && survey.has(c.slice(REF_PREFIX.length))) ||
-    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL);
+    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL || c === HIT_COL);
 }
 
 function hasSurveyEntry(row, cols) {
   for (const c of cols || []) if (String((row || {})[c] ?? "").trim() !== "") return true;
   return false;
+}
+
+function isSurveyHit(v) {
+  const s = normalizeClassValue(v);
+  return s !== "" && SURVEY_MISS.indexOf(s) < 0;
+}
+
+function surveyHitLabel(row, cols) {
+  const hits = [];
+  for (const c of cols || []) if (isSurveyHit((row || {})[c])) hits.push(c);
+  if (hits.length === 0) return HIT_NONE;
+  if (hits.length === 1) return hits[0];
+  return HIT_MULTI;
 }
 
 function csvEscape(v) {
@@ -690,7 +712,7 @@ function isDevHost(hostname, protocol, stableUrl) {
 }
 
 function isLiveColorColumn(attr) {
-  return attr === NOTE_FLAG_COL || attr === COMBO_COL;
+  return attr === NOTE_FLAG_COL || attr === COMBO_COL || attr === HIT_COL;
 }
 
 function formatValue(v) {
@@ -1016,6 +1038,7 @@ function isReservedColumn(name, idCol) {
   if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
+  if (n === HIT_COL) return true;   // 点検項目から作る派生列
   if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
   return false;
 }
@@ -1105,4 +1128,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, SURVEY_MISS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

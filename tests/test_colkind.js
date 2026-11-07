@@ -14,6 +14,7 @@
  * ここで検証するのは、その振り分けを決める純関数。
  */
 const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
+        isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -111,6 +112,53 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   const a = ledgerColumns(COLS, ["はらみ出し", "ひび割れ"]);
   const b = ledgerColumns(COLS, SURVEY);
   ok(j(a) === j(b), "点検項目の集合は配列でもSetでも同じ");
+}
+
+/* ---------- 点検項目をまとめた1枚の図 ---------- */
+/* 項目ごとに色分けすると、項目の数だけ図を見比べることになる。
+   「どの石に何が出ているか」を1枚で読めるようにする */
+{
+  const ITEMS = ["剥離", "割れ", "はらみ出し"];
+  ok(surveyHitLabel({ "剥離": "あり" }, ITEMS) === "剥離", "1つだけなら項目名");
+  ok(surveyHitLabel({ "割れ": "あり" }, ITEMS) === "割れ", "別の項目でも項目名");
+  ok(surveyHitLabel({ "剥離": "あり", "割れ": "あり" }, ITEMS) === HIT_MULTI,
+     "**2つ以上なら「複数」**(いちばん重い石を1色で拾う)");
+  ok(surveyHitLabel({ "剥離": "あり", "割れ": "あり", "はらみ出し": "あり" }, ITEMS) === HIT_MULTI,
+     "3つでも「複数」");
+  ok(surveyHitLabel({}, ITEMS) === HIT_NONE, "どれも該当しなければ「なし」");
+  ok(surveyHitLabel({ "石種": "花崗岩" }, ITEMS) === HIT_NONE,
+     "**点検項目以外の値は見ない**(石種は該当ではない)");
+  ok(surveyHitLabel(null, ITEMS) === HIT_NONE, "行がnullでも落ちない");
+  ok(surveyHitLabel({ "剥離": "あり" }, []) === HIT_NONE, "項目が無ければ「なし」");
+  ok(surveyHitLabel({ "剥離": "あり" }, null) === HIT_NONE, "項目がnullでも落ちない");
+  // **全行に必ず値が入る**(空にすると欠損扱いで灰色になり「なし」と区別できない)
+  ok(surveyHitLabel({}, ITEMS) !== "", "値を空にしない(欠損と区別できなくなる)");
+}
+
+/* 何を「該当」とみなすか */
+{
+  ok(isSurveyHit("あり"), "「あり」は該当");
+  ok(isSurveyHit("該当"), "「該当」は該当");
+  ok(isSurveyHit("要観察"), "**知らない値も該当に数える**(指摘を図から消さない)");
+  ok(isSurveyHit(" あり "), "前後の空白は無視する");
+  ok(!isSurveyHit(""), "空は該当ではない");
+  ok(!isSurveyHit("   "), "空白だけも該当ではない");
+  ok(!isSurveyHit(null), "nullは該当ではない");
+  ok(!isSurveyHit(undefined), "undefinedも該当ではない");
+  // 否定の語だけは拾う。「なし」と書いてあるものを該当に数えるのは明らかな誤読
+  ok(!isSurveyHit("なし"), "**「なし」は該当ではない**");
+  ok(!isSurveyHit("無"), "「無」も該当ではない");
+  ok(!isSurveyHit("非該当"), "「非該当」も該当ではない");
+  ok(!isSurveyHit("該当なし"), "「該当なし」も該当ではない");
+}
+
+/* 書き出さない。点検側の選択肢には出す */
+{
+  const COLS2 = ["ID", "Width", "石種", "剥離", HIT_COL];
+  const S2 = new Set(["剥離"]);
+  ok(!ledgerColumns(COLS2, S2).includes(HIT_COL), "**該当項目は台帳に書き出さない**(派生列)");
+  ok(!surveyValueColumns(COLS2, S2).includes(HIT_COL), "記録にも書き出さない");
+  ok(surveyVisualColumns(COLS2, S2).includes(HIT_COL), "点検側の色分けには出す");
 }
 
 console.log("");

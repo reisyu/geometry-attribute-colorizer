@@ -5480,8 +5480,9 @@ function syncNoteDerived() {
   for (const row of csvRows) {
     row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
   }
+  const hitAdded = syncSurveyHitDerived() === true;
   const comboAdded = syncComboDerived();
-  return added || comboAdded;
+  return added || comboAdded || hitAdded;
 }
 
 /* 手で書いた瞬間に塗り直す対象かどうか。書いた内容そのものが色なので、
@@ -5489,11 +5490,62 @@ function syncNoteDerived() {
    メモの有無は色分けの選択肢から外したが、判定は残しておく(害が無く、
    選択肢に戻したときに塗り直しの抜けを作らないため) */
 function isLiveColorColumn(attr) {
-  return attr === NOTE_FLAG_COL || attr === COMBO_COL;
+  return attr === NOTE_FLAG_COL || attr === COMBO_COL || attr === HIT_COL;
 }
 
 /* 「記録の状況」の列を作り直す。**前回の記録が無くても作る**(初回の点検では
    「今回のみ」と「記録なし」の2値になる)。メモの列が無いときだけ作らない */
+/* 点検項目を横断して1枚の図にする派生列。
+
+   項目ごとに色分けすると、項目の数だけ図を見比べることになる。
+   「どの石に何が出ているか」を1枚で読めるようにする。
+   1つだけ該当ならその項目名、2つ以上なら「複数」、どれも該当しなければ「なし」。
+
+   **接頭辞を付けない。** 「履歴:」にすると syncRecordDerived が
+   HIST_PREFIX で始まる列を全部消すので、黙って消える。
+   HasNote と同じく、名前で個別に扱う */
+const HIT_COL = "該当項目";
+const HIT_MULTI = "複数";
+const HIT_NONE = "なし";
+
+/* 「該当していない」と明示された値。これ以外の非空値はすべて該当とみなす。
+
+   語彙は開いている(§5.1.3)ので、「要観察」のような値が必ず出る。
+   それを該当でない側に落とすと**指摘が図から消える**ため、安全側に倒す。
+   ただし「なし」と書いてあるものを該当に数えるのは明らかな誤読なので、
+   否定の語だけは拾う */
+const SURVEY_MISS = ["なし", "無", "無し", "非該当", "該当なし"];
+
+function isSurveyHit(v) {
+  const s = normalizeClassValue(v);
+  return s !== "" && SURVEY_MISS.indexOf(s) < 0;
+}
+
+/* その石が、どの点検項目に該当しているか。純関数 */
+function surveyHitLabel(row, cols) {
+  const hits = [];
+  for (const c of cols || []) if (isSurveyHit((row || {})[c])) hits.push(c);
+  if (hits.length === 0) return HIT_NONE;
+  if (hits.length === 1) return hits[0];
+  return HIT_MULTI;
+}
+
+/* 列を作り直す。**全行に必ず値を入れる**(空欄にすると欠損扱いで灰色になり、
+   「なし」と「未計算」が区別できない)。点検項目が1つも無ければ作らない */
+function syncSurveyHitDerived() {
+  const cols = surveyItemColumns();
+  if (cols.length === 0) {
+    const had = csvColumns.includes(HIT_COL);
+    csvColumns = csvColumns.filter((c) => c !== HIT_COL);
+    for (const row of csvRows) delete row[HIT_COL];
+    return had ? "removed" : false;
+  }
+  const added = !csvColumns.includes(HIT_COL);
+  if (added) csvColumns.push(HIT_COL);
+  for (const row of csvRows) row[HIT_COL] = surveyHitLabel(row, cols);
+  return added;
+}
+
 function syncComboDerived() {
   const prevCol = REF_PREFIX + NOTE_FLAG_COL;
   const hasPrevCol = csvColumns.includes(prevCol);
@@ -5536,7 +5588,10 @@ function refreshSurveyAttributeOptions() {
   const sel = document.getElementById("survey-attribute");
   if (!sel) return;
   const prev = sel.value;
-  const cols = surveyVisualColumns(csvColumns, surveyCols);
+  /* まとめて読める図を先に出す。項目ごとの図は、気になったときに選ぶもの */
+  const all = surveyVisualColumns(csvColumns, surveyCols);
+  const head = [HIT_COL, COMBO_COL].filter((c) => all.includes(c));
+  const cols = head.concat(all.filter((c) => !head.includes(c)));
   sel.innerHTML = "";
   const none = document.createElement("option");
   none.value = ""; none.textContent = cols.length ? "(選択してください)" : "(点検の記録がありません)";
@@ -5867,6 +5922,21 @@ function applyColorize() {
     if (attr === HIST_PREFIX + "調査者") {
       sorted = sorted.filter((c) => c !== SURVEYOR_NONE).concat(
         (SURVEYOR_NONE in counts) ? [SURVEYOR_NONE] : []);
+    }
+
+    /* 「該当項目」は、複数に赤を当てる。**いちばん強い色を、いちばん重い石に**。
+       なしはグレー(注目対象外)でこのアプリの語彙に揃える。
+       項目の色はパレットの1番から順に当てる(0番の赤は複数に取っておく)。
+       **列を作った順**で決めるので、どの石から数えても色が変わらない */
+    if (attr === HIT_COL) {
+      const items = surveyItemColumns();
+      sorted = items.filter((c) => c in counts)
+        .concat([HIT_MULTI, HIT_NONE].filter((c) => c in counts));
+      items.forEach((c, i) => {
+        if (c in counts) categoryColorCache[c] = PALETTE[(i % (PALETTE.length - 1)) + 1];
+      });
+      categoryColorCache[HIT_MULTI] = PALETTE[0];
+      categoryColorCache[HIT_NONE] = OTHER_COLOR;
     }
 
     if (attr === COMBO_COL) {
@@ -8121,14 +8191,15 @@ function clearManualColumns() { staticCols.clear(); surveyCols.clear(); }
 function ledgerColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
   return (columns || []).filter((c) =>
-    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && !survey.has(c));
+    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && c !== HIT_COL &&
+    !survey.has(c));
 }
 
 /* 記録CSVに入る値の列。点検項目とメモ。
    静的な属性は台帳にあるので入れない(調査日と調査者の鍵が付いてしまう)。純関数 */
 function surveyValueColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
-  return (columns || []).filter((c) => survey.has(c) || c === NOTE_COL);
+  return (columns || []).filter((c) => (survey.has(c) || c === NOTE_COL) && c !== HIT_COL);
 }
 
 /* その石に、今回の点検として残すものがあるか。純関数。
@@ -8152,6 +8223,7 @@ function isReservedColumn(name, idCol) {
   if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
+  if (n === HIT_COL) return true;   // 点検項目から作る派生列
   if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
   return false;
 }
@@ -8184,7 +8256,7 @@ function surveyVisualColumns(columns, surveySet) {
     survey.has(c) ||
     c.startsWith(HIST_PREFIX) ||
     (c.startsWith(REF_PREFIX) && survey.has(c.slice(REF_PREFIX.length))) ||
-    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL);
+    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL || c === HIT_COL);
 }
 
 /* その列で実際に使われている値と件数。多い順に並べる(よく使う値を手前に) */
@@ -8386,6 +8458,14 @@ function applyClassValue(col, rawValue) {
 /* 手入力を書いた後の後始末。色分け・ラベル・未保存表示・控えを揃える。
    メモ欄と分類で同じ経路を通す(片方だけ更新すると表示と実態が食い違う) */
 function afterManualEdit(col) {
+  /* 点検項目を書き換えたら「該当項目」を作り直す。
+     列が増減したときは選択肢も更新する(片方だけ直すと実態と食い違う) */
+  const hit = syncSurveyHitDerived();
+  if (hit) {
+    refreshAttributeOptions();
+    refreshLabelContentOptions();
+    refreshFilterRuleOptions();
+  }
   scheduleSaveNotes();
   setUnsavedNotes(true);
   if (hasApplied && document.getElementById("attribute").value === col) applyColorize();
@@ -8438,6 +8518,7 @@ function addManualColumn(kind) {
   }
   csvColumns.push(name);
   registerManualColumn(name, kind);
+  syncSurveyHitDerived();
   input.value = "";
   refreshAttributeOptions();
   refreshLabelContentOptions();
@@ -8491,6 +8572,7 @@ function renderColumnList(boxId, cols, kind) {
       b.textContent = other === "survey" ? "点検項目に変える" : "属性の列に変える";
       b.addEventListener("click", () => {
         registerManualColumn(col, other);
+        syncSurveyHitDerived();
         refreshAttributeOptions();
         refreshLabelContentOptions();
         refreshFilterRuleOptions();
