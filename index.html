@@ -1188,7 +1188,7 @@
       各オブジェクトの外接矩形の水平軸に沿った中心線を、矩形回転角に応じた色で描画します。線が水平に揃っていれば整った積み方、乱れていればランダムな積み方だと読み取れます
     </div>
     <div class="row">
-      <label class="checkbox-row"><input type="checkbox" id="show-rect-lines"> 傾きラインを表示</label>
+      <label class="checkbox-row"><input type="checkbox" id="show-rect-lines" checked> 傾きラインを表示</label>
     </div>
     <div class="row">
       <label class="small">線の色</label>
@@ -1324,7 +1324,7 @@
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-legend" checked> 凡例(ヒストグラム付き)</label>
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-scalebar" checked> スケールバー(立面図のみ)</label>
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-labels"> ラベル(内容はステップ6の選択に従う)</label>
-        <label class="checkbox-row"><input type="checkbox" id="svg-inc-lines"> 傾きライン(色・太さはステップ4の設定に従う)</label>
+        <label class="checkbox-row"><input type="checkbox" id="svg-inc-lines" checked> 傾きラインと傾きの分布(色・太さはステップ4の設定に従う)</label>
         <label class="checkbox-row"><input type="checkbox" id="svg-no-fill"> 塗りつぶしなし(輪郭線のみの線画にする)</label>
       </div>
       <div class="row">
@@ -2337,6 +2337,7 @@ function loadGLBBuffer(buffer, displayName) {
       lastRectLineRestored = 0;
       const restored = restoreRectLinesFromGeometry();
 
+      refreshRectLinesAfterLoad();
       frameAll();
       updateDistanceValueText();
       document.getElementById("dropzone-hint").classList.add("hidden");
@@ -3060,6 +3061,7 @@ function loadDXFFile(file) {
       }
 
       scene.add(modelRoot);
+      refreshRectLinesAfterLoad();
       frameAll();
       updateDistanceValueText();
       hideProgress();
@@ -5962,7 +5964,11 @@ function renderRectLineHist(angles) {
   document.getElementById("rectline-hist-n").textContent = "n=" + total;
 }
 
-function rebuildRectLines() {
+/* userAction: 利用者がチェックを操作したときだけ true。
+   既定で表示するようにしたため、**傾きラインを出せないデータを開くたびに**
+   「表示できるデータがありません」が出てしまう。利用者が何も触っていないのに
+   エラーを見せない。出せないときはチェックを静かに外して実態に合わせる */
+function rebuildRectLines(userAction) {
   if (rectLinesObj) {
     scene.remove(rectLinesObj);
     rectLinesObj.geometry.dispose();
@@ -6017,8 +6023,10 @@ function rebuildRectLines() {
   }
 
   if (positions.length === 0) {
-    setStatus("傾きラインを表示できるデータがありません。" + String.fromCharCode(10) +
-      "DXF・内蔵サンプル・このアプリが書き出したGLB(点検データのZIPを含む)で利用できます。", true);
+    if (userAction) {
+      setStatus("傾きラインを表示できるデータがありません。" + String.fromCharCode(10) +
+        "DXF・内蔵サンプル・このアプリが書き出したGLB(点検データのZIPを含む)で利用できます。", true);
+    }
     document.getElementById("show-rect-lines").checked = false;
     renderRectLineHist([]);
     return;
@@ -6043,9 +6051,17 @@ function rebuildRectLines() {
 }
 
 document.getElementById("show-rect-lines").addEventListener("change", () => {
-  rebuildRectLines();
+  rebuildRectLines(true);
   updateStepSummaries();
 });
+
+/* モデルを読み込んだ後に呼ぶ。既定で表示するので、読み込みの時点で描く。
+   読み込み時にはどこからも呼ばれておらず、チェックを既定オンにしただけでは
+   **一度オフ→オンするまで線が出ない** */
+function refreshRectLinesAfterLoad() {
+  rebuildRectLines(false);
+  updateStepSummaries();
+}
 /* 色・太さの変更は即時反映(デバウンス付き) */
 let rectLineTimer = null;
 for (const id of ["line-color-center", "line-color-edge", "line-width"]) {
@@ -6403,7 +6419,7 @@ function applyFilter() {
     resultEl.textContent = "";
   }
   rebuildLabels();
-  rebuildRectLines();  // フィルタ状態を傾きラインにも反映
+  rebuildRectLines(false);  // フィルタ状態を傾きラインにも反映
   refreshMinimap();    // 俯瞰図も「いま表示している石」に合わせる
   updateStepSummaries();
 }
@@ -9105,6 +9121,7 @@ function loadSampleData() {
 
   modelRoot = group;
   scene.add(modelRoot);
+  refreshRectLinesAfterLoad();
   frameAll();
   updateDistanceValueText();
   document.getElementById("dropzone-hint").classList.add("hidden");
