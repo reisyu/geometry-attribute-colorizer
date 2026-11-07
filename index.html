@@ -775,7 +775,9 @@
     font-size: calc(10px * var(--ui-scale));
     color: var(--ink-dim);
   }
-  #legend .legend-title {
+  /* 凡例類の見出し。傾きの分布と色分けの凡例で見た目を揃える
+     (箱ごとにセレクタを書くと、片方だけ素のままになる) */
+  #legend-stack .legend-title {
     font-family: var(--sans);
     font-size: calc(11px * var(--ui-scale));
     color: var(--ink-dim);
