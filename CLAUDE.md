@@ -41,7 +41,7 @@
 **`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node tests/run_all.js       # 抽出 + 全テストを一括実行（25ファイル・540件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（26ファイル・597件）
 ```
 
 抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
@@ -56,6 +56,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（25ファイ
 | `test_markdown.js` | 日本語の強調が効かない書き方の検出 | 16 |
 | `test_suite.js` | 幾何計算・色計算 | 64 |
 | `test_rectline.js` | 傾きラインの計算 | 11 |
+| `test_anglehist.js` | 傾きの分布(ビンの割り当て・数でない値) | 28 |
 | `test_palette.js` | カテゴリ色パレット | 3 |
 | `test_fitview.js` | 全体表示のフィット計算 | 22 |
 | `test_winding.js` | GLB法線の巻き順 | 7 |
@@ -71,7 +72,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（25ファイ
 | `test_bundlecsv.js` | 点検データのCSV(データ名・ファイル名・記録の状況・調査者) | 63 |
 | `test_thickline.js` | 選択の輪郭線(太線の板の組み立て) | 23 |
 | `test_selection.js` | ブラシ選択の当たり判定 | 15 |
-| `test_classify.js` | 分類の列(正規化・予約列名) | 53 |
+| `test_classify.js` | 分類の列(正規化・予約列名・チップの付け外し・記録CSVのヘッダ) | 82 |
 | `test_geoloc.js` | 現在地(平面直角座標の変換・系の推定) | 18 |
 | `test_minimap.js` | 俯瞰ミニマップ(軸の並び・スケールバー) | 17 |
 | `test_uiscale.js` | 文字の大きさ(直書きが残っていないか) | 15 |
