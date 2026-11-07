@@ -33,7 +33,7 @@
     --accent-dim: #9fd6cd;
   }
   body.light .obj-label { background: rgba(255, 255, 255, 0.82); }
-  body.light #legend { background: rgba(255, 255, 255, 0.92); }
+  body.light #legend, body.light #rectline-legend { background: rgba(255, 255, 255, 0.92); }
   body.light #inspector { background: rgba(255, 255, 255, 0.94); }
   body.light #sample-badge { background: rgba(255, 255, 255, 0.88); }
   body.light #viewport-wrap.dragover::after { background: rgba(255, 255, 255, 0.7); }
@@ -713,10 +713,19 @@
     max-height: calc(100% - 26px - var(--tb-h, 28px) - 384px);
   }
 
-  #legend {
+  /* 凡例類を左下に縦に積む。位置は器が持ち、中の箱は並ぶだけにする */
+  #legend-stack {
     position: absolute;
     left: 16px;
     bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    pointer-events: none;
+  }
+  #legend-stack > * { pointer-events: auto; }
+  #legend {
     background: rgba(33,36,42,.92);
     border: 1px solid var(--panel-edge);
     border-radius: 6px;
@@ -741,13 +750,23 @@
     cursor: default;
   }
   .hist-bin:hover { opacity: 1; outline: 1px solid var(--ink); }
-  /* ステップ4の傾きの分布。ビンは凡例と同じ .hist-bin を使い回す */
+  /* 傾きの分布。色分けの凡例と同じ見た目にして、並べて読めるようにする */
+  #rectline-legend {
+    background: rgba(33,36,42,.92);
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: calc(11px * var(--ui-scale));
+    font-family: var(--mono);
+    min-width: 220px;
+    display: none;
+  }
   #rectline-hist {
     display: flex;
     align-items: flex-end;
     gap: 1px;
     height: 36px;
-    margin-top: 4px;
+    margin-bottom: 3px;
   }
   .rl-hist-axis {
     display: flex;
@@ -755,13 +774,6 @@
     font-family: var(--mono);
     font-size: calc(10px * var(--ui-scale));
     color: var(--ink-dim);
-    margin-top: 2px;
-  }
-  .rl-hist-note {
-    font-size: calc(10.5px * var(--ui-scale));
-    color: var(--ink-dim);
-    margin-top: 4px;
-    line-height: 1.4;
   }
   #legend .legend-title {
     font-family: var(--sans);
@@ -987,7 +999,7 @@
     /* 狭い画面では右下に置くと凡例と横に重なる(375px幅で実測)。
        縦に積むほうが破綻しないので、ここだけ左下に戻す */
     #minimap { left: 16px; right: auto; bottom: 16px; }
-    #viewport-wrap.mm-open #legend { bottom: 296px; }
+    #viewport-wrap.mm-open #legend-stack { bottom: 296px; }
     #viewport-wrap.mm-open #inspector { max-height: calc(100% - 70px); }
   }
 </style>
@@ -1188,12 +1200,6 @@
     <div class="row">
       <label class="small" for="line-width">線の太さ <span id="line-width-value" class="slider-value">75mm</span></label>
       <input type="range" id="line-width" min="20" max="100" step="5" value="75">
-    </div>
-    <div class="row" id="rectline-hist-box" style="display:none">
-      <label class="small">傾きの分布 <span id="rectline-hist-n" class="slider-value"></span></label>
-      <div id="rectline-hist"></div>
-      <div class="rl-hist-axis"><span>-45°</span><span>0°</span><span>+45°</span></div>
-      <div class="rl-hist-note">いま線を描いているオブジェクトだけを数えています</div>
     </div>
 
   </div>
@@ -1399,14 +1405,22 @@
     </div>
   </div>
 
-  <div id="legend">
-    <div class="legend-title" id="legend-title"></div>
-    <div id="legend-numeric">
-      <div id="legend-hist"></div>
-      <div id="legend-bar"></div>
-      <div id="legend-range"><span id="legend-min"></span><span id="legend-max"></span></div>
+  <!-- 凡例類。傾きの分布は色分けの凡例と別のことを言うので、箱を分けて縦に積む -->
+  <div id="legend-stack">
+    <div id="rectline-legend">
+      <div class="legend-title">傾き <span id="rectline-hist-n"></span></div>
+      <div id="rectline-hist"></div>
+      <div class="rl-hist-axis"><span>-45°</span><span>0°</span><span>+45°</span></div>
     </div>
-    <div id="legend-cats"></div>
+    <div id="legend">
+      <div class="legend-title" id="legend-title"></div>
+      <div id="legend-numeric">
+        <div id="legend-hist"></div>
+        <div id="legend-bar"></div>
+        <div id="legend-range"><span id="legend-min"></span><span id="legend-max"></span></div>
+      </div>
+      <div id="legend-cats"></div>
+    </div>
   </div>
 
   <div id="inspector">
@@ -3358,6 +3372,38 @@ function buildLegendSVGParts(items, contentH, margin) {
   return parts;
 }
 
+/* 傾きの分布(SVG)。画面のオーバーレイと同じ24ビン・同じ色で描く。
+   凡例の**下**に積む。横に並べるとスケールバー(右下)と衝突しうるが、
+   衝突するかどうかは壁の横幅で変わるので、幅に依存しない置き方にする */
+function buildRectLineHistSVGParts(items, x, y) {
+  const angles = [];
+  for (const item of items) {
+    const rl = item.mesh.userData.rectLine;
+    if (rl) angles.push(rl.angle);
+  }
+  if (angles.length === 0) return [];
+
+  const { counts, total } = angleHistogram(angles, RECTLINE_HIST_BINS);
+  const lc = currentLineColors();
+  const barW = 260, histH = 40;
+  const binW = barW / counts.length;
+  const maxCount = Math.max(...counts, 1);
+
+  const parts = [];
+  parts.push(`<text x="${x}" y="${y}" font-size="14" fill="#222222">傾き  n=${total}</text>`);
+  for (let b = 0; b < counts.length; b++) {
+    const h = counts[b] / maxCount * histH;
+    const mid = -45 + 90 * ((b + 0.5) / counts.length);
+    const fill = counts[b] === 0 ? "#dddddd" : rgbToCss(symmetricAngleColor(mid, lc.center, lc.edge));
+    parts.push(`<rect x="${(x + b * binW).toFixed(1)}" y="${(y + 8 + histH - h).toFixed(1)}" width="${(binW - 1).toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}" fill="${fill}"/>`);
+  }
+  const ty = y + 8 + histH + 14;
+  parts.push(`<text x="${x}" y="${ty}" font-size="12" fill="#222222">-45°</text>`);
+  parts.push(`<text x="${x + barW / 2}" y="${ty}" font-size="12" fill="#222222" text-anchor="middle">0°</text>`);
+  parts.push(`<text x="${x + barW}" y="${ty}" font-size="12" fill="#222222" text-anchor="end">+45°</text>`);
+  return parts;
+}
+
 /* ============================================================
    SVG書き出しの共通部分
 
@@ -3396,8 +3442,13 @@ function buildExportSVG(items, view, opt) {
   const { margin, contentW, contentH, pxPerUnit, toX, toY } = view;
   const withScalebar = opt.incScalebar && view.scalebarSpan != null;
   const legendH = (opt.incLegend || withScalebar) ? 130 : 0;
+  /* 傾きの分布は、傾きラインを入れたときに一緒に出す。
+     線だけでは左右どちらに偏っているかを図から読み取れないため。
+     角度を持つものが1つも無ければ場所も取らない */
+  const hasRectLines = opt.incLines && items.some((it) => it.mesh.userData.rectLine);
+  const rectHistH = hasRectLines ? 90 : 0;
   const svgW = contentW + margin * 2;
-  const svgH = contentH + margin * 2 + legendH;
+  const svgH = contentH + margin * 2 + legendH + rectHistH;
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const parts = [];
@@ -3460,6 +3511,11 @@ function buildExportSVG(items, view, opt) {
 
   // --- 凡例 ---
   if (opt.incLegend) parts.push(...buildLegendSVGParts(items, contentH, margin));
+
+  // --- 傾きの分布(凡例の下) ---
+  if (hasRectLines) {
+    parts.push(...buildRectLineHistSVGParts(items, margin, contentH + margin * 2 + legendH));
+  }
 
   // --- スケールバー(右下)。縮尺が一定な投影のときだけ意味を持つ ---
   if (withScalebar) {
@@ -5881,7 +5937,7 @@ function angleHistogram(angles, nbins) {
    rectLine を持たないもの(extras の無い古いGLBなど)は入らないので、
    全体の個数と一致しないことがある。だから n を必ず出す */
 function renderRectLineHist(angles) {
-  const box = document.getElementById("rectline-hist-box");
+  const box = document.getElementById("rectline-legend");
   if (!box) return;
   if (!angles || angles.length === 0) { box.style.display = "none"; return; }
   box.style.display = "block";
