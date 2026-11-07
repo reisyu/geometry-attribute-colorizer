@@ -4060,7 +4060,12 @@ async function exportBatchSVG() {
       restoreManualRange(attr);
       updateAttrDescription();
       if (!applyColorize()) { skipped.push(attrLabel(attr)); continue; }
-      const r = buildElevationSVG(readSVGExportOptions());
+      /* 属性ごとのシートに傾きラインは重ねない。まとめ書き出しは
+         「色分けの図」と「傾きラインの線画」を別の紙に分ける作りで、
+         RectAngle を既定の属性から外しているのも二重になるからだった。
+         v1.38.0 で SVG設定の傾きラインを既定オンにしたため、ここが
+         設定をそのまま使っていると色分けの図すべてに線が乗ってしまう */
+      const r = buildElevationSVG({ ...readSVGExportOptions(), incLines: false });
       // 列名は利用者のCSV由来なので、そのままファイル名にしない。
       // 記号だけの列名で空になることもあるため、その場合は連番で代用する
       const part = safeFileNamePart(attr) || String(i + 1);
