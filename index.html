@@ -5523,6 +5523,22 @@ function isNumericColumn(rows, col) {
   return true;
 }
 
+/* RGB(0..1) -> HSV。色相は hsvToRgb と同じ 0..1 で返す。
+   無彩色(彩度0)のとき色相は定まらないので 0 を返す。純関数 */
+function rgbToHsv(rgb) {
+  const r = rgb[0], g = rgb[1], b = rgb[2];
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0) {
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+    if (h < 0) h += 1;
+  }
+  return [h, mx === 0 ? 0 : d / mx, mx];
+}
+
 function hsvToRgb(h, s, v) {
   const i = Math.floor(h * 6);
   const f = h * 6 - i;
@@ -5892,14 +5908,29 @@ document.getElementById("reset-btn").addEventListener("click", () => {
 ============================================================ */
 let rectLinesObj = null;
 
-/* 対称グラデーション: |angle|/45 で中央色→両端色を補間(純関数) */
+/* 対称グラデーション: |angle|/45 で中央色→両端色を補間(純関数)。
+
+   **RGBの直線補間ではなくHSVで回す。** 既定の青(#2456e6)と赤(#e62222)は
+   どちらも彩度0.84・明度0.90だが、RGBで混ぜると途中で灰色がかった紫を通り、
+   ±22.5°付近で彩度0.55・明度0.52まで落ちる。石の色分けは常に
+   彩度0.85・明度0.95(hsvToRgb(h, 0.85, 0.95))なので、**線のほうが下地より
+   暗く鈍い色になり、いちばん読みたい中間の傾きが見えにくかった**。
+   色相を短いほうに回し、彩度と明度は両端の値を補間するので、
+   全域で両端と同じ鮮やかさを保つ。両端の色そのものは変わらない。
+
+   色相を回す副作用として、両端に選んだ色の「間」に無い色相を通る
+   (青→赤なら紫〜マゼンタ)。見え方を取るほうが現場では役に立つ */
 function symmetricAngleColor(angle, centerRGB, edgeRGB) {
-  const t = Math.max(0, Math.min(1, Math.abs(angle) / 45));
-  return [
-    centerRGB[0] + (edgeRGB[0] - centerRGB[0]) * t,
-    centerRGB[1] + (edgeRGB[1] - centerRGB[1]) * t,
-    centerRGB[2] + (edgeRGB[2] - centerRGB[2]) * t,
-  ];
+  const n = Number(angle);
+  const t = Number.isFinite(n) ? Math.max(0, Math.min(1, Math.abs(n) / 45)) : 0;
+  const a = rgbToHsv(centerRGB), b = rgbToHsv(edgeRGB);
+  // 無彩色には色相が無い。相手の色相を使う(0を使うと赤へ流れてしまう)
+  const ha = a[1] === 0 ? b[0] : a[0];
+  const hb = b[1] === 0 ? a[0] : b[0];
+  let dh = hb - ha;
+  if (dh > 0.5) dh -= 1;
+  else if (dh < -0.5) dh += 1;
+  return hsvToRgb(ha + dh * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
 }
 
 function currentLineColors() {
