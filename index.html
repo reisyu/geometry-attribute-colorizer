@@ -9477,17 +9477,21 @@ function updateStepSummaries() {
   // 3. 色分け
   const attrSel = document.getElementById("attribute");
   stepSummaryEls[2].textContent = hasApplied && attrSel.value ? attrLabel(attrSel.value) : "";
-  // 4. 傾きライン
-  stepSummaryEls[3].textContent = document.getElementById("show-rect-lines").checked ? "表示中" : "";
+  /* 4〜6は見出しのチェック(§10.7.1)がオンオフを示すので、要約では
+     **チェックから読み取れないことだけ**を出す。「表示中」はチェックと
+     同じことを二度言っているだけで、横に並ぶと目が滑る */
+  // 4. 傾きライン — チェック以外に言うことが無い
+  stepSummaryEls[3].textContent = "";
   // 5. フィルタ
   if (document.getElementById("filter-enable").checked) {
     const m = document.getElementById("filter-result").textContent.match(/除外: (\d+)/);
-    stepSummaryEls[4].textContent = m ? `除外 ${m[1]}個` : "有効";
+    // 5. フィルタ — 何個除いたかはチェックからは分からないので、これは残す
+    stepSummaryEls[4].textContent = m ? `除外 ${m[1]}個` : "";
   } else {
     stepSummaryEls[4].textContent = "";
   }
-  // 6. ラベル
-  stepSummaryEls[5].textContent = showLabelsCheckbox.checked ? "表示中" : "";
+  // 6. ラベル — チェック以外に言うことが無い
+  stepSummaryEls[5].textContent = "";
   // 7. 書き出す — 未保存の手入力があることは畳んでいても見せる。
   // 件数と呼び名はバッジ・パネルの注意と同じ関数から取る(数え方を分けない)
   const unsaved = hasUnsavedNotes ? unsavedManualSummary() : { n: 0, word: "メモ" };
