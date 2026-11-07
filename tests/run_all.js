@@ -29,6 +29,7 @@ const TESTS = [
   ["test_markdown.js", "日本語の強調"],
   ["test_suite.js", "幾何計算・色計算"],
   ["test_rectline.js", "傾きライン"],
+  ["test_anglehist.js", "傾きの分布"],
   ["test_palette.js", "カテゴリ色パレット"],
   ["test_fitview.js", "全体表示のフィット"],
   ["test_winding.js", "GLB法線の巻き順"],

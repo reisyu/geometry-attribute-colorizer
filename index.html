@@ -741,6 +741,28 @@
     cursor: default;
   }
   .hist-bin:hover { opacity: 1; outline: 1px solid var(--ink); }
+  /* ステップ4の傾きの分布。ビンは凡例と同じ .hist-bin を使い回す */
+  #rectline-hist {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 36px;
+    margin-top: 4px;
+  }
+  .rl-hist-axis {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: calc(10px * var(--ui-scale));
+    color: var(--ink-dim);
+    margin-top: 2px;
+  }
+  .rl-hist-note {
+    font-size: calc(10.5px * var(--ui-scale));
+    color: var(--ink-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
   #legend .legend-title {
     font-family: var(--sans);
     font-size: calc(11px * var(--ui-scale));
@@ -1149,6 +1171,12 @@
     <div class="row">
       <label class="small" for="line-width">線の太さ <span id="line-width-value" class="slider-value">75mm</span></label>
       <input type="range" id="line-width" min="20" max="100" step="5" value="75">
+    </div>
+    <div class="row" id="rectline-hist-box" style="display:none">
+      <label class="small">傾きの分布 <span id="rectline-hist-n" class="slider-value"></span></label>
+      <div id="rectline-hist"></div>
+      <div class="rl-hist-axis"><span>-45°</span><span>0°</span><span>+45°</span></div>
+      <div class="rl-hist-note">いま線を描いているオブジェクトだけを数えています</div>
     </div>
 
   </div>
@@ -5776,6 +5804,63 @@ function currentLineColors() {
   };
 }
 
+const RECTLINE_HIST_BINS = 24;   // 凡例のヒストグラムと同じ本数
+
+/* 傾き角の分布。範囲は -45〜+45 に固定する。
+   矩形回転角の値域そのものなので、色分けの手動範囲には引きずらせない
+   (線は常にこの範囲で色が付いており、図と目盛りを一致させるため)。
+   範囲外の値は端のビンに積む(凡例のヒストグラムと同じ挙動)。純関数 */
+function angleHistogram(angles, nbins) {
+  const n = Math.max(1, Math.floor(Number(nbins)) || 0);
+  const counts = new Array(n).fill(0);
+  let total = 0;
+  for (const a of angles || []) {
+    // 空や null を Number() に通すと 0 になり、0°として数えてしまう。
+    // 他の属性を読むときと同じく、文字列にして trim してから判定する
+    const s = String(a == null ? "" : a).trim();
+    if (s === "") continue;
+    const v = Number(s);
+    if (!Number.isFinite(v)) continue;          // 数でない値は数えない
+    const t = Math.max(0, Math.min(1, (v + 45) / 90));
+    counts[Math.min(n - 1, Math.floor(t * n))]++;
+    total++;
+  }
+  return { counts, total };
+}
+
+/* 分布をステップ4のパネルに描く。
+   色は線と同じ対称グラデーション(symmetricAngleColor)にして、
+   ピッカーで線の色を変えたらヒストグラムも一緒に変わるようにする。
+
+   母体は**線を描いたオブジェクトだけ**。フィルタで消したものと、
+   rectLine を持たないもの(extras の無い古いGLBなど)は入らないので、
+   全体の個数と一致しないことがある。だから n を必ず出す */
+function renderRectLineHist(angles) {
+  const box = document.getElementById("rectline-hist-box");
+  if (!box) return;
+  if (!angles || angles.length === 0) { box.style.display = "none"; return; }
+  box.style.display = "block";
+
+  const { counts, total } = angleHistogram(angles, RECTLINE_HIST_BINS);
+  const { center, edge } = currentLineColors();
+  const maxCount = Math.max(...counts, 1);
+  const host = document.getElementById("rectline-hist");
+  host.innerHTML = "";
+  for (let b = 0; b < counts.length; b++) {
+    const lo = -45 + 90 * (b / counts.length);
+    const hi = -45 + 90 * ((b + 1) / counts.length);
+    const bin = document.createElement("div");
+    bin.className = "hist-bin";
+    bin.style.height = counts[b] === 0 ? "1px" : (counts[b] / maxCount * 36).toFixed(1) + "px";
+    bin.style.background = counts[b] === 0
+      ? "var(--panel-edge)"
+      : rgbToCss(symmetricAngleColor((lo + hi) / 2, center, edge));
+    bin.title = Number(lo.toPrecision(3)) + "° 〜 " + Number(hi.toPrecision(3)) + "°: " + counts[b] + "個";
+    host.appendChild(bin);
+  }
+  document.getElementById("rectline-hist-n").textContent = "n=" + total;
+}
+
 function rebuildRectLines() {
   if (rectLinesObj) {
     scene.remove(rectLinesObj);
@@ -5783,7 +5868,7 @@ function rebuildRectLines() {
     rectLinesObj.material.dispose();
     rectLinesObj = null;
   }
-  if (!document.getElementById("show-rect-lines").checked) return;
+  if (!document.getElementById("show-rect-lines").checked) { renderRectLineHist([]); return; }
 
   const thickness = Number(document.getElementById("line-width").value) / 1000; // mm -> m
   const { center, edge } = currentLineColors();
@@ -5793,6 +5878,7 @@ function rebuildRectLines() {
 
   const positions = [];
   const colors = [];
+  const angles = [];   // 分布用。線を描いたものだけを数える
   const A = new THREE.Vector3(), B = new THREE.Vector3(), N = new THREE.Vector3();
   const dir = new THREE.Vector3(), perp = new THREE.Vector3();
 
@@ -5826,12 +5912,14 @@ function rebuildRectLines() {
       ax1, ay1, az1, bx2, by2, bz2, ax2, ay2, az2
     );
     for (let k = 0; k < 6; k++) colors.push(r, g, b);
+    angles.push(rl.angle);
   }
 
   if (positions.length === 0) {
     setStatus("傾きラインを表示できるデータがありません。" + String.fromCharCode(10) +
       "DXF・内蔵サンプル・このアプリが書き出したGLB(点検データのZIPを含む)で利用できます。", true);
     document.getElementById("show-rect-lines").checked = false;
+    renderRectLineHist([]);
     return;
   }
 
@@ -5850,6 +5938,7 @@ function rebuildRectLines() {
   rectLinesObj = new THREE.Mesh(geometry, material);
   scene.add(rectLinesObj);
   updateRectLineLayering();
+  renderRectLineHist(angles);
 }
 
 document.getElementById("show-rect-lines").addEventListener("change", () => {
