@@ -23,7 +23,6 @@ const FUNCS = [
   "minAreaRect2D",
   "computeContourAttributes",
   "hsvToRgb",
-  "rgbToHsv",
   "hexToRgb01",
   "lerpColor",
   "numericToColor",

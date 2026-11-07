@@ -37,71 +37,60 @@ ok(c0[2] > 0.85 && c0[0] < 0.3, `0°=青 (${c0.map(x=>x.toFixed(2))})`);
 ok(cp45[0] > 0.85, `+45°=赤 (${cp45.map(x=>x.toFixed(2))})`);
 ok(approx(cm45[0], cp45[0]) && approx(cm45[2], cp45[2]), "±45°が対称(同色)");
 ok(F.symmetricAngleColor(99, BLUE, RED)[0] > 0.85, "範囲外はクランプ");
-/* 中間色はHSVで回す(v1.38.0で変更)。
+/* 中間色(v1.38.0)。
 
-   以前はRGBの直線補間で、この検査も「RGBの平均になること」を確かめていた。
-   しかし青と赤をRGBで混ぜると途中で**灰色がかった紫**を通り、±22.5°付近で
+   以前はRGBの2色直線補間で、この検査も「RGBの平均になること」を確かめていた。
+   しかし青と赤を混ぜると途中で**灰色がかった紫**を通り、±22.5°付近で
    彩度0.55・明度0.52まで落ちる。石の色分けは常に彩度0.85・明度0.95なので、
    **線のほうが下地より暗く鈍くなり、いちばん読みたい中間の傾きが見えにくい**。
-   いまは色相を短いほうに回し、彩度と明度は両端の値を補間する。 */
+
+   HSVで色相を回す案は、巻き戻しと無彩色の場合分けが要るうえ、
+   **既定の色では片方の分岐が一度も通らない**(逆の色を選んだときだけ動く)。
+   動かない道を残さないため、中間色を1つ持たせて2区間に分ける形にした。 */
 {
-  const hsv = (c) => F.rgbToHsv(c);
-  const midCol = F.symmetricAngleColor(22.5, BLUE, RED);
-  const sB = hsv(BLUE), sR = hsv(RED), sM = hsv(midCol);
+  const MID = [0.80, 0.14, 0.90];   // マゼンタ(#cd23e6 相当)
 
-  ok(!approx(midCol[0], (BLUE[0]+RED[0])/2, 0.02),
-     "**±22.5°はRGBの平均ではない**(平均にすると灰色がかる)");
-  ok(sM[1] > 0.80, `中間でも彩度が落ちない (S=${sM[1].toFixed(2)})`);
-  ok(sM[2] > 0.85, `**中間でも明度が落ちない** (V=${sM[2].toFixed(2)})`);
-  ok(Math.abs(sM[1] - (sB[1]+sR[1])/2) < 0.02, "彩度は両端の補間どおり");
-  ok(Math.abs(sM[2] - (sB[2]+sR[2])/2) < 0.02, "明度は両端の補間どおり");
-  // 青(色相≒0.62)から赤(0)へは、短いほう=紫・マゼンタ側を通る。
-  // 長いほうへ回すと緑・黄を通り、傾きの図として意味を持たない色になる
-  ok(sM[0] > 0.75 && sM[0] < 0.95,
-     `**色相は短いほう(紫〜マゼンタ)を回る** (H=${sM[0].toFixed(2)})`);
+  // 3つの色が、それぞれの角度でそのまま出る
+  const c0 = F.symmetricAngleColor(0, BLUE, RED, MID);
+  ok(c0.every((v, i) => approx(v, BLUE[i], 1e-9)), "0°は中央色そのもの");
+  const c22 = F.symmetricAngleColor(22.5, BLUE, RED, MID);
+  ok(c22.every((v, i) => approx(v, MID[i], 1e-9)), "**±22.5°は中間色そのもの**");
+  const c45b = F.symmetricAngleColor(45, BLUE, RED, MID);
+  ok(c45b.every((v, i) => approx(v, RED[i], 1e-9)), "±45°は両端色そのもの");
+  const cm22 = F.symmetricAngleColor(-22.5, BLUE, RED, MID);
+  ok(cm22.every((v, i) => approx(v, c22[i], 1e-9)), "±22.5°が対称(同色)");
 
-  // 両端は変えない(読み方「0°=青 / ±45°=赤」を保つ)
-  const c0 = F.symmetricAngleColor(0, BLUE, RED);
-  ok(approx(c0[0], BLUE[0], 1e-6) && approx(c0[1], BLUE[1], 1e-6) && approx(c0[2], BLUE[2], 1e-6),
-     "0°は中央色そのもの");
-  const c45 = F.symmetricAngleColor(45, BLUE, RED);
-  ok(approx(c45[0], RED[0], 1e-6) && approx(c45[1], RED[1], 1e-6) && approx(c45[2], RED[2], 1e-6),
-     "±45°は両端色そのもの");
+  // 2区間がそれぞれ直線になっている
+  const q1 = F.symmetricAngleColor(11.25, BLUE, RED, MID);
+  ok(q1.every((v, i) => approx(v, (BLUE[i] + MID[i]) / 2, 1e-9)), "前半は中央色と中間色の平均");
+  const q3 = F.symmetricAngleColor(33.75, BLUE, RED, MID);
+  ok(q3.every((v, i) => approx(v, (MID[i] + RED[i]) / 2, 1e-9)), "後半は中間色と両端色の平均");
 
-  // 無彩色を選ばれても壊れない。灰色には色相が無いので、相手の色相を使う
-  const GRAY = [0.5, 0.5, 0.5];
-  const g = F.symmetricAngleColor(22.5, GRAY, RED);
-  ok(F.rgbToHsv(g)[0] < 0.05 || F.rgbToHsv(g)[0] > 0.95,
-     "灰色→赤でも赤の色相のまま(0へ流れて別の色にならない)");
-  const gg = F.symmetricAngleColor(22.5, GRAY, [0.2, 0.2, 0.2]);
-  ok(F.rgbToHsv(gg)[1] === 0, "両方とも無彩色なら無彩色のまま");
+  // くすまないこと(この変更の目的)
+  ok(Math.max(...c22) > 0.85, "**中間でも明るさが落ちない** (max=" + Math.max(...c22).toFixed(2) + ")");
+  ok(Math.max(...c22) - Math.min(...c22) > 0.6,
+     "中間でも色味が残る(灰色に寄らない) (幅=" + (Math.max(...c22) - Math.min(...c22)).toFixed(2) + ")");
 
-  // 同じ色を選ばれたとき
-  const same = F.symmetricAngleColor(22.5, BLUE, BLUE);
-  ok(approx(same[0], BLUE[0], 1e-6) && approx(same[2], BLUE[2], 1e-6), "両端が同色なら全域で同色");
+  // 範囲外
+  ok(F.symmetricAngleColor(99, BLUE, RED, MID).every((v, i) => approx(v, RED[i], 1e-9)),
+     "範囲外は両端色にクランプ");
+  ok(F.symmetricAngleColor(-99, BLUE, RED, MID).every((v, i) => approx(v, RED[i], 1e-9)),
+     "負の範囲外もクランプ");
+
+  // 中間色を渡さなければ2色の直線補間(古い呼び出しを壊さない)
+  const noMid = F.symmetricAngleColor(22.5, BLUE, RED);
+  ok(noMid.every((v, i) => approx(v, (BLUE[i] + RED[i]) / 2, 1e-9)),
+     "中間色を省けば2色の直線補間に戻る");
 
   // 壊れた角度。NaNをそのまま通すと色がNaNになり、線が描かれない
-  const bad = F.symmetricAngleColor(NaN, BLUE, RED);
+  const bad = F.symmetricAngleColor(NaN, BLUE, RED, MID);
   ok(bad.every(Number.isFinite), "**角度がNaNでも色はNaNにしない**(線が消える)");
-  ok(approx(bad[2], BLUE[2], 1e-6), "読めない角度は0°として扱う");
-}
+  ok(bad.every((v, i) => approx(v, BLUE[i], 1e-9)), "読めない角度は0°として扱う");
+  ok(F.symmetricAngleColor(undefined, BLUE, RED, MID).every(Number.isFinite), "角度が無くても落ちない");
 
-/* rgbToHsv 単体 */
-{
-  const near = (a, b) => Math.abs(a - b) < 0.01;
-  const red = F.rgbToHsv([1, 0, 0]);
-  ok(near(red[0], 0) && near(red[1], 1) && near(red[2], 1), "赤はH0 S1 V1");
-  const grn = F.rgbToHsv([0, 1, 0]);
-  ok(near(grn[0], 1/3), "緑はH=1/3");
-  const blu = F.rgbToHsv([0, 0, 1]);
-  ok(near(blu[0], 2/3), "青はH=2/3");
-  ok(F.rgbToHsv([0, 0, 0])[1] === 0, "黒は彩度0(0除算にしない)");
-  ok(F.rgbToHsv([1, 1, 1])[1] === 0, "白も彩度0");
-  // hsvToRgb との往復
-  for (const c of [[0.9, 0.2, 0.1], [0.1, 0.5, 0.8], [0.3, 0.7, 0.3]]) {
-    const h = F.rgbToHsv(c), back = F.hsvToRgb(h[0], h[1], h[2]);
-    ok(back.every((v, i) => Math.abs(v - c[i]) < 1e-6), "hsvToRgbと往復して戻る");
-  }
+  // 3色とも同じでも破綻しない
+  const same = F.symmetricAngleColor(22.5, BLUE, BLUE, BLUE);
+  ok(same.every((v, i) => approx(v, BLUE[i], 1e-9)), "3色とも同色なら全域で同色");
 }
 
 console.log(`\n===== ${pass}成功 / ${fail}失敗 =====`);
