@@ -120,6 +120,25 @@
     font-size: calc(10px * var(--ui-scale));
     transition: transform 0.15s;
   }
+  /* 見出し行のオンオフ。畳んだままでも機能を切り替えられるようにする。
+     当たり判定を24px以上にするため、ラベルで包んで余白を持たせる */
+  .step-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(24px * var(--ui-scale));
+    height: calc(24px * var(--ui-scale));
+    margin-right: 2px;
+    flex: none;
+    cursor: pointer;
+  }
+  .step-toggle input {
+    width: calc(15px * var(--ui-scale));
+    height: calc(15px * var(--ui-scale));
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
   .step-label .step-sum.warn { color: var(--warn); }
   .step-label .step-sum {
     margin-left: auto;
@@ -4091,15 +4110,8 @@ async function exportBatchSVG() {
     if (prevApplied) {
       applyColorize();
     } else {
-      // 元々は色分けしていなかったので、元のマテリアルに戻す
-      for (const { mesh } of meshes) {
-        const orig = originalMaterials.get(mesh.uuid);
-        if (orig) mesh.material = orig;
-      }
-      document.getElementById("legend").style.display = "none";
-      lastLegendState = null;   // 色分けなしの状態に戻すので凡例も捨てる(§8.2)
-      hasApplied = false;
-      updateApplyBtnProminence();
+      // 元々は色分けしていなかったので、素の色に戻す
+      clearColorize();
     }
     hideProgress();
   }
@@ -5849,6 +5861,23 @@ function applyColorize() {
   updateApplyBtnProminence();
   applyFilter();  // 色分け後にフィルタ状態を再適用
   return true;
+}
+
+/* 色分けを解除して素の色に戻す。畳んだステップ3のチェックを外したときと、
+   まとめ書き出しの後始末で使う(同じものを2か所で組み立てない)。
+   凡例の内容(lastLegendState)も捨てる。残すと、素の色に戻した図をSVGに
+   書き出したとき前の属性のグラデーション凡例だけが付く(§8.2) */
+function clearColorize() {
+  clearTimeout(reapplyTimer);
+  for (const { mesh } of meshes) {
+    const orig = originalMaterials.get(mesh.uuid);
+    if (orig) mesh.material = orig;
+  }
+  document.getElementById("legend").style.display = "none";
+  lastLegendState = null;
+  hasApplied = false;
+  updateApplyBtnProminence();
+  updateStepSummaries();
 }
 
 document.getElementById("apply-btn").addEventListener("click", applyColorize);
@@ -9357,6 +9386,35 @@ if (isDevHost(location.hostname, location.protocol, STABLE_URL)) {
   }, 1200);
 }
 
+/* 見出し行のオンオフ。
+
+   ステップを畳むと中のチェックごと隠れるため、**現場で畳んだまま
+   傾きラインやラベルを切り替えられなかった**。見出しにチェックを出す。
+
+   3は対になるチェックが無く「色分けを実行」ボタンしかないので、
+   外したときは素の色に戻す(clearColorize)。4〜6は中にあるチェックの
+   写しで、change を発火させて既存の処理をそのまま通す
+   (自前で同じことをやり直すと、片方だけ更新されて実態と食い違う)。
+
+   常に出す。畳んだときだけ出すと、開閉のたびに部品が現れて消える */
+const STEP_TOGGLES = [
+  { index: 2, name: "色分け",     get: () => hasApplied,
+    set: (on) => { if (on) applyColorize(); else clearColorize(); } },
+  { index: 3, name: "傾きライン", id: "show-rect-lines" },
+  { index: 4, name: "フィルタ",   id: "filter-enable" },
+  { index: 5, name: "ラベル",     id: "show-labels" },
+];
+const stepToggleEls = new Map();   // index -> input
+
+function syncStepToggles() {
+  for (const t of STEP_TOGGLES) {
+    const el = stepToggleEls.get(t.index);
+    if (!el) continue;
+    const on = t.id ? document.getElementById(t.id).checked : t.get();
+    if (el.checked !== on) el.checked = on;
+  }
+}
+
 const stepSummaryEls = [];
 {
   const steps = [...document.querySelectorAll("#sidebar .step")];
@@ -9367,6 +9425,34 @@ const stepSummaryEls = [];
     sum.className = "step-sum";
     label.appendChild(sum);
     stepSummaryEls.push(sum);
+
+    const t = STEP_TOGGLES.find((x) => x.index === i);
+    if (t) {
+      const wrap = document.createElement("label");
+      wrap.className = "step-toggle";
+      wrap.title = t.name + "のオンオフ";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.setAttribute("aria-label", t.name + "のオンオフ");
+      wrap.appendChild(cb);
+      label.appendChild(wrap);
+      stepToggleEls.set(i, cb);
+      // 見出しはクリックで開閉するので、チェックの操作は伝播させない
+      wrap.addEventListener("click", (e) => e.stopPropagation());
+      cb.addEventListener("change", () => {
+        if (t.id) {
+          const inner = document.getElementById(t.id);
+          inner.checked = cb.checked;
+          inner.dispatchEvent(new Event("change"));
+        } else {
+          t.set(cb.checked);
+        }
+        updateStepSummaries();
+      });
+      // 中のチェックを直接触られたときも見出しに追従させる
+      if (t.id) document.getElementById(t.id).addEventListener("change", syncStepToggles);
+    }
+
     label.addEventListener("click", () => step.classList.toggle("collapsed"));
     // 必須の「1. モデル」「3. 色分け」だけ開き、任意のステップは畳んでおく
     // (見出しの「(任意)」表記と初期状態を一致させ、必須の流れを1→3→7と読ませる)
@@ -9376,6 +9462,7 @@ const stepSummaryEls = [];
 
 /* 各ステップのヘッダーに現在の設定状態を要約表示する */
 function updateStepSummaries() {
+  syncStepToggles();
   if (stepSummaryEls.length < 7) return;
   // 1. モデル
   const glbBtn = document.getElementById("glb-btn");
