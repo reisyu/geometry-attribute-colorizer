@@ -139,6 +139,10 @@
     accent-color: var(--accent);
     cursor: pointer;
   }
+  /* 番号を振らないブロック。1〜7の必須の流れの一部ではないことを見た目で示す
+     (§10.7。点検記録 §5.1.6) */
+  .block-survey { border-left: 2px solid var(--accent-dim); }
+  .block-survey .step-label { color: var(--ink); }
   .step-label .step-sum.warn { color: var(--warn); }
   .step-label .step-sum {
     margin-left: auto;
@@ -1035,7 +1039,7 @@
   <div id="status" style="margin-bottom:12px">モデル(GLB / DXF)を読み込んで開始してください。</div>
 
   <!-- STEP 1: モデル -->
-  <div class="step">
+  <div data-step="model" class="step">
     <div class="step-label">1. モデルを読み込む</div>
 
     <div class="sub-header">メインモデル</div>
@@ -1083,7 +1087,7 @@
   </div>
 
   <!-- STEP 2: 属性データ -->
-  <div class="step">
+  <div data-step="attr" class="step">
     <div class="step-label">2. 属性データを読み込む(任意)</div>
     <div class="row section-note" id="attr-source-state">
       DXFを読み込んだ場合は自動計算されるため、CSVの読み込みは不要です
@@ -1104,9 +1108,10 @@
       <button class="ghost" id="renumber-btn" style="margin-top:0">IDを振り直す(立面図の左下から)</button>
     </div>
 
-    <div class="sub-header">分類の列(手入力)</div>
+    <div class="sub-header">属性の列(手入力)</div>
     <div class="row hint">
-      石種・エリアなど、計算では出せない分類を手で付けるための列です。
+      石種・エリアなど、<b>石そのものの性質</b>を手で付けるための列です。
+      1石に1つで、調査日や調査者には紐づきません。
       選択したオブジェクトへの入力はビュー上のパネルから行います
     </div>
     <div class="row">
@@ -1116,26 +1121,10 @@
       <button class="ghost" id="add-class-col" style="margin-top:0">列を作る</button>
     </div>
     <div class="row" id="class-col-list"></div>
-
-    <div class="sub-header">前回までの記録(参考)</div>
-    <div class="row hint">
-      前回の調査で書き出したCSVを読むと、「前回:」の付いた列が増えます。
-      色分け・フィルタ・ラベルに使えるので、<b>前回メモの付いた石だけを光らせる</b>ことができます
-    </div>
-    <div class="row">
-      <label class="filebtn" id="ref-btn" for="ref-input">クリックして前回の .csv を選択</label>
-      <input type="file" id="ref-input">
-    </div>
-    <div class="row hint" id="ref-state">
-      読み込んだ内容は編集できません。書き出すCSVにも入りません(今回の記録だけを残すため)
-    </div>
-    <div class="row">
-      <button class="ghost" id="ref-clear" style="margin-top:0; display:none">参考を外す</button>
-    </div>
   </div>
 
   <!-- STEP 3: 色分け -->
-  <div class="step">
+  <div data-step="color" class="step">
     <div class="step-label">3. 色分けする</div>
 
     <div class="row">
@@ -1203,7 +1192,7 @@
   </div>
 
   <!-- STEP 4: 傾きライン -->
-  <div class="step">
+  <div data-step="lines" class="step">
     <div class="step-label">4. 傾きラインを描画する(任意)</div>
     <div class="row section-note">
       各オブジェクトの外接矩形の水平軸に沿った中心線を、矩形回転角に応じた色で描画します。線が水平に揃っていれば整った積み方、乱れていればランダムな積み方だと読み取れます
@@ -1227,7 +1216,7 @@
   </div>
 
   <!-- STEP 5: フィルタ -->
-  <div class="step">
+  <div data-step="filter" class="step">
     <div class="step-label">5. フィルタで絞り込む(任意)</div>
     <div class="row">
       <label class="checkbox-row"><input type="checkbox" id="filter-enable"> フィルタを有効にする</label>
@@ -1254,7 +1243,7 @@
   </div>
 
   <!-- STEP 5: ラベル -->
-  <div class="step">
+  <div data-step="label" class="step">
     <div class="step-label">6. ラベルを表示する(任意)</div>
     <div class="row">
       <label class="checkbox-row"><input type="checkbox" id="show-labels"> オブジェクトの位置に属性を表示</label>
@@ -1278,8 +1267,56 @@
     </div>
   </div>
 
+  <!-- 点検記録(番号を振らない。1〜7の必須の流れの一部ではない。§10.7 / §5.1.6) -->
+  <div data-step="survey" class="step block-survey">
+    <div class="step-label">点検記録 <span class="pill dev">開発中</span></div>
+    <div class="row section-note">
+      点検のたびに書き足していく記録です。<b>調査日・調査者ごと</b>に残り、
+      石そのものの性質(石種など)とは別に保存されます。
+      石への入力はビュー上のパネルの「調査」タブから行います
+    </div>
+
+    <div class="sub-header">点検項目</div>
+    <div class="row hint">
+      はらみ出し・ひび割れなど、<b>点検のたびに見て回る項目</b>です。
+      該当した石に印を付けると、その日その人の記録として残ります
+    </div>
+    <div class="row">
+      <input type="text" id="new-survey-col" placeholder="例: はらみ出し">
+    </div>
+    <div class="row">
+      <button class="ghost" id="add-survey-col" style="margin-top:0">項目を作る</button>
+    </div>
+    <div class="row" id="survey-col-list"></div>
+
+    <div class="sub-header">点検結果で色分けする</div>
+    <div class="row hint">
+      点検項目と履歴での色分けはここから選びます。
+      「3. 色分けする」には石そのものの属性だけが並びます
+    </div>
+    <div class="row">
+      <select id="survey-attribute"><option value="">(選択してください)</option></select>
+    </div>
+
+    <div class="sub-header">前回までの記録(参考)</div>
+    <div class="row hint">
+      前回の調査で書き出したCSVを読むと、「前回:」の付いた列が増えます。
+      色分け・フィルタ・ラベルに使えるので、<b>前回メモの付いた石だけを光らせる</b>ことができます
+    </div>
+    <div class="row">
+      <label class="filebtn" id="ref-btn" for="ref-input">クリックして前回の .csv を選択</label>
+      <input type="file" id="ref-input">
+    </div>
+    <div class="row hint" id="ref-state">
+      読み込んだ内容は編集できません。書き出すCSVにも入りません(今回の記録だけを残すため)
+    </div>
+    <div class="row">
+      <button class="ghost" id="ref-clear" style="margin-top:0; display:none">参考を外す</button>
+    </div>
+  </div>
+
   <!-- STEP 5: 書き出し -->
-  <div class="step">
+  <div data-step="export" class="step">
     <div class="step-label">7. 書き出す</div>
 
     <div class="row hint" id="share-support" style="display:none"></div>
@@ -1943,7 +1980,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.38.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.39.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -4663,7 +4700,7 @@ function loadCSVTable(rows, columns, displayName) {
       csvColumns = columns;
       noteBackupWarned = false;   // データが変わったら控えの可否を改めて知らせる
       // 手入力の記録は前のデータのもの。持ち越すと関係のない列を控えてしまう
-      manualCols.clear();
+      clearManualColumns();
       categoryOrders.clear();   // カテゴリの色の並びも、そのデータに固有のもの
       if (csvColumns.length < 2) {
         setStatus("CSVにはID列と属性列の少なくとも2列が必要です。", true);
@@ -4919,7 +4956,8 @@ function applyRecordLog() {
     for (const c of cols) if (String(r[c] ?? "") !== "") row[c] = r[c];
   }
   for (const c of cols) if (!csvColumns.includes(c)) csvColumns.push(c);
-  if (restored > 0) { manualCols.clear(); for (const c of cols) manualCols.add(c); }
+  // 記録から戻した列は点検項目(記録CSVに入っていたもの)
+  if (restored > 0) { surveyCols.clear(); for (const c of cols) registerManualColumn(c, "survey"); }
 
   // 前回 = 今日より前でいちばん新しい調査日
   const before = recordDates().filter((d) => !today || d < today);
@@ -4992,13 +5030,14 @@ function syncRecordDerived(valueCols) {
 function currentRecordRows() {
   const today = surveyDateValue(), me = surveyorValue();
   const idCol = document.getElementById("id-column").value;
-  const cols = manualEditColumns();
+  /* **点検項目とメモだけ**。静的な属性は台帳にあり、調査日・調査者の鍵を
+     付けてはいけない(§5.1.6)。ここを手入力の列すべてにしていたため、
+     石種を入れただけの石が 履歴:記録回数=1 になっていた */
+  const cols = surveyValueColumns(csvColumns, surveyCols);
   const out = [];
   if (cols.length === 0) return out;
   for (const row of csvRows) {
-    let any = false;
-    for (const c of cols) if (String(row[c] ?? "").trim() !== "") { any = true; break; }
-    if (!any) continue;
+    if (!hasSurveyEntry(row, cols)) continue;
     const r = { ID: row[idCol], [SURVEY_DATE_COL]: today, [SURVEYOR_COL]: me };
     for (const c of cols) r[c] = row[c] ?? "";
     out.push(r);
@@ -5026,6 +5065,9 @@ function isDerivedColumn(c) {
 function refIsCarried(c) {
   if (REF_KEEP.has(c)) return true;
   if (REF_SKIP.has(c)) return false;
+  /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
+     「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
+  if (staticCols.has(c)) return false;
   return !Object.prototype.hasOwnProperty.call(ATTR_INFO, c);
 }
 
@@ -5214,12 +5256,12 @@ async function exportBundle() {
     !(String(r[SURVEY_DATE_COL] ?? "") === today && String(r[SURVEYOR_COL] ?? "") === me));
   mergeRecordRows(mineNow);
 
+  /* 保存先が種別そのもの(§5.1.6)。
+     台帳 = 幾何属性 + 静的な属性。記録 = 点検項目 + メモ。
+     読み戻すときは、どちらのCSVに入っていたかで種別が決まる */
   const recCols = ["ID", SURVEY_DATE_COL, SURVEYOR_COL]
-    .concat(recordHeaderColumns([recordValueColumns(), manualEditColumns()]));
-  // 台帳は幾何属性だけ。記録の列は入れない(どちらが正か分からなくなる)
-  const manual = new Set(manualEditColumns());
-  const ledgerCols = csvColumns.filter((c) =>
-    !isDerivedColumn(c) && !manual.has(c) && c !== NOTE_FLAG_COL);
+    .concat(recordHeaderColumns([recordValueColumns(), surveyValueColumns(csvColumns, surveyCols)]));
+  const ledgerCols = ledgerColumns(csvColumns, surveyCols);
 
   const zip = await buildZip([
     { name: ZIP_MODEL, bytes: new Uint8Array(glb) },
@@ -5259,7 +5301,8 @@ async function loadBundle(file) {
   };
   // 記録CSVは調査日の列を持つ。台帳はそれを持たない。中身で見分ける
   const parsed = csvs.map((e) => ({ name: base(e.name), ...parse(e.bytes) }));
-  const ledger = parsed.find((p) => !p.cols.includes(SURVEY_DATE_COL));
+  const ledgers = parsed.filter((p) => !p.cols.includes(SURVEY_DATE_COL));
+  const ledger = ledgers[0];
   const records = parsed.filter((p) => p.cols.includes(SURVEY_DATE_COL));
   if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(調査日の列が無いCSV)。", true); return; }
 
@@ -5272,12 +5315,21 @@ async function loadBundle(file) {
      空の行は記録にも未保存の数にも入らない(どちらも中身で数えている) */
   if (!csvColumns.includes(NOTE_COL)) csvColumns.push(NOTE_COL);
 
+  /* 台帳CSVの手入力の列は静的な属性として戻す(§5.1.6)。
+     計算で出せる列と仕組みの列を除いた残りが、人が付けた属性 */
+  {
+    const idCol = idColumnName();
+    for (const c of ledger.cols) {
+      if (!isReservedColumn(c, idCol)) registerManualColumn(c, "static");
+    }
+  }
+
   /* 記録CSVのヘッダにある列も、同じ理由で器として戻す。
      分類や点検の列を先に作っておいて翌日書き足す使い方では、
      値がまだ無い列は記録の行にも台帳にも現れないので、**列ごと消えていた** */
   for (const c of recordHeaderColumns(records.map((p) => p.cols))) {
     if (!csvColumns.includes(c)) csvColumns.push(c);
-    manualCols.add(c);
+    registerManualColumn(c, "survey");   // 記録CSVにあった＝点検項目
   }
 
   recordLog = [];
@@ -5288,19 +5340,16 @@ async function loadBundle(file) {
 
   // 今回書いた石が見える図で始める
   const opening = openingAttribute(csvColumns);
-  let switched = false;
-  if (opening) {
-    const sel = document.getElementById("attribute");
-    if ([...sel.options].some((o) => o.value === opening)) {
-      sel.value = opening;
-      hasApplied = true;
-      applyColorize();
-      switched = true;
-    }
-  }
+  const switched = opening ? colorizeBySurveyColumn(opening) : false;
 
   let msg = "点検データを開きました: " + meshes.length + " オブジェクト" + NL +
     "記録 " + recordLog.length + " 行 / " + records.length + " ファイル";
+  /* 台帳は1つしか使わない。持ち寄り統合は「記録CSVだけを集める」運用なので
+     前提としては正しいが、**静的な属性が黙って消える**のは防ぐ(§5.1.6) */
+  if (ledgers.length > 1) {
+    msg += NL + "台帳が " + ledgers.length + " 個ありました。「" + ledger.name +
+      "」を使います(石種などの属性は、このファイルのものだけが入ります)。";
+  }
   if (info.prevDate) msg += NL + "前回(" + info.prevDate + ")の記録 " + info.prevRows + " 件を参考に重ねました。";
   if (info.restored) msg += NL + "今回(" + surveyDateValue() + ")のあなたの記録 " + info.restored + " 件を戻しました。";
   if (switched) {
@@ -5457,16 +5506,65 @@ function refreshAttributeOptions() {
   const idCol = document.getElementById("id-column").value;
   const attrSel = document.getElementById("attribute");
   attrSel.innerHTML = "";
-  visualizableColumns(idCol).forEach((c) => {
+  // 点検系は「点検記録」ブロックの側で選ぶ(§5.1.6)
+  const survey = new Set(surveyVisualColumns(csvColumns, surveyCols));
+  visualizableColumns(idCol).filter((c) => !survey.has(c)).forEach((c) => {
     const o = document.createElement("option");
     o.value = c; o.textContent = attrLabel(c);
     attrSel.appendChild(o);
   });
   attrSel.disabled = attrSel.options.length === 0;
+  refreshSurveyAttributeOptions();
   refreshBatchAttrList();
   updateAttrDescription();
   restoreManualRange(attrSel.value);   // 起動直後に選ばれている属性にも既定値を出す
 }
+
+/* 点検結果で色分けする。選ぶとステップ3の属性を切り替えて実行する
+   (色分けの仕組みは1つ。選ぶ場所だけを分ける) */
+function refreshSurveyAttributeOptions() {
+  const sel = document.getElementById("survey-attribute");
+  if (!sel) return;
+  const prev = sel.value;
+  const cols = surveyVisualColumns(csvColumns, surveyCols);
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = cols.length ? "(選択してください)" : "(点検の記録がありません)";
+  sel.appendChild(none);
+  for (const c of cols) {
+    const o = document.createElement("option");
+    o.value = c; o.textContent = attrLabel(c);
+    sel.appendChild(o);
+  }
+  sel.value = cols.includes(prev) ? prev : "";
+  sel.disabled = cols.length === 0;
+}
+
+/* 点検系の列で色分けする。色分けの仕組みは1つで、選ぶ場所だけを分けている。
+   ステップ3のドロップダウンには点検系を出していないので、値を入れるだけでは
+   選べない。一時的に項目を足してから選ぶ。
+   ZIPを開いた直後の自動切り替えもここを通す(経路を分けると片方だけ腐る) */
+function colorizeBySurveyColumn(col) {
+  if (!col || !csvColumns.includes(col)) return false;
+  const attrSel = document.getElementById("attribute");
+  if (![...attrSel.options].some((o) => o.value === col)) {
+    const o = document.createElement("option");
+    o.value = col; o.textContent = attrLabel(col);
+    attrSel.appendChild(o);
+  }
+  attrSel.value = col;
+  const sel = document.getElementById("survey-attribute");
+  if (sel && [...sel.options].some((o) => o.value === col)) sel.value = col;
+  updateAttrDescription();
+  hasApplied = true;
+  applyColorize();
+  updateStepSummaries();
+  return true;
+}
+
+document.getElementById("survey-attribute").addEventListener("change", (e) => {
+  colorizeBySurveyColumn(e.target.value);
+});
 
 function updateAttrDescription() {
   const attr = document.getElementById("attribute").value;
@@ -6817,7 +6915,7 @@ function disposeModel() {
   setUnsavedNotes(false);
 
   // 手入力の記録・選択・カテゴリ色の並び・座標系の推定は別のモデルへ持ち越さない
-  manualCols.clear();
+  clearManualColumns();
   categoryOrders.clear();
   geoGuess = null;
   refRows = []; refColumns = []; refLabel = "";   // 前の現場の記録を次の現場に重ねない
@@ -7977,8 +8075,59 @@ document.getElementById("mm-close").addEventListener("click", () => setGeoMode(f
 ============================================================ */
 const CLASS_MAX_NAME = 40;
 
-/* 手で書き込んだ列。控えと未保存の対象を「メモだけ」から広げるために覚えておく */
-const manualCols = new Set();
+/* 手で書き込んだ列。控えと未保存の対象を「メモだけ」から広げるために覚えておく。
+
+   **2種類ある(§5.1.6)。**
+   ・静的な属性(石種・エリア) — 石そのものの性質。調査日にも調査者にも依存しない。
+     1石に1つ。台帳CSVに入る
+   ・点検項目(はらみ出し・ひび割れ) — ある日ある人が見た所見。
+     鍵は ID×調査日×調査者 で、点検のたびに増える。記録CSVに入る
+
+   **種別は保存先そのもので決める。** 台帳CSVから来た列は静的、記録CSVから
+   来た列は点検項目。新しい接頭辞も設定ファイルも持たない。
+
+   分けない作りだと、石種を入れただけの石が 履歴:記録回数=1 になり、
+   「何度も指摘されている石」の図に点検していない石が混ざる */
+const staticCols = new Set();   // 静的な属性(台帳へ)
+const surveyCols = new Set();   // 点検項目(記録へ)
+
+/* 種別が分からない列は静的として扱う。記録側に倒すと履歴が汚れるため、
+   安全な側へ寄せる */
+function columnKind(col) {
+  if (surveyCols.has(col)) return "survey";
+  if (staticCols.has(col)) return "static";
+  return null;
+}
+
+function registerManualColumn(col, kind) {
+  if (kind === "survey") { staticCols.delete(col); surveyCols.add(col); }
+  else { surveyCols.delete(col); staticCols.add(col); }
+}
+
+function clearManualColumns() { staticCols.clear(); surveyCols.clear(); }
+
+/* 台帳CSVに入る列。幾何属性と静的な属性。
+   点検項目とメモは記録側なので入れない(どちらが正か分からなくなる)。純関数 */
+function ledgerColumns(columns, surveySet) {
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  return (columns || []).filter((c) =>
+    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && !survey.has(c));
+}
+
+/* 記録CSVに入る値の列。点検項目とメモ。
+   静的な属性は台帳にあるので入れない(調査日と調査者の鍵が付いてしまう)。純関数 */
+function surveyValueColumns(columns, surveySet) {
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  return (columns || []).filter((c) => survey.has(c) || c === NOTE_COL);
+}
+
+/* その石に、今回の点検として残すものがあるか。純関数。
+   **静的な属性は見ない。** 石種を入れただけの石を記録行にすると、
+   点検していない石が 履歴:記録回数 に数えられる */
+function hasSurveyEntry(row, cols) {
+  for (const c of cols || []) if (String((row || {})[c] ?? "").trim() !== "") return true;
+  return false;
+}
 
 function idColumnName() {
   const sel = document.getElementById("id-column");
@@ -8009,6 +8158,23 @@ function normalizeClassValue(v) {
 function classColumns() {
   const idCol = idColumnName();
   return csvColumns.filter((c) => !isReservedColumn(c, idCol));
+}
+
+/* 手で作った列を種別で分ける(§5.1.6)。種別が分からないものは静的に倒す */
+function staticClassColumns() { return classColumns().filter((c) => !surveyCols.has(c)); }
+function surveyItemColumns()  { return classColumns().filter((c) => surveyCols.has(c)); }
+
+/* 点検結果の色分けに出す列。点検項目と、記録から作られる履歴・前回。純関数
+
+   ステップ3のドロップダウンからは外す。点検項目を10本作ると色分けの選択肢が
+   10本増え、「前回:」も付くと20本になって選べなくなる(§5.1.6) */
+function surveyVisualColumns(columns, surveySet) {
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  return (columns || []).filter((c) =>
+    survey.has(c) ||
+    c.startsWith(HIST_PREFIX) ||
+    (c.startsWith(REF_PREFIX) && survey.has(c.slice(REF_PREFIX.length))) ||
+    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL);
 }
 
 /* その列で実際に使われている値と件数。多い順に並べる(よく使う値を手前に) */
@@ -8174,7 +8340,8 @@ function applyClassValue(col, rawValue) {
   let added = false;
   if (!csvColumns.includes(col)) { csvColumns.push(col); added = true; }
   for (const r of rows) r[col] = value;
-  manualCols.add(col);
+  // 種別は列を作ったときに決まっている。分からない列は静的に倒す(§5.1.6)
+  if (!columnKind(col)) registerManualColumn(col, "static");
   rememberClassValue(col, value);
   if (added) {
     refreshAttributeOptions();
@@ -8219,8 +8386,14 @@ function addClassValueFromInput() {
 
 /* ---- ステップ2(列を作る・値を整える) ---- */
 
-document.getElementById("add-class-col").addEventListener("click", () => {
-  const input = document.getElementById("new-class-col");
+document.getElementById("add-class-col").addEventListener("click", () => addManualColumn("static"));
+document.getElementById("add-survey-col").addEventListener("click", () => addManualColumn("survey"));
+
+/* 列を作る。**どちらのメニューで作ったかが、そのまま種別になる**(§5.1.6)。
+   作成時に種別を選ばせる画面を別に用意しなくてよい */
+function addManualColumn(kind) {
+  const input = document.getElementById(kind === "survey" ? "new-survey-col" : "new-class-col");
+  const what = kind === "survey" ? "点検項目" : "属性の列";
   const name = normalizeClassValue(input.value);
   const NL = String.fromCharCode(10);
   if (csvRows.length === 0) {
@@ -8239,22 +8412,30 @@ document.getElementById("add-class-col").addEventListener("click", () => {
     return;
   }
   csvColumns.push(name);
-  manualCols.add(name);
+  registerManualColumn(name, kind);
   input.value = "";
   refreshAttributeOptions();
   refreshLabelContentOptions();
   refreshFilterRuleOptions();
   renderClassColumnManager();
   renderClassifyUI();
-  setStatus("分類の列「" + name + "」を作りました。" + NL +
-            "ビュー上でオブジェクトを選ぶと、値を付けられます。");
-});
+  updateStepSummaries();
+  const where = kind === "survey"
+    ? "ビュー上でオブジェクトを選び、「調査」タブから印を付けます。" + NL +
+      "付けた内容は、その日その人の記録として残ります。"
+    : "ビュー上でオブジェクトを選ぶと、値を付けられます。";
+  setStatus(what + "「" + name + "」を作りました。" + NL + where);
+}
 
 function renderClassColumnManager() {
-  const box = document.getElementById("class-col-list");
+  renderColumnList("class-col-list", staticClassColumns(), "static");
+  renderColumnList("survey-col-list", surveyItemColumns(), "survey");
+}
+
+function renderColumnList(boxId, cols, kind) {
+  const box = document.getElementById(boxId);
   if (!box) return;
   box.innerHTML = "";
-  const cols = classColumns();
   if (cols.length === 0 || csvRows.length === 0) return;
 
   for (const col of cols) {
@@ -8273,6 +8454,28 @@ function renderClassColumnManager() {
       p.className = "hint";
       p.textContent = "まだ値が入っていません";
       d.appendChild(p);
+
+      /* **値が空のときだけ種別を変えられる**(§5.1.6)。
+         値が入っている列は変えられない — 点検→静的は複数回の値のどれを
+         残すかを決める必要があり、静的→点検は調査日と調査者を後から
+         付けることになるため、安全に自動化できない */
+      const other = kind === "survey" ? "static" : "survey";
+      const b = document.createElement("button");
+      b.className = "ghost";
+      b.style.marginTop = "0";
+      b.textContent = other === "survey" ? "点検項目に変える" : "属性の列に変える";
+      b.addEventListener("click", () => {
+        registerManualColumn(col, other);
+        refreshAttributeOptions();
+        refreshLabelContentOptions();
+        refreshFilterRuleOptions();
+        renderClassColumnManager();
+        renderClassifyUI();
+        updateStepSummaries();
+        setStatus("「" + col + "」を" +
+          (other === "survey" ? "点検項目" : "属性の列") + "に変えました。");
+      });
+      d.appendChild(b);
     }
     for (const [v, n] of counts) {
       const row = document.createElement("div");
@@ -8305,7 +8508,6 @@ function renameClassValue(col, from, to) {
     if (normalizeClassValue(row[col]) === from) { row[col] = next; n++; }
   }
   if (n === 0) return;
-  manualCols.add(col);
   afterManualEdit(col);
   const NL = String.fromCharCode(10);
   if (next === "") setStatus("「" + from + "」を空にしました(" + n + "個)。" + NL + "CSVで保存しないと残りません。");
@@ -8377,8 +8579,9 @@ noteInput.addEventListener("input", () => {
 
 /* 未保存として数える列。メモだけでなく、分類など手で書いた列すべてが対象。
    ここが漏れると「保存しなくてよい」と誤解させる */
+/* 未保存の表示と控えの対象。**種別によらず、手で書いたものはすべて守る** */
 function manualEditColumns() {
-  const cols = new Set(manualCols);
+  const cols = new Set([...staticCols, ...surveyCols]);
   if (csvColumns.includes(NOTE_COL)) cols.add(NOTE_COL);
   return [...cols];
 }
@@ -8631,7 +8834,8 @@ function offerNoteRestore() {
       else missing.add(k);
     }
     if (!csvColumns.includes(col)) csvColumns.push(col);
-    if (col !== NOTE_COL) manualCols.add(col);   // 復元した分も未保存・控えの対象にする
+    // 復元した分も未保存・控えの対象にする。種別が分からなければ静的に倒す
+    if (col !== NOTE_COL && !columnKind(col)) registerManualColumn(col, "static");
   }
   if (restored === 0) { setStatus("復元できる入力がありませんでした。", true); return; }
 
@@ -9397,36 +9601,39 @@ if (isDevHost(location.hostname, location.protocol, STABLE_URL)) {
    (自前で同じことをやり直すと、片方だけ更新されて実態と食い違う)。
 
    常に出す。畳んだときだけ出すと、開閉のたびに部品が現れて消える */
+/* ステップは data-step の名前で参照する。**位置番号で持たない。**
+   点検記録のブロックを足したときに、書き出しの要約が1つずれる作りだった */
 const STEP_TOGGLES = [
-  { index: 2, name: "色分け",     get: () => hasApplied,
+  { key: "color",  name: "色分け",     get: () => hasApplied,
     set: (on) => { if (on) applyColorize(); else clearColorize(); } },
-  { index: 3, name: "傾きライン", id: "show-rect-lines" },
-  { index: 4, name: "フィルタ",   id: "filter-enable" },
-  { index: 5, name: "ラベル",     id: "show-labels" },
+  { key: "lines",  name: "傾きライン", id: "show-rect-lines" },
+  { key: "filter", name: "フィルタ",   id: "filter-enable" },
+  { key: "label",  name: "ラベル",     id: "show-labels" },
 ];
-const stepToggleEls = new Map();   // index -> input
+const stepToggleEls = new Map();   // data-step -> input
 
 function syncStepToggles() {
   for (const t of STEP_TOGGLES) {
-    const el = stepToggleEls.get(t.index);
+    const el = stepToggleEls.get(t.key);
     if (!el) continue;
     const on = t.id ? document.getElementById(t.id).checked : t.get();
     if (el.checked !== on) el.checked = on;
   }
 }
 
-const stepSummaryEls = [];
+const stepSummaryEls = new Map();   // data-step -> span
 {
   const steps = [...document.querySelectorAll("#sidebar .step")];
   steps.forEach((step, i) => {
+    const key = step.dataset.step;
     const label = step.querySelector(".step-label");
     // 折りたたみ中でも設定状態が見えるサマリー表示
     const sum = document.createElement("span");
     sum.className = "step-sum";
     label.appendChild(sum);
-    stepSummaryEls.push(sum);
+    stepSummaryEls.set(key, sum);
 
-    const t = STEP_TOGGLES.find((x) => x.index === i);
+    const t = STEP_TOGGLES.find((x) => x.key === key);
     if (t) {
       const wrap = document.createElement("label");
       wrap.className = "step-toggle";
@@ -9436,7 +9643,7 @@ const stepSummaryEls = [];
       cb.setAttribute("aria-label", t.name + "のオンオフ");
       wrap.appendChild(cb);
       label.appendChild(wrap);
-      stepToggleEls.set(i, cb);
+      stepToggleEls.set(key, cb);
       // 見出しはクリックで開閉するので、チェックの操作は伝播させない
       wrap.addEventListener("click", (e) => e.stopPropagation());
       cb.addEventListener("change", () => {
@@ -9456,47 +9663,52 @@ const stepSummaryEls = [];
     label.addEventListener("click", () => step.classList.toggle("collapsed"));
     // 必須の「1. モデル」「3. 色分け」だけ開き、任意のステップは畳んでおく
     // (見出しの「(任意)」表記と初期状態を一致させ、必須の流れを1→3→7と読ませる)
-    if (i !== 0 && i !== 2) step.classList.add("collapsed");
+    // 必須の「1. モデル」「3. 色分け」だけ開く。他(点検記録を含む)は畳んでおく
+    if (key !== "model" && key !== "color") step.classList.add("collapsed");
   });
 }
 
 /* 各ステップのヘッダーに現在の設定状態を要約表示する */
 function updateStepSummaries() {
   syncStepToggles();
-  if (stepSummaryEls.length < 7) return;
+  const set = (key, text, warn) => {
+    const el = stepSummaryEls.get(key);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("warn", !!warn);
+  };
   // 1. モデル
   const glbBtn = document.getElementById("glb-btn");
-  stepSummaryEls[0].textContent = glbBtn.classList.contains("loaded")
+  set("model", glbBtn.classList.contains("loaded")
     ? glbBtn.textContent
-    : (meshes.length > 0 ? `サンプル ${meshes.length}個` : "");
-  // 2. 属性データ — 分類の列を作ってあることも畳んだ状態で分かるようにする
-  const nClass = csvRows.length > 0 ? classColumns().length : 0;
-  stepSummaryEls[1].textContent = csvRows.length > 0
-    ? `${csvRows.length}行` + (nClass > 0 ? ` / 分類${nClass}列` : "")
-    : "";
+    : (meshes.length > 0 ? `サンプル ${meshes.length}個` : ""));
+  // 2. 属性データ — 手で作った属性の列も畳んだ状態で分かるようにする
+  const nStatic = csvRows.length > 0 ? staticClassColumns().length : 0;
+  set("attr", csvRows.length > 0
+    ? `${csvRows.length}行` + (nStatic > 0 ? ` / 属性${nStatic}列` : "")
+    : "");
   // 3. 色分け
   const attrSel = document.getElementById("attribute");
-  stepSummaryEls[2].textContent = hasApplied && attrSel.value ? attrLabel(attrSel.value) : "";
-  /* 4〜6は見出しのチェック(§10.7.1)がオンオフを示すので、要約では
+  set("color", hasApplied && attrSel.value ? attrLabel(attrSel.value) : "");
+  /* 色分け〜ラベルは見出しのチェック(§10.7.1)がオンオフを示すので、要約では
      **チェックから読み取れないことだけ**を出す。「表示中」はチェックと
      同じことを二度言っているだけで、横に並ぶと目が滑る */
-  // 4. 傾きライン — チェック以外に言うことが無い
-  stepSummaryEls[3].textContent = "";
-  // 5. フィルタ
+  set("lines", "");   // チェック以外に言うことが無い
+  // 5. フィルタ — 何個除いたかはチェックからは分からないので、これは残す
   if (document.getElementById("filter-enable").checked) {
-    const m = document.getElementById("filter-result").textContent.match(/除外: (\d+)/);
-    // 5. フィルタ — 何個除いたかはチェックからは分からないので、これは残す
-    stepSummaryEls[4].textContent = m ? `除外 ${m[1]}個` : "";
+    const m = document.getElementById("filter-result").textContent.match(/除外: (d+)/);
+    set("filter", m ? `除外 ${m[1]}個` : "");
   } else {
-    stepSummaryEls[4].textContent = "";
+    set("filter", "");
   }
-  // 6. ラベル — チェック以外に言うことが無い
-  stepSummaryEls[5].textContent = "";
+  set("label", "");   // チェック以外に言うことが無い
+  // 点検記録 — 項目を作ってあることを畳んだ状態で見せる
+  const nSurvey = csvRows.length > 0 ? surveyItemColumns().length : 0;
+  set("survey", nSurvey > 0 ? `${nSurvey}項目` : "");
   // 7. 書き出す — 未保存の手入力があることは畳んでいても見せる。
   // 件数と呼び名はバッジ・パネルの注意と同じ関数から取る(数え方を分けない)
   const unsaved = hasUnsavedNotes ? unsavedManualSummary() : { n: 0, word: "メモ" };
-  stepSummaryEls[6].textContent = unsaved.n ? `${unsaved.word}${unsaved.n}件 未保存` : "";
-  stepSummaryEls[6].classList.toggle("warn", unsaved.n > 0);
+  set("export", unsaved.n ? `${unsaved.word}${unsaved.n}件 未保存` : "", unsaved.n > 0);
 }
 
 /* ============================================================

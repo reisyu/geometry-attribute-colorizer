@@ -46,6 +46,7 @@ const TESTS = [
   ["test_thickline.js", "選択の輪郭線(太線)"],
   ["test_selection.js", "ブラシ選択の当たり判定"],
   ["test_classify.js", "分類の列(手入力)"],
+  ["test_colkind.js", "属性と点検項目の分離"],
   ["test_geoloc.js", "現在地(平面直角座標)"],
   ["test_minimap.js", "俯瞰ミニマップ"],
   ["test_uiscale.js", "文字の大きさ"],
