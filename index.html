@@ -906,6 +906,16 @@
   #insp-classify .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
   /* 列ごとに1行。列を選び直さずに、見えている全部の列へ入力できるようにする
      (点検項目のように列が増えると、切り替えの手数が入力そのものを支配する) */
+  #insp-classify .cls-group-head {
+    font-size: calc(10.5px * var(--ui-scale));
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: .04em;
+    margin: 10px 0 2px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--panel-edge);
+  }
+  #insp-classify .cls-group-head:first-child { margin-top: 2px; }
   #insp-classify .cls-row { margin: 8px 0; }
   #insp-classify .cls-row-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   #insp-classify .cls-row-name {
@@ -1499,7 +1509,7 @@
       <input type="text" id="surveyor" placeholder="調査者" title="記録はこの名前で残ります">
     </div>
     <div id="insp-classify">
-      <label class="insp-note-label">分類・点検項目</label>
+      <label class="insp-note-label">入力</label>
       <div id="insp-class-list"></div>
       <div class="cls-new">
         <select id="insp-class-col" aria-label="値を追加する列"></select>
@@ -8246,9 +8256,24 @@ function renderClassifyUI() {
   if (cols.length === 0 || total === 0) { box.style.display = "none"; return; }
   box.style.display = "block";
 
+  /* 属性と点検項目は別のもの(§5.1.6)なので、入力するときも分けて見せる。
+     石種とはらみ出しが同じ並びにあると、1石に1つなのか点検のたびに
+     増えるのかが読み取れない。片方しか無ければ見出しは出さない */
   const list = document.getElementById("insp-class-list");
   list.innerHTML = "";
-  for (const col of cols) list.appendChild(buildClassRow(col, rows, total));
+  const groups = [
+    ["属性", staticClassColumns()],
+    ["点検項目", surveyItemColumns()],
+  ].filter(([, cs]) => cs.length > 0);
+  for (const [name, cs] of groups) {
+    if (groups.length > 1) {
+      const h = document.createElement("div");
+      h.className = "cls-group-head";
+      h.textContent = name;
+      list.appendChild(h);
+    }
+    for (const col of cs) list.appendChild(buildClassRow(col, rows, total));
+  }
 
   // 新しい値を足す先。行末の「＋」を押すとここが切り替わる
   const sel = document.getElementById("insp-class-col");
