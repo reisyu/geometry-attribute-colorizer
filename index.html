@@ -866,9 +866,24 @@
   #inspector textarea:disabled { opacity: .5; }
 
   #insp-classify { display: none; margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 8px; }
-  #insp-classify .cls-head { display: flex; align-items: center; gap: 8px; }
-  #insp-classify .cls-head select { flex: 1; min-width: 0; }
-  #insp-classify .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  #insp-classify .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
+  /* 列ごとに1行。列を選び直さずに、見えている全部の列へ入力できるようにする
+     (点検項目のように列が増えると、切り替えの手数が入力そのものを支配する) */
+  #insp-classify .cls-row { margin: 8px 0; }
+  #insp-classify .cls-row-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  #insp-classify .cls-row-name {
+    font-size: calc(11.5px * var(--ui-scale));
+    color: var(--ink);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  #insp-classify .cls-row-warn { font-size: calc(10.5px * var(--ui-scale)); color: var(--warn); }
+  #insp-classify .cls-new { display: flex; gap: 6px; margin-top: 10px; }
+  #insp-classify .cls-new select, #insp-classify .cls-new input { flex: 1; min-width: 0; }
+  #inspector .cls-chip.cls-add { font-weight: 700; padding: 3px 12px; }
+  /* 今回使ったが、いまは0件の候補。押せるが、データには無いことが分かるように薄く */
+  #inspector .cls-chip.cls-ghost { opacity: .55; }
+  #inspector .cls-chip.cls-ghost.on { opacity: 1; }
   #inspector .cls-chip {
     background: rgba(127, 138, 150, 0.16);
     border: 1px solid var(--panel-edge);
@@ -876,7 +891,9 @@
     color: var(--ink);
     font-family: inherit;
     font-size: calc(11.5px * var(--ui-scale));
-    padding: 3px 10px;
+    /* 指で繰り返し押す部品なので、当たり判定を24px以上にする
+       (点検項目では、このチップがチェックボックスそのものになる) */
+    padding: 5px 11px;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1409,13 +1426,11 @@
       <input type="text" id="surveyor" placeholder="調査者" title="記録はこの名前で残ります">
     </div>
     <div id="insp-classify">
-      <div class="cls-head">
-        <label class="insp-note-label" for="insp-class-col">分類</label>
-        <select id="insp-class-col"></select>
-      </div>
-      <div class="cls-chips" id="insp-class-chips"></div>
+      <label class="insp-note-label">分類・点検項目</label>
+      <div id="insp-class-list"></div>
       <div class="cls-new">
-        <input type="text" id="insp-class-new" placeholder="新しい値を入力">
+        <select id="insp-class-col" aria-label="値を追加する列"></select>
+        <input type="text" id="insp-class-new" placeholder="新しい値">
         <button class="g-btn" id="insp-class-add">追加</button>
       </div>
       <div class="g-warn" id="insp-class-warn"></div>
@@ -4778,6 +4793,27 @@ function recordValueColumns() {
   return cols;
 }
 
+/* 記録CSVが持つべき値の列。渡された列一覧をつないで重複を落とし、
+   鍵の3列(ID・調査日・調査者)は外す。純関数
+
+   書き出しでは「記録に現れた列」と「手で作った列」の両方を見る。
+   値の入っていない列は記録の行に現れず、台帳からも外れる(手入力の列なので)
+   ため、**作っただけの列はZIPを往復すると消えていた**。
+   点検項目を先に用意して翌日書き足す使い方ができない。
+   読み込みでも同じ関数でヘッダから器を戻す */
+function recordHeaderColumns(columnLists) {
+  const skip = new Set(["ID", SURVEY_DATE_COL, SURVEYOR_COL]);
+  const out = [];
+  for (const cols of columnLists || []) {
+    for (const c of cols || []) {
+      const n = String(c == null ? "" : c).trim();
+      if (n === "" || skip.has(n) || out.includes(n)) continue;
+      out.push(n);
+    }
+  }
+  return out;
+}
+
 /* 台帳から、今回の入力と「前回」を組み立てて画面に反映する。
 
    今回  = 今日の日付 × 自分の行 → そのまま編集できる値として csvRows に戻す
@@ -5100,7 +5136,8 @@ async function exportBundle() {
     !(String(r[SURVEY_DATE_COL] ?? "") === today && String(r[SURVEYOR_COL] ?? "") === me));
   mergeRecordRows(mineNow);
 
-  const recCols = ["ID", SURVEY_DATE_COL, SURVEYOR_COL].concat(recordValueColumns());
+  const recCols = ["ID", SURVEY_DATE_COL, SURVEYOR_COL]
+    .concat(recordHeaderColumns([recordValueColumns(), manualEditColumns()]));
   // 台帳は幾何属性だけ。記録の列は入れない(どちらが正か分からなくなる)
   const manual = new Set(manualEditColumns());
   const ledgerCols = csvColumns.filter((c) =>
@@ -5156,6 +5193,14 @@ async function loadBundle(file) {
      書いた石から色が変わる図で始めるために、器を先に用意する。
      空の行は記録にも未保存の数にも入らない(どちらも中身で数えている) */
   if (!csvColumns.includes(NOTE_COL)) csvColumns.push(NOTE_COL);
+
+  /* 記録CSVのヘッダにある列も、同じ理由で器として戻す。
+     分類や点検の列を先に作っておいて翌日書き足す使い方では、
+     値がまだ無い列は記録の行にも台帳にも現れないので、**列ごと消えていた** */
+  for (const c of recordHeaderColumns(records.map((p) => p.cols))) {
+    if (!csvColumns.includes(c)) csvColumns.push(c);
+    manualCols.add(c);
+  }
 
   recordLog = [];
   let differed = 0;
@@ -7871,14 +7916,53 @@ function classifyTargets() {
 
 /* ---- ビュー上のパネル(値を付ける) ---- */
 
+/* その列で今回使った値。
+   候補はデータに実際にある値から作るので、**最後の1つを外すと候補ごと消え**、
+   押し直す場所が無くなる。付け外しを繰り返す使い方(点検項目のチェック)では
+   これが行き止まりになるため、今回使った値は件数0でも残す。
+   覚えるのはこのセッションの間だけで、保存はしない
+   (語彙の保管場所はCSVそのもの、という決めは変えない) */
+const classRecentValues = new Map();   // 列名 -> Set(値)
+
+function rememberClassValue(col, value) {
+  if (value === "") return;
+  if (!classRecentValues.has(col)) classRecentValues.set(col, new Set());
+  classRecentValues.get(col).add(value);
+}
+
+/* 候補の並び。データにある値(多い順)の後ろに、今回使って今は0件の値を足す。純関数 */
+function classChoices(counted, recent) {
+  const out = Array.from(counted || []).map((e) => [e[0], e[1]]);
+  const seen = new Set(out.map((e) => e[0]));
+  for (const v of recent || []) if (!seen.has(v)) { out.push([v, 0]); seen.add(v); }
+  return out;
+}
+
+/* 点灯しているチップをもう一度押したときに書く値。
+   選んでいるものが全部その値なら空に戻す = チェックを外す感触になる。
+   混ざっているときは、まずその値に揃える(いきなり空にしない)。純関数 */
+function classChipNextValue(currentValues, tapped) {
+  const t = String(tapped == null ? "" : tapped);
+  if (t === "") return "";
+  const vals = Array.from(currentValues || []);
+  if (vals.length === 0) return t;
+  for (const v of vals) if (String(v == null ? "" : v) !== t) return t;
+  return "";
+}
+
 function renderClassifyUI() {
   const box = document.getElementById("insp-classify");
-  const sel = document.getElementById("insp-class-col");
   const cols = classColumns();
   const { rows, total } = classifyTargets();
   if (cols.length === 0 || total === 0) { box.style.display = "none"; return; }
   box.style.display = "block";
 
+  const list = document.getElementById("insp-class-list");
+  list.innerHTML = "";
+  for (const col of cols) list.appendChild(buildClassRow(col, rows, total));
+
+  // 新しい値を足す先。行末の「＋」を押すとここが切り替わる
+  const sel = document.getElementById("insp-class-col");
   const prev = sel.value;
   sel.innerHTML = "";
   for (const c of cols) {
@@ -7887,37 +7971,72 @@ function renderClassifyUI() {
     sel.appendChild(o);
   }
   sel.value = cols.includes(prev) ? prev : cols[0];
-  const col = sel.value;
 
-  // いま付いている値(全部同じならその値を点灯させる)
+  // 行では言えない知らせ(どの列にも書けない)は、まとめてここに出す
+  const skipped = total - rows.length;
+  document.getElementById("insp-class-warn").textContent =
+    skipped > 0 ? skipped + "個は属性データと結び付いていないため書けません" : "";
+}
+
+/* 1列ぶんの行 */
+function buildClassRow(col, rows, total) {
+  const wrap = document.createElement("div");
+  wrap.className = "cls-row";
+
+  // いま付いている値(選んだものが全部同じならその値を点灯させる)
   const current = new Set(rows.map((r) => normalizeClassValue(r[col])));
+  let filled = 0;
+  for (const r of rows) if (normalizeClassValue(r[col]) !== "") filled++;
 
-  const chips = document.getElementById("insp-class-chips");
-  chips.innerHTML = "";
-  for (const [v, n] of classValueCounts(col)) {
+  const head = document.createElement("div");
+  head.className = "cls-row-head";
+  const name = document.createElement("span");
+  name.className = "cls-row-name";
+  name.textContent = col;
+  head.appendChild(name);
+  // 黙って上書きしない。列ごとに、既に値が入っている個数を先に出す
+  if (filled > 0 && total > 1) {
+    const w = document.createElement("span");
+    w.className = "cls-row-warn";
+    w.textContent = filled + "個に値あり(上書きされます)";
+    head.appendChild(w);
+  }
+  wrap.appendChild(head);
+
+  const chips = document.createElement("div");
+  chips.className = "cls-chips";
+  for (const [v, n] of classChoices(classValueCounts(col), classRecentValues.get(col))) {
     const b = document.createElement("button");
-    b.className = "cls-chip" + (current.size === 1 && current.has(v) ? " on" : "");
+    b.className = "cls-chip" + (current.size === 1 && current.has(v) ? " on" : "")
+                             + (n === 0 ? " cls-ghost" : "");
     b.textContent = v;
     const cn = document.createElement("span");
     cn.className = "cls-n"; cn.textContent = n;
     b.appendChild(cn);
-    b.addEventListener("click", () => applyClassValue(col, v));
+    b.title = "点灯しているときにもう一度押すと外します";
+    b.addEventListener("click", () => applyClassValue(col, classChipNextValue(current, v)));
     chips.appendChild(b);
   }
-  const clr = document.createElement("button");
-  clr.className = "cls-chip";
-  clr.textContent = "空にする";
-  clr.addEventListener("click", () => applyClassValue(col, ""));
-  chips.appendChild(clr);
+  // 「空にする」は、外せる値が実際にあるときだけ出す(行が増えるので常時は邪魔)
+  if (filled > 0) {
+    const clr = document.createElement("button");
+    clr.className = "cls-chip";
+    clr.textContent = "空にする";
+    clr.addEventListener("click", () => applyClassValue(col, ""));
+    chips.appendChild(clr);
+  }
+  const add = document.createElement("button");
+  add.className = "cls-chip cls-add";
+  add.textContent = "＋";
+  add.title = "この列に新しい値を追加";
+  add.addEventListener("click", () => {
+    document.getElementById("insp-class-col").value = col;
+    document.getElementById("insp-class-new").focus();
+  });
+  chips.appendChild(add);
 
-  // 上書きの予告。黙って書き換えない(メモの一括入力と同じ扱い)
-  let filled = 0;
-  for (const r of rows) if (normalizeClassValue(r[col]) !== "") filled++;
-  const skipped = total - rows.length;
-  const msgs = [];
-  if (filled > 0 && total > 1) msgs.push(filled + "個には既に値が入っています(上書きされます)");
-  if (skipped > 0) msgs.push(skipped + "個は属性データと結び付いていないため書けません");
-  document.getElementById("insp-class-warn").textContent = msgs.join(" / ");
+  wrap.appendChild(chips);
+  return wrap;
 }
 
 function applyClassValue(col, rawValue) {
@@ -7933,6 +8052,7 @@ function applyClassValue(col, rawValue) {
   if (!csvColumns.includes(col)) { csvColumns.push(col); added = true; }
   for (const r of rows) r[col] = value;
   manualCols.add(col);
+  rememberClassValue(col, value);
   if (added) {
     refreshAttributeOptions();
     refreshLabelContentOptions();
@@ -7960,7 +8080,6 @@ function afterManualEdit(col) {
   renderClassColumnManager();
 }
 
-document.getElementById("insp-class-col").addEventListener("change", renderClassifyUI);
 document.getElementById("insp-class-add").addEventListener("click", addClassValueFromInput);
 document.getElementById("insp-class-new").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); addClassValueFromInput(); }

@@ -7,7 +7,9 @@
  *  ・自動計算される列と同じ名前を作らせないこと(読み直しで消えるため)
  * の2つが要になる。実コードから抽出した関数で確かめる。
  */
-const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
+const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX, HIST_PREFIX,
+        classChipNextValue, classChoices, recordHeaderColumns,
+        SURVEY_DATE_COL, SURVEYOR_COL } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n); };
@@ -74,6 +76,79 @@ ok(!isReservedColumn("石種", ""), "石種は使える");
 ok(!isReservedColumn("エリア", ""), "エリアは使える");
 ok(!isReservedColumn("劣化度", ""), "劣化度は使える");
 ok(!isReservedColumn("width", ""), "小文字のwidthは別の列として使える(計算列はWidth)");
+
+
+/* ---------- チップをもう一度押すと外れる ---------- */
+/* 点検項目のように値が「該当」1つしかない列では、チップがチェックボックス
+   そのものになる。押して付け、もう一度押して外せないと、外すために
+   「空にする」を探すことになり、項目の数だけ余計な操作が増える */
+{
+  const eqv = (a, b, n) => ok(a === b, n + "  (" + JSON.stringify(a) + ")");
+  eqv(classChipNextValue([], "該当"), "該当", "まだ何も付いていなければ、その値を書く");
+  eqv(classChipNextValue([""], "該当"), "該当", "空なら、その値を書く");
+  eqv(classChipNextValue(["該当"], "該当"), "", "**同じ値をもう一度押すと外れる**");
+  eqv(classChipNextValue(["非該当"], "該当"), "該当", "別の値が付いていれば、押した値に変える");
+  eqv(classChipNextValue(new Set(["該当"]), "該当"), "", "Setで渡しても同じ(呼び出し側はSet)");
+
+  // 複数選択で値が混ざっているとき。いきなり空にすると、
+  // 「揃えたいだけ」の操作で**書いてあるものまで消える**
+  eqv(classChipNextValue(["該当", ""], "該当"), "該当", "**混ざっていれば、まず揃える**(空にしない)");
+  eqv(classChipNextValue(["該当", "非該当"], "該当"), "該当", "別の値が混ざっていても揃える");
+  eqv(classChipNextValue(["該当", "該当"], "該当"), "", "全部同じなら外れる");
+
+  // 「空にする」チップは常に空
+  eqv(classChipNextValue(["該当"], ""), "", "空を押せば空のまま");
+  eqv(classChipNextValue([], ""), "", "何も付いていないときに空を押しても空");
+
+  // 壊れた入力
+  eqv(classChipNextValue(null, "該当"), "該当", "nullでも落ちない");
+  eqv(classChipNextValue([null, null], "該当"), "該当", "値がnullなら、まだ付いていない扱い");
+  eqv(classChipNextValue(["該当"], null), "", "押した値がnullなら空");
+}
+
+/* ---------- 外した値を候補に残す ---------- */
+/* 候補はデータに実際にある値から作るので、**最後の1つを外すと候補ごと消え**、
+   押し直す場所が無くなる。付け外しを繰り返す点検項目では行き止まりになる */
+{
+  const j = (a) => JSON.stringify(a);
+  ok(j(classChoices([["該当", 3]], null)) === j([["該当", 3]]),
+     "今回使った値が無ければ、データのままを返す");
+  ok(j(classChoices([], new Set(["該当"]))) === j([["該当", 0]]),
+     "**0件でも、今回使った値は候補に残す**");
+  ok(j(classChoices([["該当", 2]], new Set(["該当"]))) === j([["該当", 2]]),
+     "データにある値は二重に出さない(件数はデータ側を使う)");
+  ok(j(classChoices([["該当", 2]], new Set(["非該当"]))) === j([["該当", 2], ["非該当", 0]]),
+     "データにある値が先、今回だけの値が後ろ");
+  ok(j(classChoices([], [])) === j([]), "どちらも空なら空");
+  ok(j(classChoices(null, null)) === j([]), "nullでも落ちない");
+  {
+    const src = [["該当", 1]];
+    classChoices(src, new Set(["非該当"]));
+    ok(j(src) === j([["該当", 1]]), "**元の配列を書き換えない**(呼び出しごとに増えていかない)");
+  }
+}
+
+/* ---------- 記録CSVのヘッダ(作っただけの列を消さない) ---------- */
+/* 列を作って値を入れないままZIPを保存すると、台帳からは手入力列として外れ、
+   記録の行にも現れないため、**作った列ごと消えていた**。
+   点検項目を先に用意して翌日書き足す使い方が成立しない */
+{
+  const j = (a) => JSON.stringify(a);
+  ok(j(recordHeaderColumns([["Note"], ["点検:ひび割れ"]])) === j(["Note", "点検:ひび割れ"]),
+     "**値が無い列もヘッダに残す**(複数の一覧をつなぐ)");
+  ok(j(recordHeaderColumns([["Note", "石種"], ["石種", "Note"]])) === j(["Note", "石種"]),
+     "重複は落とし、最初に出た順を保つ");
+  ok(j(recordHeaderColumns([["ID", SURVEY_DATE_COL, SURVEYOR_COL, "Note"]])) === j(["Note"]),
+     "**鍵の3列は値の列ではない**ので外す");
+  ok(j(recordHeaderColumns([])) === j([]), "空なら空");
+  ok(j(recordHeaderColumns(null)) === j([]), "nullでも落ちない");
+  ok(j(recordHeaderColumns([null, undefined, ["Note"]])) === j(["Note"]),
+     "中身がnullの一覧が混じっても落ちない");
+  ok(j(recordHeaderColumns([["", "  ", "Note"]])) === j(["Note"]),
+     "空や空白だけの列名は拾わない");
+  ok(j(recordHeaderColumns([[" Note "]])) === j(["Note"]), "前後の空白は落とす");
+  ok(j(recordHeaderColumns([["ID"]])) === j([]), "鍵だけなら値の列は無い");
+}
 
 console.log("");
 console.log("===== " + pass + "成功 / " + fail + "失敗 =====");
