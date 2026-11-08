@@ -5612,15 +5612,10 @@ function refreshSurveyAttributeOptions() {
    ZIPを開いた直後の自動切り替えもここを通す(経路を分けると片方だけ腐る) */
 function colorizeBySurveyColumn(col) {
   if (!col || !csvColumns.includes(col)) return false;
-  const attrSel = document.getElementById("attribute");
-  if (![...attrSel.options].some((o) => o.value === col)) {
-    const o = document.createElement("option");
-    o.value = col; o.textContent = attrLabel(col);
-    attrSel.appendChild(o);
-  }
-  attrSel.value = col;
   const sel = document.getElementById("survey-attribute");
-  if (sel && [...sel.options].some((o) => o.value === col)) sel.value = col;
+  if (!sel || ![...sel.options].some((o) => o.value === col)) return false;
+  sel.value = col;
+  colorizeFrom = "survey";
   updateAttrDescription();
   hasApplied = true;
   applyColorize();
@@ -5633,6 +5628,7 @@ document.getElementById("survey-attribute").addEventListener("change", (e) => {
 });
 
 function updateAttrDescription() {
+  // 説明はステップ3で選んでいる属性のもの。点検側は別の見出しで説明している
   const attr = document.getElementById("attribute").value;
   document.getElementById("attr-description").textContent = attrDescription(attr);
 }
@@ -5805,9 +5801,22 @@ function scheduleReapply() {
   reapplyTimer = setTimeout(applyColorize, 150);
 }
 
+/* 色分けをどちらで選んだか。3Dの表示は1つしかないので、同時に2つは出せない。
+   **混ぜないのは状態のほう**。点検記録で選んだ色を、ステップ3が
+   自分で選んだかのように見せない(選択肢に注入すると、分けた意味が消える) */
+let colorizeFrom = "attr";   // "attr" | "survey"
+
+function currentColorizeColumn() {
+  if (colorizeFrom === "survey") {
+    const v = document.getElementById("survey-attribute").value;
+    if (v) return v;
+  }
+  return document.getElementById("attribute").value;
+}
+
 function applyColorize() {
   const idCol = document.getElementById("id-column").value;
-  const attr = document.getElementById("attribute").value;
+  const attr = currentColorizeColumn();
   const prefix = document.getElementById("id-prefix").value;
   const preset = document.getElementById("preset").value;
   const cLow = hexToRgb01(document.getElementById("color-low").value);
@@ -6047,6 +6056,8 @@ function applyColorize() {
    凡例の内容(lastLegendState)も捨てる。残すと、素の色に戻した図をSVGに
    書き出したとき前の属性のグラデーション凡例だけが付く(§8.2) */
 function clearColorize() {
+  colorizeFrom = "attr";
+  document.getElementById("survey-attribute").value = "";
   clearTimeout(reapplyTimer);
   for (const { mesh } of meshes) {
     const orig = originalMaterials.get(mesh.uuid);
@@ -7523,7 +7534,7 @@ function applyGroupNote() {
     refreshFilterRuleOptions();
   }
   scheduleSaveNotes();
-  if (hasApplied && isLiveColorColumn(document.getElementById("attribute").value)) applyColorize();
+  if (hasApplied && isLiveColorColumn(currentColorizeColumn())) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
   setUnsavedNotes(true);
   updateSelectionUI();
@@ -8469,7 +8480,7 @@ function afterManualEdit(col) {
   }
   scheduleSaveNotes();
   setUnsavedNotes(true);
-  if (hasApplied && document.getElementById("attribute").value === col) applyColorize();
+  if (hasApplied && (currentColorizeColumn() === col || isLiveColorColumn(currentColorizeColumn()))) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
   if (noteTargetRow) renderInspectorTable(noteTargetRow);
   renderClassifyUI();
@@ -8680,7 +8691,7 @@ noteInput.addEventListener("input", () => {
   renderInspectorTable(noteTargetRow);   // HasNoteの表示を実際の値に追従させる
   scheduleSaveNotes();
   // 有無で色分け中・ラベル表示中なら、書いた瞬間に図へ反映する
-  if (hasApplied && isLiveColorColumn(document.getElementById("attribute").value)) applyColorize();
+  if (hasApplied && isLiveColorColumn(currentColorizeColumn())) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
   setUnsavedNotes(true);
 });
@@ -9233,6 +9244,9 @@ document.getElementById("rd-keep").addEventListener("click", () => {
 /* 属性を切り替えるときに、前の属性の値を退避してから新しい値を出す。
    色分けの再適用より先に走らせる必要があるため、changeの登録順に注意 */
 document.getElementById("attribute").addEventListener("change", () => {
+  // ステップ3で選んだら、色分けの出どころもこちらに戻す
+  colorizeFrom = "attr";
+  document.getElementById("survey-attribute").value = "";
   stashManualRange();
   restoreManualRange(document.getElementById("attribute").value);
 });
@@ -9795,9 +9809,13 @@ function updateStepSummaries() {
   set("attr", csvRows.length > 0
     ? `${csvRows.length}行` + (nStatic > 0 ? ` / 属性${nStatic}列` : "")
     : "");
-  // 3. 色分け
+  /* 3. 色分け — 点検記録で色分けしているときは、ステップ3は自分の属性名を
+     出さない。どちらの図を見ているのかが、畳んだ状態でも分かるようにする */
+  const bySurvey = hasApplied && colorizeFrom === "survey" &&
+                   document.getElementById("survey-attribute").value;
   const attrSel = document.getElementById("attribute");
-  set("color", hasApplied && attrSel.value ? attrLabel(attrSel.value) : "");
+  set("color", bySurvey ? "点検記録で色分け中"
+                        : (hasApplied && attrSel.value ? attrLabel(attrSel.value) : ""));
   /* 色分け〜ラベルは見出しのチェック(§10.7.1)がオンオフを示すので、要約では
      **チェックから読み取れないことだけ**を出す。「表示中」はチェックと
      同じことを二度言っているだけで、横に並ぶと目が滑る */
@@ -9810,9 +9828,12 @@ function updateStepSummaries() {
     set("filter", "");
   }
   set("label", "");   // チェック以外に言うことが無い
-  // 点検記録 — 項目を作ってあることを畳んだ状態で見せる
+  /* 点検記録 — 色分けに使っているときは、どの図かを出す。
+     畳んでいても「いま何の図を見ているか」が分かるようにする */
   const nSurvey = csvRows.length > 0 ? surveyItemColumns().length : 0;
-  set("survey", nSurvey > 0 ? `${nSurvey}項目` : "");
+  set("survey", bySurvey
+    ? attrLabel(document.getElementById("survey-attribute").value)
+    : (nSurvey > 0 ? `${nSurvey}項目` : ""));
   // 7. 書き出す — 未保存の手入力があることは畳んでいても見せる。
   // 件数と呼び名はバッジ・パネルの注意と同じ関数から取る(数え方を分けない)
   const unsaved = hasUnsavedNotes ? unsavedManualSummary() : { n: 0, word: "メモ" };
