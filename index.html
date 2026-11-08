@@ -958,7 +958,7 @@
   }
   #inspector .cls-chip:hover { border-color: var(--accent); color: var(--accent); }
   #inspector .cls-chip.on { background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700; }
-  /* 属性タブ / 調査タブ。狭い画面でも2つ並ぶよう、文字だけの切り替えにする */
+  /* 属性タブ / 点検タブ。狭い画面でも2つ並ぶよう、文字だけの切り替えにする */
   .insp-tabs { display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid var(--panel-edge); }
   .insp-tab {
     flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
@@ -975,7 +975,7 @@
   }
   body.light input[type="date"]::-webkit-calendar-picker-indicator { filter: opacity(.6); }
 
-  /* 調査日と調査者。書いている場所のすぐ上に置き、何が刻まれるかを見えるようにする */
+  /* 点検日と点検者。書いている場所のすぐ上に置き、何が刻まれるかを見えるようにする */
   .survey-head { display: flex; gap: 6px; margin-bottom: 8px; }
   .survey-head input {
     flex: 1 1 0; min-width: 0; margin: 0;
@@ -992,7 +992,7 @@
   #insp-note-prev .nl-item { padding: 2px 0; white-space: pre-wrap; }
   #insp-note-prev .nl-item + .nl-item { border-top: 1px solid rgba(127, 138, 150, 0.22); }
   #insp-note-prev .nl-head { color: var(--accent); margin-right: 6px; font-family: var(--mono); }
-  /* 同じ調査日の他の人の記述は、過去の回と区別が付くようにする */
+  /* 同じ点検日の他の人の記述は、過去の回と区別が付くようにする */
   #insp-note-prev .nl-same .nl-head::after { content: "（今回）"; color: var(--ink-dim); font-family: var(--sans); }
   #inspector .cls-chip .cls-n { opacity: .65; margin-left: 4px; }
   #insp-classify .cls-new { display: flex; gap: 6px; }
@@ -1074,7 +1074,7 @@
     </div>
     <div class="row">
       <label class="small" for="dataset-name">データ名</label>
-      <input type="text" id="dataset-name" placeholder="例: 本丸東面_2026調査">
+      <input type="text" id="dataset-name" placeholder="例: 本丸東面_2026点検">
     </div>
     <div class="row hint">
       書き出すCSVのDataset列に入ります
@@ -1133,7 +1133,7 @@
     <div class="sub-header">属性の列(手入力)</div>
     <div class="row hint">
       石種・エリアなど、<b>石そのものの性質</b>を手で付けるための列です。
-      1石に1つで、調査日や調査者には紐づきません。
+      1石に1つで、点検日や点検者には紐づきません。
       選択したオブジェクトへの入力はビュー上のパネルから行います
     </div>
     <div class="row">
@@ -1293,9 +1293,9 @@
   <div data-step="survey" class="step block-survey">
     <div class="step-label">点検記録(開発中)</div>
     <div class="row section-note">
-      点検のたびに書き足していく記録です。<b>調査日・調査者ごと</b>に残り、
+      点検のたびに書き足していく記録です。<b>点検日・点検者ごと</b>に残り、
       石そのものの性質(石種など)とは別に保存されます。
-      石への入力はビュー上のパネルの「調査」タブから行います
+      石への入力はビュー上のパネルの「点検」タブから行います
     </div>
 
     <div class="sub-header">点検項目</div>
@@ -1322,7 +1322,7 @@
 
     <div class="sub-header">前回までの記録(参考)</div>
     <div class="row hint">
-      前回の調査で書き出したCSVを読むと、「前回:」の付いた列が増えます。
+      前回の点検で書き出したCSVを読むと、「前回:」の付いた列が増えます。
       色分け・フィルタ・ラベルに使えるので、<b>前回メモの付いた石だけを光らせる</b>ことができます
     </div>
     <div class="row">
@@ -1510,7 +1510,7 @@
          最後に開いていたほうを次も開く(§10.9) -->
     <div class="insp-tabs" role="tablist">
       <button class="insp-tab" id="tab-attr" role="tab">属性</button>
-      <button class="insp-tab on" id="tab-survey" role="tab">調査</button>
+      <button class="insp-tab on" id="tab-survey" role="tab">点検</button>
     </div>
     <div id="insp-pane-attr">
       <table id="insp-table"></table>
@@ -1518,7 +1518,7 @@
     <div id="insp-pane-survey">
     <div class="survey-head">
       <input type="date" id="survey-date" title="この日付で記録されます">
-      <input type="text" id="surveyor" placeholder="調査者" title="記録はこの名前で残ります">
+      <input type="text" id="surveyor" placeholder="点検者" title="記録はこの名前で残ります">
     </div>
     <div id="insp-classify">
       <label class="insp-note-label">入力</label>
@@ -1636,7 +1636,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
    数cm単位の食い込みには効かない。
 
    そこで**奥のパスと手前のパスに分け、間で深度だけ捨てる**。
-   背景(bgScene)を描く → 深度を消す → 調査対象(scene)を描く、の順にすると、
+   背景(bgScene)を描く → 深度を消す → 点検対象(scene)を描く、の順にすると、
    輪郭モデルは常に写真の手前になる。あとは輪郭モデルを半透明にすれば
    下の写真が透けて見える(不透明度はステップ1のスライダー)。
 
@@ -1644,7 +1644,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
    sceneにも背景色を持たせると、手前のパスが奥のパスを塗り潰してしまう。 */
 renderer.autoClear = false;
 
-const scene = new THREE.Scene();     // 調査対象(手前のパス): 輪郭モデル・傾きライン・選択の強調
+const scene = new THREE.Scene();     // 点検対象(手前のパス): 輪郭モデル・傾きライン・選択の強調
 const bgScene = new THREE.Scene();   // 背景(奥のパス): グリッドとフォトグラメトリモデル
 bgScene.background = new THREE.Color(0x17191d);
 
@@ -2002,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.39.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.40.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -3187,7 +3187,7 @@ function loadDXFFile(file) {
 document.getElementById("download-csv-btn").addEventListener("click", () => {
   if (csvRows.length === 0) return;
   // データ名はDataset列として全行に付く(ledgerCSVが付ける)。
-  // 複数の調査データをBIツールやpandasで結合したとき、どのデータ由来かを識別する列
+  // 複数のデータをBIツールやpandasで結合したとき、どのデータ由来かを識別する列
   const dsName = document.getElementById("dataset-name").value.trim();
   // 前回分は今回の記録ではないので書き出さない(§5.1.4)
   const cols = csvColumns.filter((c) => !isDerivedColumn(c));
@@ -4854,10 +4854,10 @@ let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファ
    ZIPの中身:
      model.glb    台紙。形とID。一度作れば変わらない
      台帳.csv     全石の幾何属性。変わらない
-     記録*.csv    触った石だけ。調査のたびに増える
+     記録*.csv    触った石だけ。点検のたびに増える
 
-   記録は「1オブジェクト × 1調査日 × 1調査者 = 1行」の縦長。
-   鍵は (ID, 調査日, 調査者)。**同じ石に2人が書けば2行並ぶ**。
+   記録は「1オブジェクト × 1点検日 × 1点検者 = 1行」の縦長。
+   鍵は (ID, 点検日, 点検者)。**同じ石に2人が書けば2行並ぶ**。
    これがそのまま統合の仕組みになる: 持ち寄ったZIPの記録CSVを全部読み、
    同じ鍵の行だけまとめれば、足すだけで統合できる。
 
@@ -4865,8 +4865,39 @@ let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファ
    書いていない石が人数分重複する。加えて、空欄に「点検したが問題なし」
    という意味を読ませてしまう(それは書き出しの都合で生まれた空欄にすぎない)。
 ============================================================ */
-const SURVEY_DATE_COL = "SurveyDate";
-const SURVEYOR_COL = "調査者";
+/* 用語は「点検」に揃える(2026-11-08)。機能の名前は点検記録・点検項目なのに、
+   入力するものが点検日・点検者で、同じ画面の中で語が混ざっていた。
+   用途は城郭石垣の定期点検なので、広い語である「調査」ではなく「点検」を採る。
+
+   **書き出しは新しい名前だけ。読み込みは古い名前も受ける。**
+   このアプリでは作り直し＝DXFの読み直し＝IDの振り直しになり、
+   それまでの記録との対応が切れる(CLAUDE.md) */
+const SURVEY_DATE_COL = "InspectionDate";
+const SURVEYOR_COL = "点検者";
+const LEGACY_DATE_COLS = ["SurveyDate"];
+const LEGACY_WHO_COLS = ["調査者"];   // v1.39.1 以前の名前
+
+/* 記録CSVかどうか。古い名前の点検日列も記録として見分ける。純関数 */
+function isRecordColumns(cols) {
+  const set = new Set(cols || []);
+  if (set.has(SURVEY_DATE_COL)) return true;
+  for (const c of LEGACY_DATE_COLS) if (set.has(c)) return true;
+  return false;
+}
+
+/* 古い列名を今の名前に読み替える。行と列名の両方を書き換えた組を返す。純関数 */
+function renameLegacyRecordColumns(cols, rows) {
+  const map = new Map();
+  for (const c of LEGACY_DATE_COLS) map.set(c, SURVEY_DATE_COL);
+  for (const c of LEGACY_WHO_COLS) map.set(c, SURVEYOR_COL);
+  const outCols = (cols || []).map((c) => map.get(c) || c);
+  const outRows = (rows || []).map((r) => {
+    const o = {};
+    for (const k of Object.keys(r)) o[map.get(k) || k] = r[k];
+    return o;
+  });
+  return { cols: outCols, rows: outRows };
+}
 const ZIP_MODEL = "model.glb", ZIP_LEDGER = "台帳.csv";
 /* 記録のファイル名は recordFileName() が日と人から作る(重ならないように) */
 const HIST_PREFIX = "履歴:";   // 記録の台帳から作る集計列
@@ -4889,7 +4920,7 @@ const COMBO_BOTH = "前回と今回";
 const COMBO_NOW = "今回のみ";
 const COMBO_NONE = "記録なし";
 
-let recordLog = [];        // 読み込んだ記録の全行(全調査日・全調査者)
+let recordLog = [];        // 読み込んだ記録の全行(全点検日・全点検者)
 
 function surveyDateValue() {
   const el = document.getElementById("survey-date");
@@ -4921,12 +4952,12 @@ function mergeRecordRows(rows) {
   return { added, differed, total: recordLog.length };
 }
 
-/* 台帳に載っている調査日を古い順に。空の日付は数えない */
+/* 台帳に載っている点検日を古い順に。空の日付は数えない */
 function recordDates() {
   return [...new Set(recordLog.map((r) => String(r[SURVEY_DATE_COL] ?? "")).filter((d) => d))].sort();
 }
 
-/* 記録の列(ID・調査日・調査者を除いたもの)。人が書いた列がここに入る */
+/* 記録の列(ID・点検日・点検者を除いたもの)。人が書いた列がここに入る */
 function recordValueColumns() {
   const skip = new Set(["ID", SURVEY_DATE_COL, SURVEYOR_COL]);
   const cols = [];
@@ -4937,7 +4968,7 @@ function recordValueColumns() {
 }
 
 /* 記録CSVが持つべき値の列。渡された列一覧をつないで重複を落とし、
-   鍵の3列(ID・調査日・調査者)は外す。純関数
+   鍵の3列(ID・点検日・点検者)は外す。純関数
 
    書き出しでは「記録に現れた列」と「手で作った列」の両方を見る。
    値の入っていない列は記録の行に現れず、台帳からも外れる(手入力の列なので)
@@ -4960,7 +4991,7 @@ function recordHeaderColumns(columnLists) {
 /* 台帳から、今回の入力と「前回」を組み立てて画面に反映する。
 
    今回  = 今日の日付 × 自分の行 → そのまま編集できる値として csvRows に戻す
-   前回  = 今日より前で、いちばん新しい調査日の行 → 「前回:」列として重ねる
+   前回  = 今日より前で、いちばん新しい点検日の行 → 「前回:」列として重ねる
 
    昼に保存して午後に開き直しても、今日の行がそのまま戻るだけなので
    午前中の記録は失われない。**開く操作は何も壊さない**(§5.1.4) */
@@ -4987,7 +5018,7 @@ function applyRecordLog() {
   // 記録から戻した列は点検項目(記録CSVに入っていたもの)
   if (restored > 0) { surveyCols.clear(); for (const c of cols) registerManualColumn(c, "survey"); }
 
-  // 前回 = 今日より前でいちばん新しい調査日
+  // 前回 = 今日より前でいちばん新しい点検日
   const before = recordDates().filter((d) => !today || d < today);
   const prevDate = before.length ? before[before.length - 1] : "";
   if (prevDate) {
@@ -5013,11 +5044,11 @@ function applyRecordLog() {
    いる石が図の上で濃く浮かび上がる**。前回だけを見ていては出てこない情報で、
    経年で追う意味そのものになる。
 
-   数えるのは**調査回数**であって行数ではない。同じ日に2人が書いた石は、
-   2回指摘されたのではなく1回の調査で挙がったもの */
+   数えるのは**点検回数**であって行数ではない。同じ日に2人が書いた石は、
+   2回指摘されたのではなく1回の点検で挙がったもの */
 function syncRecordDerived(valueCols) {
   const countCol = HIST_PREFIX + "記録回数", lastCol = HIST_PREFIX + "最終記録日";
-  const whoCol = HIST_PREFIX + "調査者";
+  const whoCol = HIST_PREFIX + "点検者";
   csvColumns = csvColumns.filter((c) => !c.startsWith(HIST_PREFIX));
   for (const row of csvRows) {
     for (const k of Object.keys(row)) if (k.startsWith(HIST_PREFIX)) delete row[k];
@@ -5025,7 +5056,7 @@ function syncRecordDerived(valueCols) {
   if (recordLog.length === 0 || csvRows.length === 0) return;
 
   const cols = valueCols || recordValueColumns();
-  const dates = new Map();   // ID -> 記録のあった調査日の集合
+  const dates = new Map();   // ID -> 記録のあった点検日の集合
   const whos = new Map();    // ID -> 記録を残した人の集合
   for (const r of recordLog) {
     let any = false;
@@ -5058,7 +5089,7 @@ function syncRecordDerived(valueCols) {
 function currentRecordRows() {
   const today = surveyDateValue(), me = surveyorValue();
   const idCol = document.getElementById("id-column").value;
-  /* **点検項目とメモだけ**。静的な属性は台帳にあり、調査日・調査者の鍵を
+  /* **点検項目とメモだけ**。静的な属性は台帳にあり、点検日・点検者の鍵を
      付けてはいけない(§5.1.6)。ここを手入力の列すべてにしていたため、
      石種を入れただけの石が 履歴:記録回数=1 になっていた */
   const cols = surveyValueColumns(csvColumns, surveyCols);
@@ -5076,7 +5107,7 @@ function currentRecordRows() {
 /* 重ねるのは**人が書いた列だけ**。
 
    幾何属性は台紙から決まる固定値で、前回と今回で同じ値になる。並べても意味が
-   無いうえ、属性の選択肢を倍に増やして選びにくくする。調査日は行ごとに同じ値
+   無いうえ、属性の選択肢を倍に増やして選びにくくする。点検日は行ごとに同じ値
    なので、列にせず見出し(refLabel)として1回だけ出す。
 
    メモと「メモの有無」はATTR_INFOに載っているが、**人が書くもの**なので重ねる。
@@ -5249,9 +5280,9 @@ function ledgerCSV(rows, cols, datasetName) {
 
 /* 記録CSVのファイル名。**持ち寄って1つのZIPに入れたとき重ならない**ように、
    書き出した日と人を名前に入れる。読む側は名前ではなく列で見分ける
-   (調査日の列があるCSVが記録)ので、名前は自由に付けてよい。
+   (点検日の列があるCSVが記録)ので、名前は自由に付けてよい。
 
-   中身は全調査日・全員ぶんなので、名前が指すのは
+   中身は全点検日・全員ぶんなので、名前が指すのは
    **誰がいつ書き出した控えか**であって、中の記録の持ち主ではない */
 function recordFileName(date, who) {
   const parts = ["記録"];
@@ -5264,13 +5295,13 @@ function recordFileName(date, who) {
 
 /* 点検データをZIP 1つにまとめる。台紙・台帳・記録の3つ。
 
-   記録には**台帳の全行**(過去の調査も他の人の分も)を入れる。次に開いたとき、
+   記録には**台帳の全行**(過去の点検も他の人の分も)を入れる。次に開いたとき、
    そのZIPだけで履歴がそろうようにするため。持ち寄って統合するときは、
    それぞれのZIPの記録CSVを全部読めば、鍵が同じ行は畳まれて足し合わされる */
 async function exportBundle() {
   if (meshes.length === 0) { setStatus("先にモデルを読み込んでください。", true); return; }
   const NL = String.fromCharCode(10);
-  if (surveyDateValue() === "") { setStatus("調査日を入れてください。", true); return; }
+  if (surveyDateValue() === "") { setStatus("点検日を入れてください。", true); return; }
 
   const glb = buildGLBBytes();
   if (!glb) { setStatus("モデルを書き出せませんでした。", true); return; }
@@ -5327,12 +5358,13 @@ async function loadBundle(file) {
     const r = Papa.parse(dec.decode(bytes).replace(/^﻿/, ""), { header: true, skipEmptyLines: true });
     return { rows: r.data || [], cols: (r.meta.fields || []) };
   };
-  // 記録CSVは調査日の列を持つ。台帳はそれを持たない。中身で見分ける
+  // 記録CSVは点検日の列を持つ。台帳はそれを持たない。中身で見分ける
   const parsed = csvs.map((e) => ({ name: base(e.name), ...parse(e.bytes) }));
-  const ledgers = parsed.filter((p) => !p.cols.includes(SURVEY_DATE_COL));
+  const ledgers = parsed.filter((p) => !isRecordColumns(p.cols));
   const ledger = ledgers[0];
-  const records = parsed.filter((p) => p.cols.includes(SURVEY_DATE_COL));
-  if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(調査日の列が無いCSV)。", true); return; }
+  const records = parsed.filter((p) => isRecordColumns(p.cols))
+    .map((p) => Object.assign({}, p, renameLegacyRecordColumns(p.cols, p.rows)));
+  if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(点検日の列が無いCSV)。", true); return; }
 
   loadGLBBuffer(glb.bytes.slice().buffer, base(glb.name));
   loadCSVTable(ledger.rows, ledger.cols, base(ledger.name));
@@ -5693,7 +5725,7 @@ document.getElementById("tab-survey").addEventListener("click", () => setInspect
 document.getElementById("export-bundle-btn").addEventListener("click", () => {
   exportBundle().catch((e) => setStatus("点検データの書き出しに失敗しました: " + (e && e.message ? e.message : e), true));
 });
-// 調査日は今日を既定にする。打ち直せるのは、翌日に入力する場合があるため
+// 点検日は今日を既定にする。打ち直せるのは、翌日に入力する場合があるため
 {
   const d = new Date();
   const p = (n) => String(n).padStart(2, "0");
@@ -5943,11 +5975,11 @@ function applyColorize() {
        今回まだ何も書いていない指摘箇所が、いちばん強い色で残る。
        書けば青に変わるので、赤が消えていくのが回り終わりの目印になる。
        記録なしはグレー(注目対象外)で、このアプリの語彙に揃える */
-    /* 調査者は人数ぶんの色が要るのでパレット任せにする。
+    /* 点検者は人数ぶんの色が要るのでパレット任せにする。
        並びだけここで決め、**記録なしを最後に回す**。
        凡例は色を決めた順に並ぶので、先に色を入れると先頭に出てしまう
        (人数より「記録なし」のほうが多いため、放っておくと最初に来る) */
-    if (attr === HIST_PREFIX + "調査者") {
+    if (attr === HIST_PREFIX + "点検者") {
       sorted = sorted.filter((c) => c !== SURVEYOR_NONE).concat(
         (SURVEYOR_NONE in counts) ? [SURVEYOR_NONE] : []);
     }
@@ -6000,9 +6032,9 @@ function applyColorize() {
       }
     });
 
-    /* 調査者の「記録なし」をグレーにする。**色を入れ直すだけ**なので
+    /* 点検者の「記録なし」をグレーにする。**色を入れ直すだけ**なので
        凡例の並び(=色を決めた順)は変わらない。グレー=注目対象外 */
-    if (attr === HIST_PREFIX + "調査者" && (SURVEYOR_NONE in categoryColorCache)) {
+    if (attr === HIST_PREFIX + "点検者" && (SURVEYOR_NONE in categoryColorCache)) {
       categoryColorCache[SURVEYOR_NONE] = OTHER_COLOR;
     }
   }
@@ -6693,7 +6725,7 @@ document.getElementById("filter-enable").addEventListener("change", () => {
 document.getElementById("add-filter-rule").addEventListener("click", () => addFilterRule());
 
 /* ---- おすすめフィルタ設定 ----
-   調査で繰り返し使う絞り込みを1操作で入れられるようにする。
+   点検で繰り返し使う絞り込みを1操作で入れられるようにする。
    値は「残す範囲」であることに注意(範囲から外れたものが除外される)。
 
    Aspectの範囲が1をまたいでいるのは、細長い形を上下どちらの向きでも
@@ -8188,10 +8220,10 @@ const CLASS_MAX_NAME = 40;
 /* 手で書き込んだ列。控えと未保存の対象を「メモだけ」から広げるために覚えておく。
 
    **2種類ある(§5.1.6)。**
-   ・静的な属性(石種・エリア) — 石そのものの性質。調査日にも調査者にも依存しない。
+   ・静的な属性(石種・エリア) — 石そのものの性質。点検日にも点検者にも依存しない。
      1石に1つ。台帳CSVに入る
    ・点検項目(はらみ出し・ひび割れ) — ある日ある人が見た所見。
-     鍵は ID×調査日×調査者 で、点検のたびに増える。記録CSVに入る
+     鍵は ID×点検日×点検者 で、点検のたびに増える。記録CSVに入る
 
    **種別は保存先そのもので決める。** 台帳CSVから来た列は静的、記録CSVから
    来た列は点検項目。新しい接頭辞も設定ファイルも持たない。
@@ -8226,7 +8258,7 @@ function ledgerColumns(columns, surveySet) {
 }
 
 /* 記録CSVに入る値の列。点検項目とメモ。
-   静的な属性は台帳にあるので入れない(調査日と調査者の鍵が付いてしまう)。純関数 */
+   静的な属性は台帳にあるので入れない(点検日と点検者の鍵が付いてしまう)。純関数 */
 function surveyValueColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
   return (columns || []).filter((c) => (survey.has(c) || c === NOTE_COL) && c !== HIT_COL);
@@ -8557,7 +8589,7 @@ function addManualColumn(kind) {
   renderClassifyUI();
   updateStepSummaries();
   const where = kind === "survey"
-    ? "ビュー上でオブジェクトを選び、「調査」タブから印を付けます。" + NL +
+    ? "ビュー上でオブジェクトを選び、「点検」タブから印を付けます。" + NL +
       "付けた内容は、その日その人の記録として残ります。"
     : "ビュー上でオブジェクトを選ぶと、値を付けられます。";
   setStatus(what + "「" + name + "」を作りました。" + NL + where);
@@ -8593,7 +8625,7 @@ function renderColumnList(boxId, cols, kind) {
 
       /* **値が空のときだけ種別を変えられる**(§5.1.6)。
          値が入っている列は変えられない — 点検→静的は複数回の値のどれを
-         残すかを決める必要があり、静的→点検は調査日と調査者を後から
+         残すかを決める必要があり、静的→点検は点検日と点検者を後から
          付けることになるため、安全に自動化できない */
       const other = kind === "survey" ? "static" : "survey";
       const b = document.createElement("button");
@@ -8808,7 +8840,7 @@ document.addEventListener("visibilitychange", () => {
    所見が付き、**画面上は正常に見える**ため気づけない。
 
    **控えはデータごとに別の枠へ入れる**。枠が1つだと、同じ日にA壁とB壁を
-   回ったときにB壁の入力がA壁の控えを消してしまう。壁ごとに調査するのが
+   回ったときにB壁の入力がA壁の控えを消してしまう。壁ごとに点検するのが
    実際の使い方なので、指紋を鍵にして複数を並存させる。
 
    **件数の上限は設けない**。当初は20件を超えたら古い順に捨てていたが、
@@ -9179,7 +9211,7 @@ document.getElementById("use-mid").addEventListener("change", (e) => {
    原因に気づけない。属性ごとに覚えて切り替え時に入れ替える。
    モデルを読み直したら破棄する(データが変われば適切な範囲も変わるため) */
 /* 属性ごとの範囲の初期値。色のグラデーションを毎回同じ基準で描くための出発点で、
-   調査で扱う値の常識的な範囲に合わせてある。空欄は「自動(データの最小・最大)」の意味。
+   点検で扱う値の常識的な範囲に合わせてある。空欄は「自動(データの最小・最大)」の意味。
 
    ここに無い属性は空欄(自動)から始まる。利用者が入力欄を空にした場合は
    その状態を覚えるため、既定値が復活することはない */
@@ -9896,7 +9928,7 @@ function updateStepSummaries() {
    ローカルで開いた場合(file://)とは別の保管領域になる。
 
    **安定版と開発版はオリジンが違うので、保管領域も別になる。**
-   URLを移った利用者からは、設定も調査者名もメモの控えも消えたように見える。
+   URLを移った利用者からは、設定も点検者名もメモの控えも消えたように見える。
    移ってもらうときは、先に点検データ(ZIP)を保存してもらうこと。
 
    プライベートモードや容量超過では例外になるが、設定が保存できなくても
@@ -9937,7 +9969,7 @@ function saveSettings() {
       // パネルの開閉は作業環境の好み(データに紐づかない)なので保存する。
       // つまみは常に見えるので、畳んだまま開いても戻せる
       panelCollapsed: document.body.classList.contains("panel-collapsed"),
-      // 調査者は人に紐づくもので、データには紐づかない。毎回打ち直させない
+      // 点検者は人に紐づくもので、データには紐づかない。毎回打ち直させない
       surveyor: document.getElementById("surveyor").value,
       inspectorTab,
       uiScale: uiScaleIndex,
