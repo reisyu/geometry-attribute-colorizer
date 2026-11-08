@@ -4866,38 +4866,15 @@ let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファ
    という意味を読ませてしまう(それは書き出しの都合で生まれた空欄にすぎない)。
 ============================================================ */
 /* 用語は「点検」に揃える(2026-11-08)。機能の名前は点検記録・点検項目なのに、
-   入力するものが点検日・点検者で、同じ画面の中で語が混ざっていた。
+   入力するものが調査日・調査者で、同じ画面の中で語が混ざっていた。
    用途は城郭石垣の定期点検なので、広い語である「調査」ではなく「点検」を採る。
 
-   **書き出しは新しい名前だけ。読み込みは古い名前も受ける。**
-   このアプリでは作り直し＝DXFの読み直し＝IDの振り直しになり、
-   それまでの記録との対応が切れる(CLAUDE.md) */
+   **古い列名(SurveyDate / 調査者)の読み替えは用意しない。** 点検機能は
+   実務ではまだ使っていないため、守るべき既存データが無い。読めるようにする
+   仕組みを置くと、そのぶん壊れる箇所が増える(実際、一括置換で対応表の
+   中身まで書き換える事故を起こした) */
 const SURVEY_DATE_COL = "InspectionDate";
 const SURVEYOR_COL = "点検者";
-const LEGACY_DATE_COLS = ["SurveyDate"];
-const LEGACY_WHO_COLS = ["調査者"];   // v1.39.1 以前の名前
-
-/* 記録CSVかどうか。古い名前の点検日列も記録として見分ける。純関数 */
-function isRecordColumns(cols) {
-  const set = new Set(cols || []);
-  if (set.has(SURVEY_DATE_COL)) return true;
-  for (const c of LEGACY_DATE_COLS) if (set.has(c)) return true;
-  return false;
-}
-
-/* 古い列名を今の名前に読み替える。行と列名の両方を書き換えた組を返す。純関数 */
-function renameLegacyRecordColumns(cols, rows) {
-  const map = new Map();
-  for (const c of LEGACY_DATE_COLS) map.set(c, SURVEY_DATE_COL);
-  for (const c of LEGACY_WHO_COLS) map.set(c, SURVEYOR_COL);
-  const outCols = (cols || []).map((c) => map.get(c) || c);
-  const outRows = (rows || []).map((r) => {
-    const o = {};
-    for (const k of Object.keys(r)) o[map.get(k) || k] = r[k];
-    return o;
-  });
-  return { cols: outCols, rows: outRows };
-}
 const ZIP_MODEL = "model.glb", ZIP_LEDGER = "台帳.csv";
 /* 記録のファイル名は recordFileName() が日と人から作る(重ならないように) */
 const HIST_PREFIX = "履歴:";   // 記録の台帳から作る集計列
@@ -5360,10 +5337,9 @@ async function loadBundle(file) {
   };
   // 記録CSVは点検日の列を持つ。台帳はそれを持たない。中身で見分ける
   const parsed = csvs.map((e) => ({ name: base(e.name), ...parse(e.bytes) }));
-  const ledgers = parsed.filter((p) => !isRecordColumns(p.cols));
+  const ledgers = parsed.filter((p) => !p.cols.includes(SURVEY_DATE_COL));
   const ledger = ledgers[0];
-  const records = parsed.filter((p) => isRecordColumns(p.cols))
-    .map((p) => Object.assign({}, p, renameLegacyRecordColumns(p.cols, p.rows)));
+  const records = parsed.filter((p) => p.cols.includes(SURVEY_DATE_COL));
   if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(点検日の列が無いCSV)。", true); return; }
 
   loadGLBBuffer(glb.bytes.slice().buffer, base(glb.name));

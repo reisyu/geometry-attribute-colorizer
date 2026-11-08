@@ -15,8 +15,6 @@
  */
 const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
-        isRecordColumns, renameLegacyRecordColumns,
-        SURVEY_DATE_COL, SURVEYOR_COL, LEGACY_DATE_COLS, LEGACY_WHO_COLS,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -168,42 +166,6 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(!ledgerColumns(COLS2, S2).includes(HIT_COL), "**該当項目は台帳に書き出さない**(派生列)");
   ok(!surveyValueColumns(COLS2, S2).includes(HIT_COL), "記録にも書き出さない");
   ok(surveyVisualColumns(COLS2, S2).includes(HIT_COL), "点検側の色分けには出す");
-}
-
-/* ---------- 用語を「点検」に揃えた後も、古いZIPを読めること ---------- */
-/* v1.39.1 で 調査日→点検日 / 調査者→点検者 にした。書き出しは新しい名前だけ、
-   読み込みは古い名前も受ける。作り直しを求めるとDXFの読み直し=IDの振り直しになり、
-   それまでの記録との対応が切れる(CLAUDE.md)。
-
-   **この置き換えで実際に踏んだ罠**: 文字列を一括置換したとき、
-   古い名前の対応表 LEGACY_WHO_COLS = ["調査者"] の中身まで書き換えてしまい、
-   対応表が自分自身を指す形になって**古いZIPの点検者が読めなくなっていた**。
-   対応表が「古い名前」を持っていることを、ここで固定する */
-{
-  ok(LEGACY_DATE_COLS.includes("SurveyDate"), "**古い調査日の列名を覚えている**");
-  ok(LEGACY_WHO_COLS.includes("調査者"), "**古い調査者の列名を覚えている**");
-  ok(!LEGACY_DATE_COLS.includes(SURVEY_DATE_COL), "対応表に今の名前は入れない(自分自身を指さない)");
-  ok(!LEGACY_WHO_COLS.includes(SURVEYOR_COL), "点検者も同じ(一括置換で壊れたことがある)");
-
-  ok(isRecordColumns(["ID", SURVEY_DATE_COL, SURVEYOR_COL]), "今の名前の記録CSVを見分ける");
-  ok(isRecordColumns(["ID", "SurveyDate", "調査者"]), "**古い名前の記録CSVも見分ける**");
-  ok(!isRecordColumns(["ID", "Width", "石種"]), "台帳は記録ではない");
-  ok(!isRecordColumns([]), "空なら記録ではない");
-  ok(!isRecordColumns(null), "nullでも落ちない");
-
-  const old = renameLegacyRecordColumns(
-    ["ID", "SurveyDate", "調査者", "はらみ出し"],
-    [{ ID: "1", SurveyDate: "2026-10-01", "調査者": "山田", "はらみ出し": "あり" }]);
-  ok(j(old.cols) === j(["ID", SURVEY_DATE_COL, SURVEYOR_COL, "はらみ出し"]),
-     "**古い列名を今の名前に読み替える**", j(old.cols));
-  ok(old.rows[0][SURVEY_DATE_COL] === "2026-10-01", "日付の値が移る");
-  ok(old.rows[0][SURVEYOR_COL] === "山田", "**点検者の値が移る**(ここが抜けていた)");
-  ok(old.rows[0]["はらみ出し"] === "あり", "点検項目の値はそのまま");
-  ok(!("調査者" in old.rows[0]), "古い名前の鍵は残さない");
-
-  const now = renameLegacyRecordColumns(["ID", SURVEY_DATE_COL], [{ ID: "1" }]);
-  ok(j(now.cols) === j(["ID", SURVEY_DATE_COL]), "今の名前はそのまま通す");
-  ok(j(renameLegacyRecordColumns(null, null).cols) === j([]), "nullでも落ちない");
 }
 
 console.log("");
