@@ -114,12 +114,18 @@
     align-items: center;
     justify-content: space-between;
   }
+  /* 開閉アイコン。隣のチェックが24px角なので、10pxの文字だけでは釣り合わず
+     見つけられない。同じ幅の箱に入れて、文字も大きくする */
   .step-label::after {
     content: "▾";
-    color: var(--ink-dim);
-    font-size: calc(10px * var(--ui-scale));
+    color: var(--ink);
+    font-size: calc(13px * var(--ui-scale));
+    width: calc(20px * var(--ui-scale));
+    text-align: center;
+    flex: none;
     transition: transform 0.15s;
   }
+  .step-label:hover::after { color: var(--accent); }
   /* 見出し行のオンオフ。畳んだままでも機能を切り替えられるようにする。
      当たり判定を24px以上にするため、ラベルで包んで余白を持たせる */
   .step-toggle {
@@ -149,7 +155,9 @@
     margin-right: 8px;
     color: var(--ink-dim);
     font-weight: 400;
-    font-size: calc(10px * var(--ui-scale));
+    /* 畳んだ状態で唯一の手がかりなので、他の小さい文字(.small/.hint)に揃える。
+       ここだけ10pxで、パネルでいちばん読みにくかった */
+    font-size: calc(11px * var(--ui-scale));
     letter-spacing: 0;
     max-width: 55%;
     overflow: hidden;
@@ -816,10 +824,14 @@
   .cat-item { display: flex; align-items: center; gap: 7px; color: var(--ink); }
   .cat-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 
+  /* スライダーは既定だと高さ16pxで、指では掴みにくい。
+     上下に余白を取って当たり判定を24px以上にする(見た目の線は変えない) */
   input[type="range"] {
     width: 100%;
     accent-color: var(--accent);
     cursor: pointer;
+    height: calc(24px * var(--ui-scale));
+    margin: 0;
   }
   .slider-value {
     font-family: var(--mono);
@@ -1990,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.39.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.39.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
