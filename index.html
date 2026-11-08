@@ -4109,6 +4109,11 @@ async function exportBatchSVG() {
   const sel = document.getElementById("attribute");
   const prevAttr = sel.value;
   const prevApplied = hasApplied;
+  /* **色分けの出どころも退避する。** ここは属性の図を並べる処理で、
+     sel.value を差し替えて applyColorize を呼ぶ。点検記録で色分け中のままだと
+     currentColorizeColumn() が点検の列を返し続け、**どのシートも同じ図**になる */
+  const prevFrom = colorizeFrom;
+  colorizeFrom = "attr";
   clearTimeout(reapplyTimer);
   stashManualRange();   // 入力欄の現在値を持ち主の属性へ預けてから切り替える
 
@@ -4150,6 +4155,7 @@ async function exportBatchSVG() {
   } finally {
     batchRunning = false;
     // 退避しておいた状態に戻す
+    colorizeFrom = prevFrom;
     stashManualRange();
     sel.value = prevAttr;
     restoreManualRange(prevAttr);
@@ -9726,8 +9732,27 @@ if (isDevHost(location.hostname, location.protocol, STABLE_URL)) {
 /* ステップは data-step の名前で参照する。**位置番号で持たない。**
    点検記録のブロックを足したときに、書き出しの要約が1つずれる作りだった */
 const STEP_TOGGLES = [
-  { key: "color",  name: "色分け",     get: () => hasApplied,
-    set: (on) => { if (on) applyColorize(); else clearColorize(); } },
+  /* 色分けは「属性」と「点検記録」のどちらかひとつ。チェックも別々に持ち、
+     どちらで塗っているかがひと目で分かるようにする(両方点くことはない) */
+  { key: "color",  name: "属性での色分け", get: () => hasApplied && colorizeFrom === "attr",
+    set: (on) => {
+      if (!on) { clearColorize(); return; }
+      colorizeFrom = "attr";
+      document.getElementById("survey-attribute").value = "";
+      hasApplied = true;
+      applyColorize();
+    } },
+  { key: "survey", name: "点検結果での色分け",
+    get: () => hasApplied && colorizeFrom === "survey" &&
+               !!document.getElementById("survey-attribute").value,
+    set: (on) => {
+      if (!on) { clearColorize(); return; }
+      const sel = document.getElementById("survey-attribute");
+      // 何も選ばれていなければ、まとめの図(先頭)を出す
+      const col = sel.value || [...sel.options].map((o) => o.value).filter(Boolean)[0];
+      if (!col) { setStatus("点検の記録がまだありません。", true); syncStepToggles(); return; }
+      colorizeBySurveyColumn(col);
+    } },
   { key: "lines",  name: "傾きライン", id: "show-rect-lines" },
   { key: "filter", name: "フィルタ",   id: "filter-enable" },
   { key: "label",  name: "ラベル",     id: "show-labels" },
