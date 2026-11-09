@@ -110,6 +110,7 @@ function fetchText(url) {
   fs.copyFileSync(path.join(ROOT, "help.html"), path.join(OUT_DIR, "help.html"));
   fs.copyFileSync(path.join(ROOT, "sample_ishigaki.dxf"), path.join(OUT_DIR, "sample_ishigaki.dxf"));
   fs.copyFileSync(path.join(ROOT, "quickstart.html"), path.join(OUT_DIR, "quickstart.html"));
+  fs.copyFileSync(path.join(ROOT, "add-columns.html"), path.join(OUT_DIR, "add-columns.html"));
   // 配布フォルダ自体にも利用条件を入れる。help/quickstartは本体とは別ファイルなので、
   // フォルダごと渡したときにどれを見ても条件が分かる状態にしておく
   fs.copyFileSync(path.join(ROOT, "LICENSE"), path.join(OUT_DIR, "LICENSE"));
@@ -122,8 +123,9 @@ function fetchText(url) {
     "2. geometry-attribute-colorizer_offline.html",
     "                            ... アプリ本体。ダブルクリックで開く",
     "3. sample_ishigaki.dxf      ... 練習用の石垣データ。アプリにドラッグして読み込む",
-    "4. help.html                ... 詳しい操作ガイド(アプリの右上からも開ける)",
-    "5. LICENSE                  ... 利用条件(MIT License)",
+    "4. add-columns.html        ... 石ごとの項目(属性・点検項目)を追加する手引き",
+    "5. help.html                ... 詳しい操作ガイド(アプリの右上からも開ける)",
+    "6. LICENSE                  ... 利用条件(MIT License)",
     "",
     "インターネット接続は不要です。",
     "読み込んだデータは手元のブラウザ内だけで処理され、外部に送信されません。",
@@ -135,6 +137,6 @@ function fetchText(url) {
   ].join(String.fromCharCode(13) + String.fromCharCode(10)), "utf8");
   console.log(NEWLINE + "作成しました: " + OUT);
   console.log("大きさ: " + Math.round(fs.statSync(OUT).size / 1024) + " KB");
-  console.log("同梱: quickstart.html(1枚手順書) / help.html(操作ガイド) / sample_ishigaki.dxf(練習用データ)");
+  console.log("同梱: quickstart.html(1枚手順書) / add-columns.html(項目の追加) / help.html(操作ガイド) / sample_ishigaki.dxf(練習用データ)");
   console.log("配布するときは dist フォルダごと渡してください(ネットワーク不要)。");
 })();
