@@ -2002,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.40.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.40.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -9762,7 +9762,15 @@ const STEP_TOGGLES = [
       hasApplied = true;
       applyColorize();
     } },
+  /* 点検記録のチェックは「点検結果で色分けする」であって、
+     「このブロックを使う」ではない。**塗るものが無いうちは出さない。**
+
+     出しておくと、初めて使う人は畳んだ見出しでいちばん目立つそれを押す。
+     まだ点検項目が1つも無いので断ることになり、**使おうとしたのを拒まれた**
+     ように見える。実際にやりたいのは見出しを押してブロックを開くことなので、
+     チェックが無ければそのまま開く。項目を作れば、次から出る */
   { key: "survey", name: "点検結果での色分け",
+    available: () => surveyVisualColumns(csvColumns, surveyCols).length > 0,
     get: () => hasApplied && colorizeFrom === "survey" &&
                !!document.getElementById("survey-attribute").value,
     set: (on) => {
@@ -9770,21 +9778,24 @@ const STEP_TOGGLES = [
       const sel = document.getElementById("survey-attribute");
       // 何も選ばれていなければ、まとめの図(先頭)を出す
       const col = sel.value || [...sel.options].map((o) => o.value).filter(Boolean)[0];
-      if (!col) { setStatus("点検の記録がまだありません。", true); syncStepToggles(); return; }
-      colorizeBySurveyColumn(col);
+      if (col) colorizeBySurveyColumn(col);
     } },
   { key: "lines",  name: "傾きライン", id: "show-rect-lines" },
   { key: "filter", name: "フィルタ",   id: "filter-enable" },
   { key: "label",  name: "ラベル",     id: "show-labels" },
 ];
-const stepToggleEls = new Map();   // data-step -> input
+const stepToggleEls = new Map();   // data-step -> { cb, wrap }
 
 function syncStepToggles() {
   for (const t of STEP_TOGGLES) {
-    const el = stepToggleEls.get(t.key);
-    if (!el) continue;
+    const e = stepToggleEls.get(t.key);
+    if (!e) continue;
+    // 押しても何も起きないチェックは出さない(断る形にしない)
+    const show = t.available ? t.available() : true;
+    e.wrap.style.display = show ? "" : "none";
+    if (!show) continue;
     const on = t.id ? document.getElementById(t.id).checked : t.get();
-    if (el.checked !== on) el.checked = on;
+    if (e.cb.checked !== on) e.cb.checked = on;
   }
 }
 
@@ -9810,7 +9821,7 @@ const stepSummaryEls = new Map();   // data-step -> span
       cb.setAttribute("aria-label", t.name + "のオンオフ");
       wrap.appendChild(cb);
       label.appendChild(wrap);
-      stepToggleEls.set(key, cb);
+      stepToggleEls.set(key, { cb, wrap });
       // 見出しはクリックで開閉するので、チェックの操作は伝播させない
       wrap.addEventListener("click", (e) => e.stopPropagation());
       cb.addEventListener("change", () => {
