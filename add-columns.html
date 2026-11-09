@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geometry Attribute Colorizer — 属性と点検項目の追加</title>
+<style>
+  /* 配布・印刷用の1枚もの。A4縦に収まるように余白と文字量を詰めている。
+     体裁は quickstart.html に揃える(並べて配るため) */
+  :root {
+    --ink: #1a1c1f;
+    --dim: #5b6169;
+    --line: #c9ced5;
+    --accent: #2f6f62;
+    --accent-bg: #eaf3f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    max-width: 210mm;
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: var(--ink);
+    background: #fff;
+  }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 5px; margin-bottom: 10px; }
+  h1 { font-size: 15pt; margin: 0 0 2px; }
+  .sub { font-size: 9pt; color: var(--dim); }
+
+  h2 {
+    font-size: 11pt; margin: 11px 0 5px; color: var(--accent);
+    border-bottom: 1px solid var(--line); padding-bottom: 2px;
+  }
+  p { margin: 0 0 5px; }
+  ul, ol { margin: 3px 0 5px; padding-left: 18px; }
+  li { margin-bottom: 2px; }
+
+  .ui {
+    display: inline-block; padding: 0 5px; border: 1px solid #b6d3cb;
+    border-radius: 3px; background: var(--accent-bg); color: #22544a;
+    font-size: 9.5pt; white-space: nowrap;
+  }
+
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 4px 0 6px; }
+  th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #f4f6f8; font-weight: 600; }
+  thead th { background: var(--accent-bg); color: #22544a; }
+  td.k { width: 22%; background: #fafbfc; font-weight: 600; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .box { border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+  .box h3 { font-size: 10.5pt; margin: 0 0 4px; color: var(--accent); }
+
+  .note {
+    margin-top: 8px; border-left: 3px solid var(--accent); background: var(--accent-bg);
+    padding: 7px 11px; font-size: 9.5pt;
+  }
+  footer {
+    margin-top: 11px; font-size: 8.5pt; color: var(--dim);
+    border-top: 1px solid var(--line); padding-top: 5px;
+  }
+
+  @media print {
+    body { padding: 10mm 12mm; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>属性と点検項目の追加</h1>
+  <div class="sub">すでにこのアプリをお使いの方へ。手で入力する列の作り方が、2種類に分かれました。</div>
+</header>
+
+<h2>まず、2種類あります</h2>
+<p>手で入力する列には、性質の違うものが2つあります。<strong>作るメニューが別なので、どちらかを選ぶ操作は要りません。</strong></p>
+
+<table>
+  <thead>
+    <tr><th>　</th><th>属性</th><th>点検項目</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="k">例</td><td>石種・エリア・築石/間詰石</td><td>はらみ出し・ひび割れ・目地のゆるみ</td></tr>
+    <tr><td class="k">意味</td><td>石そのものの性質</td><td>ある日ある人が見た所見</td></tr>
+    <tr><td class="k">数</td><td>1石に1つ（変わらない）</td><td>点検のたびに増える</td></tr>
+    <tr><td class="k">作る場所</td><td><span class="ui">2. 属性データを読み込む</span></td><td><span class="ui">点検記録</span></td></tr>
+    <tr><td class="k">保存先</td><td>台帳.csv</td><td>記録_日付_名前.csv</td></tr>
+  </tbody>
+</table>
+
+<div class="cols">
+  <div class="box">
+    <h3>属性を追加する</h3>
+    <ol>
+      <li><span class="ui">2. 属性データを読み込む</span> を開く</li>
+      <li><strong>属性の列（手入力）</strong> に名前を入れる（例: 石種）</li>
+      <li><span class="ui">列を作る</span> を押す</li>
+    </ol>
+    <p>点検日や点検者には紐づきません。何度点検しても、1石につき1つの値を持ちます。</p>
+  </div>
+  <div class="box">
+    <h3>点検項目を追加する</h3>
+    <ol>
+      <li><span class="ui">点検記録</span> を開く（番号の付かないブロック）</li>
+      <li><strong>点検項目</strong> に名前を入れる（例: はらみ出し）</li>
+      <li><span class="ui">項目を作る</span> を押す</li>
+    </ol>
+    <p>点検日・点検者ごとの記録として積み上がります。前回の値と並べて見られます。</p>
+  </div>
+</div>
+
+<h2>値を入れる</h2>
+<p>石を選ぶと（タップ、または<strong>選択モード</strong>でなぞって複数）、右上のパネルの <span class="ui">点検</span> タブに入力欄が出ます。<strong>「属性」と「点検項目」の見出しで分かれて</strong>並びます。</p>
+<ul>
+  <li>値のボタン（丸いチップ）を押すと、選んだ石すべてに付きます</li>
+  <li><strong>点灯しているボタンをもう一度押すと外れます</strong>。チェックのように使えます</li>
+  <li>新しい値は、行末の <span class="ui">＋</span> を押してから入力欄に書いて <span class="ui">追加</span></li>
+</ul>
+
+<h2>点検結果を見る</h2>
+<p><span class="ui">点検記録</span> の <strong>点検結果で色分けする</strong> から選びます。<span class="ui">3. 色分けする</span> には石そのものの属性だけが並ぶので、項目を増やしても選択肢が埋まりません。</p>
+<table>
+  <tr><td class="k">該当項目</td><td>点検項目をまとめた1枚の図。1つだけ該当した石はその項目の色、<strong>2つ以上該当した石は赤</strong>、該当なしはグレー</td></tr>
+  <tr><td class="k">履歴:記録の状況</td><td>前回の指摘と今回の記録を重ねた図。どこまで回ったかが分かる</td></tr>
+  <tr><td class="k">履歴:記録回数</td><td>何回の点検で記録されたか。繰り返し指摘されている石が浮かぶ</td></tr>
+</table>
+
+<div class="note">
+  <strong>該当した項目にだけ印を付けてください。</strong> 空欄が「該当しない」を表します。
+  「なし」と書くと、その項目に記録があるものとして扱われます。<br>
+  <strong>作る場所を間違えたときは、</strong>まだ値が入っていなければ一覧から種類を変えられます（値が入っている列は変えられません）。<br>
+  <strong>入力した内容は保存しないと残りません。</strong> <span class="ui">7. 書き出す</span> の
+  <span class="ui">点検データをZIPで保存</span> で、モデル・属性・記録をまとめて持ち出せます。
+</div>
+
+<footer>
+  Geometry Attribute Colorizer　—　詳しい説明は画面右上の <span class="ui">? 操作ガイド</span> から開けます。
+</footer>
+
+</body>
+</html>

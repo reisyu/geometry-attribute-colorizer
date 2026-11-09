@@ -4758,6 +4758,10 @@ function loadCSVTable(rows, columns, displayName) {
 
       // 読み戻したCSVにメモ列があれば「メモの有無」を作り直してから選択肢を組む
       // (書き出したCSVを読み込んだとき、有無での色分けがそのまま使えるように)
+      /* 「該当項目」は表が入れ替わるたびに作り直す。
+         **syncNoteDerived に相乗りさせてはいけない** — あちらはメモ列が
+         無いと早期 return するので、起動直後(メモがまだ無い)に走らない */
+      syncSurveyHitDerived();
       syncNoteDerived();
       // オブジェクトとCSVの行の対応を作り直す。ここで作らないと、
       // 色分けをやり直すまで**前のCSVの行を指したまま**になる。
@@ -5164,6 +5168,7 @@ function afterReferenceChange(msgHead, res) {
   /* 「前回と今回」は**前回の列が揃ってから**でないと作れない。
      syncNoteDerived の中でも呼んでいるが、そちらは applyReference より前に
      走るので前回の列がまだ無い。ここで組み直す */
+  syncSurveyHitDerived();   // 記録から戻った点検項目も数に入れる
   syncComboDerived();
   refreshAttributeOptions();
   refreshLabelContentOptions();
@@ -5506,9 +5511,8 @@ function syncNoteDerived() {
   for (const row of csvRows) {
     row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
   }
-  const hitAdded = syncSurveyHitDerived() === true;
   const comboAdded = syncComboDerived();
-  return added || comboAdded || hitAdded;
+  return added || comboAdded;
 }
 
 /* 手で書いた瞬間に塗り直す対象かどうか。書いた内容そのものが色なので、
@@ -5561,12 +5565,16 @@ function surveyHitLabel(row, cols) {
    「なし」と「未計算」が区別できない)。点検項目が1つも無ければ作らない */
 function syncSurveyHitDerived() {
   const cols = surveyItemColumns();
-  if (cols.length === 0) {
+  if (csvRows.length === 0) {
     const had = csvColumns.includes(HIT_COL);
     csvColumns = csvColumns.filter((c) => c !== HIT_COL);
     for (const row of csvRows) delete row[HIT_COL];
     return had ? "removed" : false;
   }
+  /* **点検項目が1つも無くても作る。** 全石が「なし」=灰色一色になり、
+     それが「点検の図に切り替えたが、まだ何も記録がない」を表す。
+     列が無いと点検結果の色分けを選べず、初めて使う人は
+     使おうとしたのを拒まれたように感じる */
   const added = !csvColumns.includes(HIT_COL);
   if (added) csvColumns.push(HIT_COL);
   for (const row of csvRows) row[HIT_COL] = surveyHitLabel(row, cols);
@@ -5971,8 +5979,10 @@ function applyColorize() {
       items.forEach((c, i) => {
         if (c in counts) categoryColorCache[c] = PALETTE[(i % (PALETTE.length - 1)) + 1];
       });
-      categoryColorCache[HIT_MULTI] = PALETTE[0];
-      categoryColorCache[HIT_NONE] = OTHER_COLOR;
+      // 凡例は categoryColorCache を順に出すので、**居ない値に色を入れない**。
+      // 入れると「複数 (0)」のように、1つも無い分類が凡例に並ぶ
+      if (HIT_MULTI in counts) categoryColorCache[HIT_MULTI] = PALETTE[0];
+      if (HIT_NONE in counts) categoryColorCache[HIT_NONE] = OTHER_COLOR;
     }
 
     if (attr === COMBO_COL) {
@@ -9762,15 +9772,10 @@ const STEP_TOGGLES = [
       hasApplied = true;
       applyColorize();
     } },
-  /* 点検記録のチェックは「点検結果で色分けする」であって、
-     「このブロックを使う」ではない。**塗るものが無いうちは出さない。**
-
-     出しておくと、初めて使う人は畳んだ見出しでいちばん目立つそれを押す。
-     まだ点検項目が1つも無いので断ることになり、**使おうとしたのを拒まれた**
-     ように見える。実際にやりたいのは見出しを押してブロックを開くことなので、
-     チェックが無ければそのまま開く。項目を作れば、次から出る */
+  /* 点検項目がまだ無くても押せる。「該当項目」は項目ゼロでも作られ、
+     全石が「なし」=灰色一色になる。それが「点検の図に切り替えたが、
+     まだ何も記録がない」を表す。押しても断られないようにしておく */
   { key: "survey", name: "点検結果での色分け",
-    available: () => surveyVisualColumns(csvColumns, surveyCols).length > 0,
     get: () => hasApplied && colorizeFrom === "survey" &&
                !!document.getElementById("survey-attribute").value,
     set: (on) => {
@@ -9790,10 +9795,6 @@ function syncStepToggles() {
   for (const t of STEP_TOGGLES) {
     const e = stepToggleEls.get(t.key);
     if (!e) continue;
-    // 押しても何も起きないチェックは出さない(断る形にしない)
-    const show = t.available ? t.available() : true;
-    e.wrap.style.display = show ? "" : "none";
-    if (!show) continue;
     const on = t.id ? document.getElementById(t.id).checked : t.get();
     if (e.cb.checked !== on) e.cb.checked = on;
   }
