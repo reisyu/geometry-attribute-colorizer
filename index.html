@@ -2002,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.40.3";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.40.4";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -4832,15 +4832,22 @@ function comboState(hasPrev, hasNow) {
   return hasPrev ? (hasNow ? COMBO_BOTH : COMBO_PREV) : (hasNow ? COMBO_NOW : COMBO_NONE);
 }
 
-/* 前回の記録として数える列。「前回:」の付いた列のうち、人が書いた値を運ぶもの。純関数
+/* 前回の記録として数える列。純関数
 
-   **「前回:メモの有無」は数えない。** 記録が無くても「なし」という値が入るので、
-   値の有無では判定できない(本体の「前回:メモ」を見れば足りる)。
-   点検日と点検者は記録の鍵であって所見ではないので、これも数えない */
-function prevEntryColumns(columns) {
-  const skip = new Set([REF_PREFIX + NOTE_FLAG_COL,
-                        REF_PREFIX + SURVEY_DATE_COL, REF_PREFIX + SURVEYOR_COL]);
-  return (columns || []).filter((c) => String(c).startsWith(REF_PREFIX) && !skip.has(c));
+   **前回のメモと、いま点検項目として定義されている列の前回分だけ。**
+   「前回:」の付いた列をすべて数えてはいけない。「属性をCSVで保存」した
+   ファイルを前回として重ねると、石種のような属性や「該当項目」(全行に
+   「なし」が入る)まで前回の列になり、**全部の石が「前回のみ」の赤になる**
+   (v1.40.2で実際に出した)。1枚のCSVからは属性と点検項目を見分けられないので、
+   種別が分かっている列だけを数える(分からないものは静的に倒す §5.1.6) */
+function prevEntryColumns(columns, surveySet) {
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  return (columns || []).filter((c) => {
+    const s = String(c);
+    if (!s.startsWith(REF_PREFIX)) return false;
+    const base = s.slice(REF_PREFIX.length);
+    return base === NOTE_COL || (survey.has(base) && base !== NOTE_FLAG_COL && base !== HIT_COL);
+  });
 }
 
 /* その石の「記録の状況」。純関数
@@ -5135,6 +5142,9 @@ function isDerivedColumn(c) {
 function refIsCarried(c, staticSet) {
   if (REF_KEEP.has(c)) return true;
   if (REF_SKIP.has(c)) return false;
+  /* 「該当項目」は点検項目から作る派生列。「属性をCSVで保存」には入るので
+     前回のCSVに含まれうるが、重ねても意味が無い(今回の項目から作り直すもの) */
+  if (c === HIT_COL) return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
      「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
   if (staticSet && staticSet.has(c)) return false;
@@ -5613,7 +5623,7 @@ function syncSurveyHitDerived() {
 /* 「記録の状況」の列を作り直す。
 
    今回の記録 = メモか点検項目のどれかに値がある(記録行を作る条件と同じ)。
-   前回の記録 = 「前回:」の付いたメモか点検項目のどれかに値がある。
+   前回の記録 = 前回のメモか、いま定義されている点検項目の前回分のどれかに値がある。
 
    **記録に使う列が1つも無いときだけ作らない**(今回の側にも前回の側にも)。
    メモの列が無くても、点検項目が1つあれば作る。前回の記録を重ねただけで
@@ -5622,7 +5632,7 @@ function syncSurveyHitDerived() {
    列が増減したら真を返す */
 function syncComboDerived() {
   const nowCols = surveyValueColumns(csvColumns, surveyCols);
-  const prevCols = prevEntryColumns(csvColumns);
+  const prevCols = prevEntryColumns(csvColumns, surveyCols);
   const had = csvColumns.includes(COMBO_COL);
   if (csvRows.length === 0 || (nowCols.length === 0 && prevCols.length === 0)) {
     csvColumns = csvColumns.filter((c) => c !== COMBO_COL);

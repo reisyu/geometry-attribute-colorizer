@@ -198,7 +198,7 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   const cols = ["ID", "Width", "石種", "はらみ出し", NOTE_COL,
                 REF_PREFIX + NOTE_COL, REF_PREFIX + NOTE_FLAG_COL, REF_PREFIX + "はらみ出し",
                 REF_PREFIX + SURVEY_DATE_COL, REF_PREFIX + SURVEYOR_COL, HIST_PREFIX + "記録回数"];
-  const p = prevEntryColumns(cols);
+  const p = prevEntryColumns(cols, new Set(["はらみ出し"]));
   ok(p.includes(REF_PREFIX + NOTE_COL) && p.includes(REF_PREFIX + "はらみ出し"),
      "前回のメモと点検項目を数える", j(p));
   ok(!p.includes(REF_PREFIX + NOTE_FLAG_COL),
@@ -207,7 +207,21 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
      "点検日と点検者は数えない(記録の鍵であって所見ではない)");
   ok(!p.includes("はらみ出し") && !p.includes(NOTE_COL), "今回の列は入れない");
   ok(!p.includes(HIST_PREFIX + "記録回数"), "履歴の列は入れない");
-  ok(j(prevEntryColumns(null)) === "[]", "nullでも落ちない");
+  ok(j(prevEntryColumns(null, null)) === "[]", "nullでも落ちない");
+  /* 「属性をCSVで保存」したファイルを前回として重ねたときの列。属性と該当項目が
+     前回の列になる。**全行に値が入っているので、数えると全部の石が赤になる** */
+  const flat = [REF_PREFIX + "石種", REF_PREFIX + HIT_COL, REF_PREFIX + NOTE_COL,
+                REF_PREFIX + NOTE_FLAG_COL, REF_PREFIX + "はらみ出し"];
+  const pf = prevEntryColumns(flat, new Set(["はらみ出し"]));
+  ok(!pf.includes(REF_PREFIX + "石種"), "**属性の前回分は数えない**(点検の記録ではない)");
+  ok(!pf.includes(REF_PREFIX + HIT_COL), "**「前回:該当項目」は数えない**(全行に「なし」が入る派生列)");
+  ok(j(pf) === j([REF_PREFIX + NOTE_COL, REF_PREFIX + "はらみ出し"]),
+     "数えるのは前回のメモと、いま定義されている点検項目だけ", j(pf));
+  ok(j(prevEntryColumns(flat, new Set())) === j([REF_PREFIX + NOTE_COL]),
+     "点検項目が1つも無ければメモだけ");
+  ok(rowComboState({ [REF_PREFIX + "石種"]: "花崗岩", [REF_PREFIX + HIT_COL]: "なし" }, pf, ["はらみ出し"]) === COMBO_NONE,
+     "**前回の属性と該当項目だけの石を「前回のみ」にしない**");
+  ok(!refIsCarried(HIT_COL, new Set()), "「該当項目」は前回の列として重ねない");
   // 「なし」が入っていても前回の記録にしない(列ごと外してあるため)
   ok(rowComboState({ [REF_PREFIX + NOTE_FLAG_COL]: "なし" }, p, ["はらみ出し"]) === COMBO_NONE,
      "**前回のメモの有無が「なし」の石を「前回のみ」にしない**");

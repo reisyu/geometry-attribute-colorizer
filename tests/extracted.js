@@ -689,10 +689,14 @@ function comboState(hasPrev, hasNow) {
   return hasPrev ? (hasNow ? COMBO_BOTH : COMBO_PREV) : (hasNow ? COMBO_NOW : COMBO_NONE);
 }
 
-function prevEntryColumns(columns) {
-  const skip = new Set([REF_PREFIX + NOTE_FLAG_COL,
-                        REF_PREFIX + SURVEY_DATE_COL, REF_PREFIX + SURVEYOR_COL]);
-  return (columns || []).filter((c) => String(c).startsWith(REF_PREFIX) && !skip.has(c));
+function prevEntryColumns(columns, surveySet) {
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  return (columns || []).filter((c) => {
+    const s = String(c);
+    if (!s.startsWith(REF_PREFIX)) return false;
+    const base = s.slice(REF_PREFIX.length);
+    return base === NOTE_COL || (survey.has(base) && base !== NOTE_FLAG_COL && base !== HIT_COL);
+  });
 }
 
 function rowComboState(row, prevCols, nowCols) {
@@ -1064,6 +1068,9 @@ function isDerivedColumn(c) {
 function refIsCarried(c, staticSet) {
   if (REF_KEEP.has(c)) return true;
   if (REF_SKIP.has(c)) return false;
+  /* 「該当項目」は点検項目から作る派生列。「属性をCSVで保存」には入るので
+     前回のCSVに含まれうるが、重ねても意味が無い(今回の項目から作り直すもの) */
+  if (c === HIT_COL) return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
      「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
   if (staticSet && staticSet.has(c)) return false;
