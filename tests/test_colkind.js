@@ -16,7 +16,8 @@
 const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
         prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
-        SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, REF_SKIP,
+        SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, columnRole, prevBaseRole,
+        isDerivedColumn, isColorizableColumn, isReservedColumn, ATTR_INFO, COMBO_COL,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -240,8 +241,98 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(!refIsCarried("石種", S), "静的な属性は重ねない(前回と今回で同じ値)");
   ok(!refIsCarried("Width", S), "幾何属性は重ねない");
   ok(refIsCarried("はらみ出し", null), "静的な列の集合が無くても落ちない");
-  ok(REF_SKIP.has(SURVEY_DATE_COL) && REF_SKIP.has(SURVEYOR_COL),
-     "**外す列は定数で持つ**(列名を変えたときに取り残さない)");
+  ok(!refIsCarried(REF_PREFIX + "はらみ出し", S) && !refIsCarried(HIST_PREFIX + "記録回数", S),
+     "前回・履歴の列を重ね直さない(「前回:前回:…」を作らない)");
+}
+
+/* ---------- 列の種別(§5.1.7) ---------- */
+/* 「この列は何か」に答える関数が16個に分かれ、答えが食い違っていた。
+   色分けに出さないはずの列が点検側の選択肢にだけ出る、記録の鍵の列名で
+   点検項目を作れる、といった不具合はここから出た(v1.40.3)。
+   種別を決める場所を columnRole 1つにし、ほかは種別を見て決める */
+{
+  const S = new Set(["はらみ出し", "ひび割れ"]);
+  const cases = [
+    [REF_PREFIX + NOTE_COL, "prev"], [REF_PREFIX + "はらみ出し", "prev"], [REF_PREFIX + "石種", "prev"],
+    [HIST_PREFIX + "記録回数", "hist"], [COMBO_COL, "hist"],
+    [NOTE_COL, "note"], [NOTE_FLAG_COL, "noteFlag"], [HIT_COL, "hit"],
+    [SURVEY_DATE_COL, "key"], [SURVEYOR_COL, "key"],
+    ["Width", "computed"], ["SrcID", "computed"], ["Dataset", "computed"],
+    ["はらみ出し", "survey"], ["ひび割れ", "survey"],
+    ["石種", "attr"], ["エリア", "attr"], ["ID", "attr"], ["謎の列", "attr"],
+  ];
+  for (const [name, role] of cases) {
+    ok(columnRole(name, S) === role, "種別: " + name + " → " + role, "(" + columnRole(name, S) + ")");
+  }
+  ok(Object.keys(ATTR_INFO).every((k) => {
+    const r = columnRole(k, S);
+    return r === "computed" || r === "note" || r === "noteFlag";
+  }), "ATTR_INFOの列はすべて自動計算かメモ(将来増えても取りこぼさない)");
+
+  // 種別が分からないものは静的に倒す(§5.1.6)
+  ok(columnRole("はらみ出し", null) === "attr", "**点検項目の集合が無ければ attr**(分からないものは静的に倒す)");
+  ok(columnRole("はらみ出し", new Set()) === "attr", "集合が空でも attr");
+  ok(columnRole(null, S) === "attr" && columnRole(undefined, S) === "attr", "null・undefined でも落ちない");
+  ok(columnRole("", S) === "attr", "空文字でも落ちない");
+
+  /* **名前で決まる種別が、手入力の種別より先。** 記録CSVを読むと、ヘッダにあった列は
+     すべて点検項目として登録される。メモの列もそこに入るので、順序が逆だと
+     メモが点検項目として扱われる */
+  const weird = new Set([NOTE_COL, NOTE_FLAG_COL, HIT_COL, SURVEYOR_COL, "Width", REF_PREFIX + "x"]);
+  ok(columnRole(NOTE_COL, weird) === "note", "**メモは、点検項目に登録されていてもメモ**");
+  ok(columnRole(NOTE_FLAG_COL, weird) === "noteFlag", "メモの有無も同じ");
+  ok(columnRole(HIT_COL, weird) === "hit", "該当項目も同じ");
+  ok(columnRole(SURVEYOR_COL, weird) === "key", "**記録の鍵は、点検項目に登録されていても鍵**");
+  ok(columnRole("Width", weird) === "computed", "自動計算の列も同じ");
+  ok(columnRole(REF_PREFIX + "x", weird) === "prev", "前回の列も同じ");
+  ok(!surveyValueColumns([SURVEYOR_COL, NOTE_FLAG_COL, HIT_COL, "Width"], weird).length,
+     "**鍵・メモの有無・該当項目・自動計算の列は、記録の値の列にならない**");
+  ok(j(surveyValueColumns([NOTE_COL, "はらみ出し"], new Set([NOTE_COL, "はらみ出し"]))) === j([NOTE_COL, "はらみ出し"]),
+     "メモと点検項目は記録の値の列");
+
+  // 「前回:」を外した元の列の種別
+  ok(prevBaseRole(REF_PREFIX + NOTE_COL, S) === "note", "前回:メモ の元はメモ");
+  ok(prevBaseRole(REF_PREFIX + "はらみ出し", S) === "survey", "前回:点検項目 の元は点検項目");
+  ok(prevBaseRole(REF_PREFIX + "石種", S) === "attr", "前回:属性 の元は属性");
+  ok(prevBaseRole("はらみ出し", S) === null, "前回の列でなければ null");
+  ok(prevBaseRole(null, S) === null, "nullでも落ちない");
+}
+
+/* ---------- どの列も、行き先がちょうど1つに決まる ---------- */
+/* 書き出し先(台帳か記録か、どちらでもないか)と、色分けの選択肢(属性側か点検側か、
+   どちらにも出さないか)。条件を別々に書いていたときは、片方だけ直して食い違った */
+{
+  const S = new Set(["はらみ出し", "ひび割れ"]);
+  const all = [...Object.keys(ATTR_INFO), "ID", "石種", "エリア", "はらみ出し", "ひび割れ", "謎の列",
+               HIT_COL, SURVEY_DATE_COL, SURVEYOR_COL, COMBO_COL, HIST_PREFIX + "記録回数",
+               REF_PREFIX + NOTE_COL, REF_PREFIX + NOTE_FLAG_COL, REF_PREFIX + "はらみ出し", REF_PREFIX + "石種"];
+  const led = new Set(ledgerColumns(all, S));
+  const rec = new Set(surveyValueColumns(all, S));
+  const both = all.filter((c) => led.has(c) && rec.has(c));
+  ok(both.length === 0, "**台帳と記録の両方に入る列が無い**", j(both));
+  const neither = all.filter((c) => !led.has(c) && !rec.has(c));
+  ok(neither.every((c) => isDerivedColumn(c) || c === NOTE_FLAG_COL || c === HIT_COL),
+     "**どちらにも入らないのは、作り直せる列だけ**(前回・履歴・メモの有無・該当項目)", j(neither));
+
+  // 色分けの選択肢。属性側 = 色分けに出す列から点検側を除いたもの(画面と同じ組み立て)
+  const colorable = all.filter((c) => isColorizableColumn(c, "ID"));
+  const surveySide = new Set(surveyVisualColumns(all, S).filter((c) => isColorizableColumn(c, "ID")));
+  const attrSide = colorable.filter((c) => !surveySide.has(c));
+  ok(!attrSide.some((c) => S.has(c)), "**点検項目が属性側の色分けに出ない**", j(attrSide.filter((c) => S.has(c))));
+  ok(!attrSide.some((c) => c.startsWith(HIST_PREFIX) || c === HIT_COL),
+     "履歴と該当項目が属性側の色分けに出ない");
+  ok(![...surveySide].some((c) => c === "石種" || c === "Width"), "属性と幾何属性が点検側の色分けに出ない");
+  ok(![...surveySide].some((c) => c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL),
+     "**メモの有無・前回のメモの有無は、点検側の色分けにも出ない**(記録の状況で読める)",
+     j([...surveySide]));
+  ok(![...colorable].some((c) => c === NOTE_COL || c === REF_PREFIX + NOTE_COL || c === "ID"),
+     "メモ本文とIDは、どちらの色分けにも出ない");
+  ok(surveySide.has(REF_PREFIX + "はらみ出し") && attrSide.includes(REF_PREFIX + "石種"),
+     "前回の列は、元の列と同じ側に出る");
+
+  // 手で作れる列名は attr だけ(名前で種別が決まる列はすべて予約)
+  ok(all.filter((c) => !isReservedColumn(c, "")).every((c) => columnRole(c, null) === "attr"),
+     "**予約されていない名前は、すべて attr**");
 }
 
 console.log("");

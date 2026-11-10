@@ -98,10 +98,6 @@ const HIT_MULTI = "複数";
 
 const HIT_NONE = "なし";
 
-const REF_KEEP = new Set([NOTE_COL, NOTE_FLAG_COL]);
-
-const REF_SKIP = new Set([SURVEY_DATE_COL, SURVEYOR_COL]);
-
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -585,23 +581,29 @@ function recordHeaderColumns(columnLists) {
 
 function ledgerColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
-  return (columns || []).filter((c) =>
-    !isDerivedColumn(c) && c !== NOTE_COL && c !== NOTE_FLAG_COL && c !== HIT_COL &&
-    !survey.has(c));
+  return (columns || []).filter((c) => {
+    const role = columnRole(c, survey);
+    return role === "attr" || role === "computed" || role === "key";
+  });
 }
 
 function surveyValueColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
-  return (columns || []).filter((c) => (survey.has(c) || c === NOTE_COL) && c !== HIT_COL);
+  return (columns || []).filter((c) => {
+    const role = columnRole(c, survey);
+    return role === "survey" || role === "note";
+  });
 }
 
 function surveyVisualColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
-  return (columns || []).filter((c) =>
-    survey.has(c) ||
-    c.startsWith(HIST_PREFIX) ||
-    (c.startsWith(REF_PREFIX) && survey.has(c.slice(REF_PREFIX.length))) ||
-    c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL || c === HIT_COL);
+  return (columns || []).filter((c) => {
+    // 前回の列は、元の列が点検項目かメモの有無なら点検側(属性の前回分は属性側)
+    const base = prevBaseRole(c, survey);
+    if (base) return base === "survey" || base === "noteFlag";
+    const role = columnRole(c, survey);
+    return role === "survey" || role === "hist" || role === "hit" || role === "noteFlag";
+  });
 }
 
 function hasSurveyEntry(row, cols) {
@@ -692,10 +694,8 @@ function comboState(hasPrev, hasNow) {
 function prevEntryColumns(columns, surveySet) {
   const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
   return (columns || []).filter((c) => {
-    const s = String(c);
-    if (!s.startsWith(REF_PREFIX)) return false;
-    const base = s.slice(REF_PREFIX.length);
-    return base === NOTE_COL || (survey.has(base) && base !== NOTE_FLAG_COL && base !== HIT_COL);
+    const base = prevBaseRole(c, survey);
+    return base === "note" || base === "survey";
   });
 }
 
@@ -713,9 +713,9 @@ function surveyorLabel(names) {
 
 function isColorizableColumn(col, idCol) {
   if (col === idCol) return false;
-  if (col === NOTE_COL || col === REF_PREFIX + NOTE_COL) return false;
-  if (col === NOTE_FLAG_COL || col === REF_PREFIX + NOTE_FLAG_COL) return false;
-  return true;
+  // 前回の列は、元の列と同じ扱いにする(前回のメモ・前回のメモの有無も出さない)
+  const role = prevBaseRole(col, null) || columnRole(col, null);
+  return role !== "note" && role !== "noteFlag";
 }
 
 function isDevHost(hostname, protocol, stableUrl) {
@@ -1050,31 +1050,48 @@ function normalizeClassValue(v) {
 function isReservedColumn(name, idCol) {
   const n = String(name == null ? "" : name).trim();
   if (n === "") return true;
-  if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
-  if (n === HIT_COL) return true;   // 点検項目から作る派生列
-  /* 記録の鍵。この名前の点検項目を作ると、記録の行を組むときに鍵の値を
-     上書きする(点検者の名前が「あり」に置き換わっていた) */
-  if (n === SURVEY_DATE_COL || n === SURVEYOR_COL) return true;
-  if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
-  return false;
+  /* 名前で種別が決まる列はすべて予約。自動計算の列、メモ、該当項目、
+     前回・履歴(§5.1.4)、そして記録の鍵 — 鍵の名前で点検項目を作ると、
+     記録の行を組むときに鍵の値を上書きする(点検者の名前が「あり」に
+     置き換わっていた) */
+  return columnRole(n, null) !== "attr";
+}
+
+function columnRole(name, surveySet) {
+  const n = String(name == null ? "" : name);
+  if (n.startsWith(REF_PREFIX)) return "prev";
+  if (n.startsWith(HIST_PREFIX)) return "hist";
+  if (n === NOTE_COL) return "note";
+  if (n === NOTE_FLAG_COL) return "noteFlag";
+  if (n === HIT_COL) return "hit";
+  if (n === SURVEY_DATE_COL || n === SURVEYOR_COL) return "key";
+  if (Object.prototype.hasOwnProperty.call(ATTR_INFO, n)) return "computed";
+  if (surveySet && surveySet.has(n)) return "survey";
+  return "attr";
+}
+
+function prevBaseRole(name, surveySet) {
+  const n = String(name == null ? "" : name);
+  return n.startsWith(REF_PREFIX) ? columnRole(n.slice(REF_PREFIX.length), surveySet) : null;
 }
 
 function isDerivedColumn(c) {
-  return String(c).startsWith(REF_PREFIX) || String(c).startsWith(HIST_PREFIX);
+  const role = columnRole(c, null);
+  return role === "prev" || role === "hist";
 }
 
 function refIsCarried(c, staticSet) {
-  if (REF_KEEP.has(c)) return true;
-  if (REF_SKIP.has(c)) return false;
-  /* 「該当項目」は点検項目から作る派生列。「属性をCSVで保存」には入るので
-     前回のCSVに含まれうるが、重ねても意味が無い(今回の項目から作り直すもの) */
-  if (c === HIT_COL) return false;
+  const role = columnRole(c, null);
+  if (role === "note" || role === "noteFlag") return true;
+  /* 記録の鍵(点検日・点検者)・該当項目・自動計算の列は重ねない。
+     点検日は見出し(refLabel)に1回出すだけ。「該当項目」は「属性をCSVで保存」に
+     入るので前回のCSVに含まれうるが、今回の項目から作り直す派生列 */
+  if (role !== "attr") return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
      「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
-  if (staticSet && staticSet.has(c)) return false;
-  return !Object.prototype.hasOwnProperty.call(ATTR_INFO, c);
+  return !(staticSet && staticSet.has(c));
 }
 
 function latLonToJPRect(lat, lon, zone) {
@@ -1158,4 +1175,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, REF_KEEP, REF_SKIP, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

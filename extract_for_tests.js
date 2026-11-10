@@ -73,6 +73,8 @@ const FUNCS = [
   "distToSegmentSq",
   "normalizeClassValue",
   "isReservedColumn",
+  "columnRole",
+  "prevBaseRole",
   "isDerivedColumn",
   "refIsCarried",
   "latLonToJPRect",
@@ -86,8 +88,7 @@ const FUNCS = [
 const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN", "REF_PREFIX", "HIST_PREFIX", "NOTE_FLAG_COL", "COMBO_COL", "COMBO_PREV", "COMBO_BOTH", "COMBO_NOW", "COMBO_NONE", "SURVEYOR_NONE",
   "FILENAME_NG", "FILENAME_TRIM", "RECTLINE_HIST_BINS",
   "SURVEY_DATE_COL", "SURVEYOR_COL",
-  "HIT_COL", "HIT_MULTI", "HIT_NONE",
-  "REF_KEEP", "REF_SKIP"];
+  "HIT_COL", "HIT_MULTI", "HIT_NONE"];
 
 const root = __dirname;
 const htmlPath = path.join(root, "index.html");
