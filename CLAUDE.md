@@ -41,7 +41,7 @@
 **`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node tests/run_all.js       # 抽出 + 全テストを一括実行（27ファイル・768件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（28ファイル・798件）
 ```
 
 抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
@@ -57,6 +57,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（27ファイ
 | `test_suite.js` | 幾何計算・色計算 | 64 |
 | `test_rectline.js` | 傾きラインの計算・中間色の3点補間 | 25 |
 | `test_anglehist.js` | 傾きの分布(ビンの割り当て・数でない値) | 28 |
+| `test_legend.js` | 凡例の集計(図に出ている石だけを数える・画面とSVGで同じ文言) | 30 |
 | `test_palette.js` | カテゴリ色パレット | 3 |
 | `test_fitview.js` | 全体表示のフィット計算 | 22 |
 | `test_winding.js` | GLB法線の巻き順 | 7 |

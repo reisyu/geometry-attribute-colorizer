@@ -427,7 +427,9 @@
         残りをグレーの「その他」にまとめられます。</li>
     </ul>
     <p>属性を選ぶとその定義の説明も表示されるので、はじめての属性はそこで確認できます。
-      凡例とヒストグラム（値の分布）は画面下に表示されます。</p>
+      凡例とヒストグラム（値の分布）は画面下に表示されます。
+      <strong>凡例が数えるのは、図に出ている石だけです</strong>。フィルタで除外した石は
+      件数にもヒストグラムにも入りません（色の範囲は変わらないので、絞り込む前と色を見比べられます）。</p>
     <ul>
       <li><strong>色分けを実行</strong> — 色を付けます。DXFとサンプルは読み込んだ時点で
         自動的に実行されるので、押す必要があるのは<strong>GLB＋CSVの場合</strong>です。
@@ -1221,7 +1223,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.40.5";
+  const HELP_VERSION = "1.40.6";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

@@ -98,6 +98,10 @@ const HIT_MULTI = "複数";
 
 const HIT_NONE = "なし";
 
+const OTHER_COLOR = [0.55, 0.55, 0.55];
+
+const LEGEND_HIST_BINS = 24;
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -548,6 +552,66 @@ function angleHistogram(angles, nbins) {
     total++;
   }
   return { counts, total };
+}
+
+function legendModel(rows, style, catColors, others, nbins) {
+  const attr = style.attr;
+  const list = rows || [];
+  const text = (row) => String((row || {})[attr] ?? "").trim();
+
+  if (style.numericMode) {
+    const values = [];
+    for (const row of list) {
+      const raw = text(row);
+      if (raw === "") continue;   // Number("") は 0 なので、空欄を先に除く
+      const v = Number(raw);
+      if (Number.isFinite(v)) values.push(v);
+    }
+    const nb = Math.max(1, Math.floor(Number(nbins) || 1));
+    const counts = new Array(nb).fill(0);
+    const span = style.vmax - style.vmin;
+    for (const v of values) {
+      const t = span === 0 ? 0.5 : Math.max(0, Math.min(1, (v - style.vmin) / span));
+      counts[Math.min(nb - 1, Math.floor(t * nb))]++;
+    }
+    const bins = counts.map((count, b) => {
+      const lo = style.vmin + span * (b / nb), hi = style.vmin + span * ((b + 1) / nb);
+      return { lo, hi, mid: (lo + hi) / 2, count };
+    });
+    return { attr, numeric: true, n: values.length, bins, vmin: style.vmin, vmax: style.vmax };
+  }
+
+  const counts = new Map();
+  let blanks = 0;
+  for (const row of list) {
+    const v = text(row);
+    if (v === "") { blanks++; continue; }
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const otherSet = others instanceof Set ? others : new Set(others || []);
+  const items = [];
+  let otherKinds = 0, otherCount = 0;
+  for (const [cat, rgb] of catColors || []) {
+    const count = counts.get(cat) || 0;
+    /* **図に1つも無い値は凡例に出さない。** 図に無い色を説明する行は要らず、
+       フィルタで消した値が「(0)」で並ぶと読みにくい */
+    if (count === 0) continue;
+    if (otherSet.has(cat)) { otherKinds++; otherCount += count; continue; }
+    items.push({ cat, rgb, count });
+  }
+  let n = 0;
+  for (const c of counts.values()) n += c;
+  return { attr, numeric: false, n, items, blanks,
+           others: otherKinds > 0 ? { kinds: otherKinds, count: otherCount } : null };
+}
+
+function legendRowLabels(model) {
+  const out = model.items.map((it) => ({ rgb: it.rgb, text: (it.cat || "(空欄)") + " (" + it.count + ")" }));
+  // 未入力(空欄)はカテゴリにしていないので、灰色として別に出す。
+  // 分類の途中では「まだ付けていない数」が最も知りたい情報になる
+  if (model.blanks > 0) out.push({ rgb: [0.5, 0.5, 0.5], text: "未入力 (" + model.blanks + ")" });
+  if (model.others) out.push({ rgb: OTHER_COLOR, text: "その他 " + model.others.kinds + "種 (" + model.others.count + ")" });
+  return out;
 }
 
 function classChipNextValue(currentValues, tapped) {
@@ -1180,4 +1244,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

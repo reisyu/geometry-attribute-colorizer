@@ -2002,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.40.5";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.40.6";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -3387,69 +3387,52 @@ function buildGLBBytes() {
 document.getElementById("export-glb-btn").addEventListener("click", exportGLB);
 
 /* 立面図SVG・現在のビューSVGで共通の凡例(タイトル・ヒストグラム・
-   グラデーションバー or カテゴリ凡例)を生成する。lastLegendStateが
-   無ければ何も出力しない */
+   グラデーションバー or カテゴリ凡例)を生成する。塗っていなければ
+   (colorStyle が無ければ)何も出力しない */
 function buildLegendSVGParts(items, contentH, margin) {
   const parts = [];
-  if (!lastLegendState) return parts;
-  const L = lastLegendState;
+  if (!colorStyle) return parts;
+  const S = colorStyle;
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const lx = margin, ly = contentH + margin * 2;
-  parts.push(`<text x="${lx}" y="${ly}" font-size="14" fill="#222222">${esc(attrLabel(L.attr))}  n=${L.n}</text>`);
+  /* 数えるのは**この図に書き出した石**(画面と同じ関数で数える)。
+     画面と同じ石が出ていれば、見出しも行も画面と同じ文字列になる */
+  const rows = [];
+  for (const item of items) {
+    const row = attributesByMesh.get(item.mesh.uuid);
+    if (row) rows.push(row);
+  }
+  const model = currentLegendModel(rows);
+  parts.push(`<text x="${lx}" y="${ly}" font-size="14" fill="#222222">${esc(attrLabel(model.attr))}  n=${model.n}</text>`);
 
-  if (L.numericMode) {
+  if (model.numeric) {
     const barW = 400, barH = 14, histH = 40;
-    // ヒストグラム(表示中の石の値で集計)
-    const NBINS = 24;
-    const counts = new Array(NBINS).fill(0);
-    const span = L.vmax - L.vmin;
-    for (const item of items) {
-      const row = attributesByMesh.get(item.mesh.uuid);
-      if (!row) continue;
-      const v = Number(row[L.attr]);
-      if (!Number.isFinite(v)) continue;
-      const t = span === 0 ? 0.5 : Math.max(0, Math.min(1, (v - L.vmin) / span));
-      counts[Math.min(NBINS - 1, Math.floor(t * NBINS))]++;
-    }
-    const maxCount = Math.max(...counts, 1);
-    const binW = barW / NBINS;
-    for (let b = 0; b < NBINS; b++) {
-      const h = counts[b] / maxCount * histH;
-      const binMid = L.vmin + span * ((b + 0.5) / NBINS);
-      const rgb = numericToColor(binMid, L.vmin, L.vmax, L.preset, L.cLow, L.cHigh, L.useMid, L.cMid, L.invert);
-      const fill = counts[b] === 0 ? "#dddddd" : rgbToCss(rgb);
-      parts.push(`<rect x="${(lx + b * binW).toFixed(1)}" y="${(ly + 8 + histH - h).toFixed(1)}" width="${(binW - 1).toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}" fill="${fill}"/>`);
-    }
+    const maxCount = Math.max(...model.bins.map((b) => b.count), 1);
+    const binW = barW / model.bins.length;
+    model.bins.forEach((b, i) => {
+      const h = b.count / maxCount * histH;
+      const rgb = numericToColor(b.mid, S.vmin, S.vmax, S.preset, S.cLow, S.cHigh, S.useMid, S.cMid, S.invert);
+      const fill = b.count === 0 ? "#dddddd" : rgbToCss(rgb);
+      parts.push(`<rect x="${(lx + i * binW).toFixed(1)}" y="${(ly + 8 + histH - h).toFixed(1)}" width="${(binW - 1).toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}" fill="${fill}"/>`);
+    });
     // グラデーションバー
+    const span = S.vmax - S.vmin;
     const stops = [];
     for (let i = 0; i <= 10; i++) {
-      const rgb = numericToColor(L.vmin + span * (i / 10), L.vmin, L.vmax, L.preset, L.cLow, L.cHigh, L.useMid, L.cMid, L.invert);
+      const rgb = numericToColor(S.vmin + span * (i / 10), S.vmin, S.vmax, S.preset, S.cLow, S.cHigh, S.useMid, S.cMid, S.invert);
       stops.push(`<stop offset="${i * 10}%" stop-color="${rgbToCss(rgb)}"/>`);
     }
     parts.push(`<defs><linearGradient id="grad" x1="0" y1="0" x2="1" y2="0">${stops.join("")}</linearGradient></defs>`);
     parts.push(`<rect x="${lx}" y="${ly + 12 + histH}" width="${barW}" height="${barH}" fill="url(#grad)"/>`);
-    parts.push(`<text x="${lx}" y="${ly + 12 + histH + barH + 16}" font-size="12" fill="#222222">${Number(L.vmin.toPrecision(5))}</text>`);
-    parts.push(`<text x="${lx + barW}" y="${ly + 12 + histH + barH + 16}" font-size="12" fill="#222222" text-anchor="end">${Number(L.vmax.toPrecision(5))}</text>`);
+    parts.push(`<text x="${lx}" y="${ly + 12 + histH + barH + 16}" font-size="12" fill="#222222">${Number(S.vmin.toPrecision(5))}</text>`);
+    parts.push(`<text x="${lx + barW}" y="${ly + 12 + histH + barH + 16}" font-size="12" fill="#222222" text-anchor="end">${Number(S.vmax.toPrecision(5))}</text>`);
   } else {
-    // カテゴリ凡例(「その他」は1行に集約)
+    // カテゴリ凡例(「その他」は1行に集約。未入力は灰色で別に出す)
     let cy2 = ly + 12;
-    let svgOthers = 0;
-    for (const [cat, rgb] of Object.entries(categoryColorCache)) {
-      if (categoryOthers.has(cat)) { svgOthers++; continue; }
-      parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss(rgb)}"/>`);
-      const catN = (L.catCounts && L.catCounts[cat]) || 0;
-      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">${esc(cat || "(空欄)")} (${catN})</text>`);
+    for (const row of legendRowLabels(model)) {
+      parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss(row.rgb)}"/>`);
+      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">${esc(row.text)}</text>`);
       cy2 += 18;
-    }
-    if (L.blanks > 0) {
-      // 未入力は灰色で塗られている。凡例に無いと、図の灰色を説明できない
-      parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss([0.5, 0.5, 0.5])}"/>`);
-      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">未入力 (${L.blanks})</text>`);
-      cy2 += 18;
-    }
-    if (svgOthers > 0) {
-      parts.push(`<rect x="${lx}" y="${cy2}" width="12" height="12" fill="${rgbToCss(OTHER_COLOR)}"/>`);
-      parts.push(`<text x="${lx + 18}" y="${cy2 + 11}" font-size="12" fill="#222222">その他 ${svgOthers}種 (${(L.othersCount || 0)})</text>`);
     }
   }
   return parts;
@@ -5884,6 +5867,7 @@ const PALETTE = [
   [0.85, 0.60, 0.50], [0.55, 0.25, 0.45], [0.40, 0.50, 0.30], [0.65, 0.65, 0.75],
 ];
 const OTHER_COLOR = [0.55, 0.55, 0.55];  // 「その他」に集約されたカテゴリの色
+const LEGEND_HIST_BINS = 24;   // 凡例のヒストグラムの本数(画面とSVGで同じ。傾きの分布とも揃える)
 function categoryColorByIndex(i) {
   if (i < PALETTE.length) return PALETTE[i];
   // 黄金角による自動生成(彩度・明度を交互に変えて識別性を補う)
@@ -6219,7 +6203,7 @@ function applyColorize(col) {
     matched++;
   }
 
-  updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
+  colorStyle = { attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert };
   applyOverlayOpacity();   // 作り直したマテリアルに、除外表示と背景モデル用の透過を貼り直す
   rebuildLabels();
   document.getElementById("reset-btn").disabled = false;
@@ -6239,7 +6223,7 @@ function applyColorize(col) {
 
 /* 色分けを解除して素の色に戻す。畳んだステップ3のチェックを外したときと、
    まとめ書き出しの後始末で使う(同じものを2か所で組み立てない)。
-   凡例の内容(lastLegendState)も捨てる。残すと、素の色に戻した図をSVGに
+   配色(colorStyle)も捨てる。残すと、素の色に戻した図をSVGに
    書き出したとき前の属性のグラデーション凡例だけが付く(§8.2) */
 function clearColorize() {
   colorColumn = null;
@@ -6248,8 +6232,8 @@ function clearColorize() {
     const orig = originalMaterials.get(mesh.uuid);
     if (orig) mesh.material = orig;
   }
-  document.getElementById("legend").style.display = "none";
-  lastLegendState = null;
+  colorStyle = null;
+  renderLegend();
   syncColorUI();
 }
 
@@ -6850,6 +6834,7 @@ function applyFilter() {
   rebuildLabels();
   rebuildRectLines(false);  // フィルタ状態を傾きラインにも反映
   refreshMinimap();    // 俯瞰図も「いま表示している石」に合わせる
+  renderLegend();      // 凡例も「いま表示している石」を数える
   updateStepSummaries();
 }
 
@@ -6921,119 +6906,149 @@ function rgbToCss(rgb) {
   return `rgb(${Math.round(rgb[0] * 255)},${Math.round(rgb[1] * 255)},${Math.round(rgb[2] * 255)})`;
 }
 
-let lastLegendState = null;  // SVG書き出し時に凡例を再現するための状態
+/* いま塗っている配色。凡例を描くのに要る設定だけを持つ(件数は持たない)。
+   塗っていなければ null。applyColorize が書き、clearColorize が捨てる */
+let colorStyle = null;
 
-function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert) {
-  lastLegendState = { attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert };
+/* 凡例に出す中身を数える。純関数(§5.1.3)。
+
+   **数えるのは図に出ている石だけ**(v1.40.6)。rows には、その図に出ている石の行を
+   1石1行で渡す。画面なら表示中の石、SVGなら書き出した石。以前は画面がCSVの全行を、
+   SVGのヒストグラムが書き出した石を数えており、フィルタで84石だけ出しているのに
+   凡例は n=123 だった。
+
+   style   … { attr, numericMode, vmin, vmax }(色の割り当ては applyColorize が決めたもの)
+   catColors … [[値, rgb], …] 色を決めた順(凡例もこの順に並ぶ)
+   others  … 「その他」にまとめた値の集合
+   nbins   … ヒストグラムの本数
+
+   範囲(vmin・vmax)は数えた石から決め直さない。フィルタを掛けるたびに色の
+   対応が変わると、図を見比べられなくなる */
+function legendModel(rows, style, catColors, others, nbins) {
+  const attr = style.attr;
+  const list = rows || [];
+  const text = (row) => String((row || {})[attr] ?? "").trim();
+
+  if (style.numericMode) {
+    const values = [];
+    for (const row of list) {
+      const raw = text(row);
+      if (raw === "") continue;   // Number("") は 0 なので、空欄を先に除く
+      const v = Number(raw);
+      if (Number.isFinite(v)) values.push(v);
+    }
+    const nb = Math.max(1, Math.floor(Number(nbins) || 1));
+    const counts = new Array(nb).fill(0);
+    const span = style.vmax - style.vmin;
+    for (const v of values) {
+      const t = span === 0 ? 0.5 : Math.max(0, Math.min(1, (v - style.vmin) / span));
+      counts[Math.min(nb - 1, Math.floor(t * nb))]++;
+    }
+    const bins = counts.map((count, b) => {
+      const lo = style.vmin + span * (b / nb), hi = style.vmin + span * ((b + 1) / nb);
+      return { lo, hi, mid: (lo + hi) / 2, count };
+    });
+    return { attr, numeric: true, n: values.length, bins, vmin: style.vmin, vmax: style.vmax };
+  }
+
+  const counts = new Map();
+  let blanks = 0;
+  for (const row of list) {
+    const v = text(row);
+    if (v === "") { blanks++; continue; }
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const otherSet = others instanceof Set ? others : new Set(others || []);
+  const items = [];
+  let otherKinds = 0, otherCount = 0;
+  for (const [cat, rgb] of catColors || []) {
+    const count = counts.get(cat) || 0;
+    /* **図に1つも無い値は凡例に出さない。** 図に無い色を説明する行は要らず、
+       フィルタで消した値が「(0)」で並ぶと読みにくい */
+    if (count === 0) continue;
+    if (otherSet.has(cat)) { otherKinds++; otherCount += count; continue; }
+    items.push({ cat, rgb, count });
+  }
+  let n = 0;
+  for (const c of counts.values()) n += c;
+  return { attr, numeric: false, n, items, blanks,
+           others: otherKinds > 0 ? { kinds: otherKinds, count: otherCount } : null };
+}
+
+/* 凡例の行の文言。画面とSVGで**同じ文字列**にする(§5.1.3)。純関数 */
+function legendRowLabels(model) {
+  const out = model.items.map((it) => ({ rgb: it.rgb, text: (it.cat || "(空欄)") + " (" + it.count + ")" }));
+  // 未入力(空欄)はカテゴリにしていないので、灰色として別に出す。
+  // 分類の途中では「まだ付けていない数」が最も知りたい情報になる
+  if (model.blanks > 0) out.push({ rgb: [0.5, 0.5, 0.5], text: "未入力 (" + model.blanks + ")" });
+  if (model.others) out.push({ rgb: OTHER_COLOR, text: "その他 " + model.others.kinds + "種 (" + model.others.count + ")" });
+  return out;
+}
+
+/* 図に出ている石の行。画面の凡例はこれを数える(フィルタで除外した石は入れない) */
+function shownRows() {
+  const rows = [];
+  for (const { mesh } of meshes) {
+    if (!mesh.visible || mesh.userData.filtered) continue;
+    const row = attributesByMesh.get(mesh.uuid);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+function currentLegendModel(rows) {
+  return legendModel(rows, colorStyle, Object.entries(categoryColorCache), categoryOthers, LEGEND_HIST_BINS);
+}
+
+/* 画面の凡例を描き直す。塗っていなければ隠す。
+   **表示している石が変わるたびに呼ぶ**(applyFilter の最後)。数えるのは図に出ている石なので、
+   フィルタを変えたら件数も変わる */
+function renderLegend() {
   const legend = document.getElementById("legend");
+  if (!colorStyle) { legend.style.display = "none"; return; }
+  const S = colorStyle;
+  const model = currentLegendModel(shownRows());
   const numDiv = document.getElementById("legend-numeric");
   const catDiv = document.getElementById("legend-cats");
   legend.style.display = "block";
+  document.getElementById("legend-title").textContent = `${attrLabel(model.attr)}  n=${model.n}`;
 
-  // 現在の属性の全値を集める(統計・ヒストグラム用)
-  const values = [];
-  for (const row of csvRows) {
-    const v = (row[attr] ?? "").toString().trim();
-    if (v === "") continue;
-    if (numericMode) {
-      const n = Number(v);
-      if (Number.isFinite(n)) values.push(n);
-    } else {
-      values.push(v);
-    }
-  }
-  // 書き出したSVGの凡例でも同じ n を使う(画面とSVGで見出しを食い違わせない §5.1.3)
-  lastLegendState.n = values.length;
-  document.getElementById("legend-title").textContent =
-    `${attrLabel(attr)}  n=${values.length}`;
-
-  if (numericMode) {
+  if (model.numeric) {
     numDiv.style.display = "block";
     catDiv.style.display = "none";
-
-    // --- ヒストグラム(グラデーションバーと横位置が対応、ビンは実際の色で着色) ---
+    // ヒストグラム(グラデーションバーと横位置が対応、ビンは実際の色で着色)
     const histDiv = document.getElementById("legend-hist");
     histDiv.innerHTML = "";
-    const NBINS = 24;
-    const counts = new Array(NBINS).fill(0);
-    const span = vmax - vmin;
-    for (const n of values) {
-      const t = span === 0 ? 0.5 : Math.max(0, Math.min(1, (n - vmin) / span));
-      counts[Math.min(NBINS - 1, Math.floor(t * NBINS))]++;
-    }
-    const maxCount = Math.max(...counts, 1);
-    for (let b = 0; b < NBINS; b++) {
-      const binLo = vmin + span * (b / NBINS);
-      const binHi = vmin + span * ((b + 1) / NBINS);
-      const binMid = (binLo + binHi) / 2;
-      const rgb = numericToColor(binMid, vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
+    const maxCount = Math.max(...model.bins.map((b) => b.count), 1);
+    for (const b of model.bins) {
+      const rgb = numericToColor(b.mid, S.vmin, S.vmax, S.preset, S.cLow, S.cHigh, S.useMid, S.cMid, S.invert);
       const bin = document.createElement("div");
       bin.className = "hist-bin";
-      bin.style.height = counts[b] === 0 ? "1px" : (counts[b] / maxCount * 42).toFixed(1) + "px";
-      bin.style.background = counts[b] === 0 ? "var(--panel-edge)" : rgbToCss(rgb);
-      bin.title = `${Number(binLo.toPrecision(4))} 〜 ${Number(binHi.toPrecision(4))}: ${counts[b]}個`;
+      bin.style.height = b.count === 0 ? "1px" : (b.count / maxCount * 42).toFixed(1) + "px";
+      bin.style.background = b.count === 0 ? "var(--panel-edge)" : rgbToCss(rgb);
+      bin.title = `${Number(b.lo.toPrecision(4))} 〜 ${Number(b.hi.toPrecision(4))}: ${b.count}個`;
       histDiv.appendChild(bin);
     }
-
     const stops = [];
     for (let i = 0; i <= 10; i++) {
-      const rgb = numericToColor(vmin + (vmax - vmin) * (i / 10), vmin, vmax, preset, cLow, cHigh, useMid, cMid, invert);
+      const rgb = numericToColor(S.vmin + (S.vmax - S.vmin) * (i / 10), S.vmin, S.vmax, S.preset, S.cLow, S.cHigh, S.useMid, S.cMid, S.invert);
       stops.push(`${rgbToCss(rgb)} ${i * 10}%`);
     }
     document.getElementById("legend-bar").style.background = `linear-gradient(to right, ${stops.join(",")})`;
-    document.getElementById("legend-min").textContent = Number(vmin.toPrecision(5));
-    document.getElementById("legend-max").textContent = Number(vmax.toPrecision(5));
+    document.getElementById("legend-min").textContent = Number(S.vmin.toPrecision(5));
+    document.getElementById("legend-max").textContent = Number(S.vmax.toPrecision(5));
   } else {
     numDiv.style.display = "none";
     catDiv.style.display = "flex";
     catDiv.innerHTML = "";
-    // カテゴリごとの個数を数える
-    const catCounts = {};
-    for (const v of values) catCounts[v] = (catCounts[v] || 0) + 1;
-    lastLegendState.catCounts = catCounts;   // 書き出したSVGの凡例でも同じ件数を使う
-    let othersCount = 0, othersCats = 0;
-    for (const [cat, rgb] of Object.entries(categoryColorCache)) {
-      if (categoryOthers.has(cat)) {
-        othersCount += catCounts[cat] || 0;
-        othersCats++;
-        continue;  // 「その他」に集約されたカテゴリは個別表示しない
-      }
+    for (const row of legendRowLabels(model)) {
       const item = document.createElement("div");
       item.className = "cat-item";
       const sw = document.createElement("span");
       sw.className = "cat-swatch";
-      sw.style.background = rgbToCss(rgb);
+      sw.style.background = rgbToCss(row.rgb);
       const label = document.createElement("span");
-      label.textContent = `${cat || "(空欄)"} (${catCounts[cat] || 0})`;
-      item.appendChild(sw); item.appendChild(label);
-      catDiv.appendChild(item);
-    }
-    // 未入力(空欄)はカテゴリにしていないので、灰色として別に出す。
-    // 分類の途中では「まだ付けていない数」が最も知りたい情報になる
-    const blanks = csvRows.length - values.length;
-    // 書き出したSVGの凡例にも同じ行を出すため、件数をここで控える。
-    // 画面にだけ出して図に出さないと、灰色の石を説明する行が図から消える
-    lastLegendState.blanks = blanks;
-    if (blanks > 0) {
-      const item = document.createElement("div");
-      item.className = "cat-item";
-      const sw = document.createElement("span");
-      sw.className = "cat-swatch";
-      sw.style.background = rgbToCss([0.5, 0.5, 0.5]);
-      const label = document.createElement("span");
-      label.textContent = "未入力 (" + blanks + ")";
-      item.appendChild(sw); item.appendChild(label);
-      catDiv.appendChild(item);
-    }
-    lastLegendState.othersCount = othersCount;
-    if (othersCats > 0) {
-      const item = document.createElement("div");
-      item.className = "cat-item";
-      const sw = document.createElement("span");
-      sw.className = "cat-swatch";
-      sw.style.background = rgbToCss(OTHER_COLOR);
-      const label = document.createElement("span");
-      label.textContent = `その他 ${othersCats}種 (${othersCount})`;
+      label.textContent = row.text;
       item.appendChild(sw); item.appendChild(label);
       catDiv.appendChild(item);
     }
