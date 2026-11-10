@@ -18,6 +18,7 @@ const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
         SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, columnRole, prevBaseRole,
         isDerivedColumn, isColorizableColumn, isReservedColumn, ATTR_INFO, COMBO_COL,
+        colorSideOf,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -333,6 +334,33 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   // 手で作れる列名は attr だけ(名前で種別が決まる列はすべて予約)
   ok(all.filter((c) => !isReservedColumn(c, "")).every((c) => columnRole(c, null) === "attr"),
      "**予約されていない名前は、すべて attr**");
+}
+
+/* ---------- 塗っている列は、どちらの色分けか ---------- */
+/* 色分けの状態は「いま塗っている列」1つで持ち、属性側か点検側かはそこから決める
+   (§5.1.6)。以前は「どちらで選んだか」を別に持っていて、まとめ書き出しで
+   属性を差し替えても点検側のままになり、どのシートも同じ図になった */
+{
+  const S = new Set(["はらみ出し"]);
+  ok(colorSideOf("Width", S) === "attr", "幾何属性は属性側");
+  ok(colorSideOf("石種", S) === "attr", "手で作った属性は属性側");
+  ok(colorSideOf("はらみ出し", S) === "survey", "点検項目は点検側");
+  ok(colorSideOf(HIT_COL, S) === "survey", "該当項目は点検側");
+  ok(colorSideOf(COMBO_COL, S) === "survey", "記録の状況は点検側");
+  ok(colorSideOf(HIST_PREFIX + "記録回数", S) === "survey", "履歴は点検側");
+  ok(colorSideOf(REF_PREFIX + "はらみ出し", S) === "survey", "点検項目の前回分は点検側");
+  ok(colorSideOf(REF_PREFIX + "石種", S) === "attr", "属性の前回分は属性側");
+  ok(colorSideOf(null, S) === null && colorSideOf("", S) === null, "**塗っていなければ null**(どちらのチェックも点かない)");
+  ok(colorSideOf("はらみ出し", null) === "attr", "点検項目の集合が無ければ属性側(分からないものは静的に倒す)");
+  /* 種別を変えると側も移る。「点検項目に変える」を押したら、属性側のチェックが消えて
+     点検側のチェックが点く(塗っている列そのものは変わらない) */
+  ok(colorSideOf("石種", new Set(["石種"])) === "survey", "**点検項目に変えた列は点検側に移る**");
+  // 2つの選択肢は重ならない(どちらか一方のチェックだけが点く)
+  const all = ["Width", "石種", "はらみ出し", HIT_COL, COMBO_COL, HIST_PREFIX + "記録回数",
+               REF_PREFIX + "はらみ出し", REF_PREFIX + "石種"];
+  const surveySide = new Set(surveyVisualColumns(all, S));
+  ok(all.every((c) => (colorSideOf(c, S) === "survey") === surveySide.has(c)),
+     "**点検側と判定する列は、点検側の選択肢に出る列と一致する**");
 }
 
 console.log("");

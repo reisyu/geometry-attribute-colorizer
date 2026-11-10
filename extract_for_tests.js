@@ -35,6 +35,7 @@ const FUNCS = [
   "ledgerColumns",
   "surveyValueColumns",
   "surveyVisualColumns",
+  "colorSideOf",
   "hasSurveyEntry",
   "isSurveyHit",
   "surveyHitLabel",
