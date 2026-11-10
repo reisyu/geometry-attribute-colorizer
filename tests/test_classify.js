@@ -150,6 +150,16 @@ ok(!isReservedColumn("width", ""), "小文字のwidthは別の列として使え
   ok(j(recordHeaderColumns([["ID"]])) === j([]), "鍵だけなら値の列は無い");
 }
 
+/* ---------- 記録の鍵の列名 ---------- */
+/* 記録の行は { ID, 点検日, 点検者 } に値の列を足して組む。同じ名前の点検項目が
+   あると鍵を上書きする。実際に「点検者」という点検項目を作れてしまい、
+   **記録の点検者名が「あり」に置き換わっていた** */
+ok(isReservedColumn(SURVEYOR_COL, ""), "**「点検者」は手入力の列に使えない**(記録の鍵を上書きする)");
+ok(isReservedColumn(SURVEY_DATE_COL, ""), "**点検日の列名も使えない**");
+ok(isReservedColumn(" " + SURVEYOR_COL + " ", ""), "前後に空白があっても同じ");
+ok(!isReservedColumn("確認者", ""), "似た意味の別名は使える");
+ok(!isReservedColumn("点検者メモ", ""), "鍵の名前を含むだけの列は使える");
+
 console.log("");
 console.log("===== " + pass + "成功 / " + fail + "失敗 =====");
 process.exit(fail ? 1 : 0);

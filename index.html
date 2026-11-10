@@ -2002,7 +2002,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.40.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.40.3";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -3395,7 +3395,7 @@ function buildLegendSVGParts(items, contentH, margin) {
   const L = lastLegendState;
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const lx = margin, ly = contentH + margin * 2;
-  parts.push(`<text x="${lx}" y="${ly}" font-size="14" fill="#222222">${esc(attrLabel(L.attr))}  n=${items.length}</text>`);
+  parts.push(`<text x="${lx}" y="${ly}" font-size="14" fill="#222222">${esc(attrLabel(L.attr))}  n=${L.n}</text>`);
 
   if (L.numericMode) {
     const barW = 400, barH = 14, histH = 40;
@@ -4871,7 +4871,7 @@ function rowComboState(row, prevCols, nowCols) {
 const REF_PREFIX = "前回:";
 let refRows = [];        // 参考として読んだ行
 let refColumns = [];     // その列名(前回:を付ける前)
-let refLabel = "";       // いつの記録か(SurveyDate → Dataset → ファイル名)
+let refLabel = "";       // いつの記録か(点検日 → Dataset → ファイル名)
 
 /* ============================================================
    点検データ(ZIP)と、記録の台帳
@@ -5119,7 +5119,11 @@ function currentRecordRows() {
    メモと「メモの有無」はATTR_INFOに載っているが、**人が書くもの**なので重ねる。
    ここを機械的にATTR_INFOで弾くと、いちばん運びたいメモが落ちる(実際に落とした) */
 const REF_KEEP = new Set([NOTE_COL, NOTE_FLAG_COL]);
-const REF_SKIP = new Set(["SurveyDate"]);
+/* 点検日と点検者は記録の鍵。行ごとに同じ値なので列にせず、点検日だけを
+   見出し(refLabel)として1回出す。**列名は定数で書く** — 以前は旧名を文字列で
+   直書きしていたため、列名を変えたときに取り残され、「前回:InspectionDate」
+   「前回:点検者」が属性の色分けの選択肢に出ていた */
+const REF_SKIP = new Set([SURVEY_DATE_COL, SURVEYOR_COL]);
 
 /* 記録の台帳から作られる列。手で入れたものではないので、
    書き出さず、分類の列の名前にも使わせない */
@@ -5127,12 +5131,13 @@ function isDerivedColumn(c) {
   return String(c).startsWith(REF_PREFIX) || String(c).startsWith(HIST_PREFIX);
 }
 
-function refIsCarried(c) {
+/* 前回の記録から「前回:」列として重ねるかどうか。純関数 */
+function refIsCarried(c, staticSet) {
   if (REF_KEEP.has(c)) return true;
   if (REF_SKIP.has(c)) return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
      「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
-  if (staticCols.has(c)) return false;
+  if (staticSet && staticSet.has(c)) return false;
   return !Object.prototype.hasOwnProperty.call(ATTR_INFO, c);
 }
 
@@ -5144,7 +5149,7 @@ function refIdColumn() {
 }
 
 function refCarriedColumns(idCol) {
-  return refColumns.filter((c) => c !== idCol && !isDerivedColumn(c) && refIsCarried(c));
+  return refColumns.filter((c) => c !== idCol && !isDerivedColumn(c) && refIsCarried(c, staticCols));
 }
 
 /* いまの行に「前回:」列を重ね直す。読み直しても古い値が残らないよう、毎回落としてから足す */
@@ -5485,7 +5490,7 @@ function loadReferenceCSVText(text, displayName) {
       // いつの記録かを、データの中から拾う。無ければファイル名で代用する
       const pick = (c) => cols.includes(c)
         ? (rows.map((r) => String(r[c] ?? "").trim()).find((v) => v !== "") || "") : "";
-      refLabel = pick("SurveyDate") || pick("Dataset") || displayName.replace(/\.csv$/i, "");
+      refLabel = pick(SURVEY_DATE_COL) || pick("Dataset") || displayName.replace(/\.csv$/i, "");
 
       document.getElementById("ref-btn").classList.add("loaded");
       document.getElementById("ref-btn").textContent = displayName;
@@ -5665,7 +5670,11 @@ function refreshSurveyAttributeOptions() {
   if (!sel) return;
   const prev = sel.value;
   /* まとめて読める図を先に出す。項目ごとの図は、気になったときに選ぶもの */
-  const all = surveyVisualColumns(csvColumns, surveyCols);
+  /* 色分けに出さない列はここでも外す。「メモの有無」「前回:メモの有無」は
+     「記録の状況」で読めるので選択肢から外してある(isColorizableColumn)が、
+     点検側の選択肢だけがその判定を通っておらず、生の列名で並んでいた */
+  const idCol = idColumnName();
+  const all = surveyVisualColumns(csvColumns, surveyCols).filter((c) => isColorizableColumn(c, idCol));
   const head = [HIT_COL, COMBO_COL].filter((c) => all.includes(c));
   const cols = head.concat(all.filter((c) => !head.includes(c)));
   sel.innerHTML = "";
@@ -6399,6 +6408,11 @@ for (const id of ["line-color-center", "line-color-mid", "line-color-edge", "lin
 ============================================================ */
 const filterRules = [];  // { row, attrSel, minInput, maxInput }
 let filterTimer = null;
+/* フィルタで除外している数。畳んだステップ5の見出しに出す。
+   以前は画面の文言(「除外: 12 個 / …」)を正規表現で読み戻していたが、
+   パターンの書き損じで一度も一致せず、**見出しに何も出ていなかった**。
+   表示用の文字列をデータとして読まない */
+let filterExcludedCount = 0;
 
 function scheduleFilter() {
   clearTimeout(filterTimer);
@@ -6731,6 +6745,7 @@ function applyFilter() {
   }
 
   const resultEl = document.getElementById("filter-result");
+  filterExcludedCount = enabled ? filteredCount : 0;
   if (enabled) {
     resultEl.textContent = `除外: ${filteredCount} 個 / 表示: ${meshes.length - filteredCount} 個`;
   } else {
@@ -6831,6 +6846,8 @@ function updateLegend(attr, numericMode, vmin, vmax, preset, cLow, cHigh, useMid
       values.push(v);
     }
   }
+  // 書き出したSVGの凡例でも同じ n を使う(画面とSVGで見出しを食い違わせない §5.1.3)
+  lastLegendState.n = values.length;
   document.getElementById("legend-title").textContent =
     `${attrLabel(attr)}  n=${values.length}`;
 
@@ -8313,6 +8330,9 @@ function isReservedColumn(name, idCol) {
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
   if (n === HIT_COL) return true;   // 点検項目から作る派生列
+  /* 記録の鍵。この名前の点検項目を作ると、記録の行を組むときに鍵の値を
+     上書きする(点検者の名前が「あり」に置き換わっていた) */
+  if (n === SURVEY_DATE_COL || n === SURVEYOR_COL) return true;
   if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
   return false;
 }
@@ -8601,6 +8621,11 @@ function addManualColumn(kind) {
     setStatus("「" + name + "」という列はすでにあります。", true); return;
   }
   if (isReservedColumn(name, idColumnName())) {
+    if (name === SURVEY_DATE_COL || name === SURVEYOR_COL) {
+      setStatus("「" + name + "」は記録の鍵(誰がいつ書いたか)に使う列名なので使えません。" + NL +
+                "別の名前にしてください(例: 確認者)。", true);
+      return;
+    }
     setStatus("「" + name + "」は自動計算・仕組み用の列名なので使えません。" + NL +
               "この名前で作ると、DXFを読み直したときに計算値で上書きされ、手で入れた値が消えます。", true);
     return;
@@ -8947,8 +8972,13 @@ function saveNotes() {
         "画面上の入力は残りますが、閉じると失われます。CSVで保存してください。", true);
     }
     // 全部消したら、そのデータの枠だけを消す(他のデータの控えは残す)
+    /* 点検項目かどうかも控える。値だけを控えていたため、復元すると種別が
+       分からず属性の列に倒され、**点検の記録が台帳側に入って記録として
+       数えられなくなっていた**。属性は既定なので、点検項目だけを書く */
+    const kinds = {};
+    for (const col of Object.keys(cols)) if (surveyCols.has(col)) kinds[col] = "survey";
     if (n === 0) delete store.slots[key];
-    else store.slots[key] = { savedAt: Date.now(), fp, cols };
+    else store.slots[key] = { savedAt: Date.now(), fp, cols, kinds };
 
     if (Object.keys(store.slots).length === 0) { localStorage.removeItem(NOTES_KEY); return; }
 
@@ -9030,8 +9060,11 @@ function offerNoteRestore() {
       else missing.add(k);
     }
     if (!csvColumns.includes(col)) csvColumns.push(col);
-    // 復元した分も未保存・控えの対象にする。種別が分からなければ静的に倒す
-    if (col !== NOTE_COL && !columnKind(col)) registerManualColumn(col, "static");
+    // 復元した分も未保存・控えの対象にする。種別は控えにあるものを使い、
+    // 無ければ(古い控え)静的に倒す
+    if (col !== NOTE_COL && !columnKind(col)) {
+      registerManualColumn(col, (saved.kinds || {})[col] === "survey" ? "survey" : "static");
+    }
   }
   if (restored === 0) { setStatus("復元できる入力がありませんでした。", true); return; }
 
@@ -9921,8 +9954,7 @@ function updateStepSummaries() {
   set("lines", "");   // チェック以外に言うことが無い
   // 5. フィルタ — 何個除いたかはチェックからは分からないので、これは残す
   if (document.getElementById("filter-enable").checked) {
-    const m = document.getElementById("filter-result").textContent.match(/除外: (d+)/);
-    set("filter", m ? `除外 ${m[1]}個` : "");
+    set("filter", `除外 ${filterExcludedCount}個`);
   } else {
     set("filter", "");
   }

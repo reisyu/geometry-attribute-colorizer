@@ -98,6 +98,10 @@ const HIT_MULTI = "複数";
 
 const HIT_NONE = "なし";
 
+const REF_KEEP = new Set([NOTE_COL, NOTE_FLAG_COL]);
+
+const REF_SKIP = new Set([SURVEY_DATE_COL, SURVEYOR_COL]);
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -1046,12 +1050,24 @@ function isReservedColumn(name, idCol) {
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
   if (n === HIT_COL) return true;   // 点検項目から作る派生列
+  /* 記録の鍵。この名前の点検項目を作ると、記録の行を組むときに鍵の値を
+     上書きする(点検者の名前が「あり」に置き換わっていた) */
+  if (n === SURVEY_DATE_COL || n === SURVEYOR_COL) return true;
   if (isDerivedColumn(n)) return true;   // 前回の記録・履歴の集計用に予約している(§5.1.4)
   return false;
 }
 
 function isDerivedColumn(c) {
   return String(c).startsWith(REF_PREFIX) || String(c).startsWith(HIST_PREFIX);
+}
+
+function refIsCarried(c, staticSet) {
+  if (REF_KEEP.has(c)) return true;
+  if (REF_SKIP.has(c)) return false;
+  /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
+     「前回:石種」は意味を持たないうえ、色分けの選択肢を増やす */
+  if (staticSet && staticSet.has(c)) return false;
+  return !Object.prototype.hasOwnProperty.call(ATTR_INFO, c);
 }
 
 function latLonToJPRect(lat, lon, zone) {
@@ -1135,4 +1151,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, REF_KEEP, REF_SKIP, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

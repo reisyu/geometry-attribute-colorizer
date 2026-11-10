@@ -16,7 +16,7 @@
 const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
         prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
-        SURVEY_DATE_COL, SURVEYOR_COL,
+        SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, REF_SKIP,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -211,6 +211,23 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   // 「なし」が入っていても前回の記録にしない(列ごと外してあるため)
   ok(rowComboState({ [REF_PREFIX + NOTE_FLAG_COL]: "なし" }, p, ["はらみ出し"]) === COMBO_NONE,
      "**前回のメモの有無が「なし」の石を「前回のみ」にしない**");
+}
+
+/* ---------- 前回の記録から重ねる列 ---------- */
+/* 列名を文字列で直書きしていたため、点検日の列名を変えたときに取り残され、
+   **「前回:InspectionDate」「前回:点検者」が属性の色分けの選択肢に出ていた** */
+{
+  const S = new Set(["石種"]);
+  ok(!refIsCarried(SURVEY_DATE_COL, S), "**点検日は重ねない**(見出しに1回出すだけ)");
+  ok(!refIsCarried(SURVEYOR_COL, S), "**点検者も重ねない**(記録の鍵であって所見ではない)");
+  ok(refIsCarried(NOTE_COL, S), "メモは重ねる(いちばん運びたいもの)");
+  ok(refIsCarried(NOTE_FLAG_COL, S), "メモの有無も重ねる");
+  ok(refIsCarried("はらみ出し", S), "点検項目は重ねる");
+  ok(!refIsCarried("石種", S), "静的な属性は重ねない(前回と今回で同じ値)");
+  ok(!refIsCarried("Width", S), "幾何属性は重ねない");
+  ok(refIsCarried("はらみ出し", null), "静的な列の集合が無くても落ちない");
+  ok(REF_SKIP.has(SURVEY_DATE_COL) && REF_SKIP.has(SURVEYOR_COL),
+     "**外す列は定数で持つ**(列名を変えたときに取り残さない)");
 }
 
 console.log("");
