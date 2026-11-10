@@ -15,6 +15,8 @@
  */
 const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
+        prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
+        SURVEY_DATE_COL, SURVEYOR_COL,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -166,6 +168,49 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(!ledgerColumns(COLS2, S2).includes(HIT_COL), "**該当項目は台帳に書き出さない**(派生列)");
   ok(!surveyValueColumns(COLS2, S2).includes(HIT_COL), "記録にも書き出さない");
   ok(surveyVisualColumns(COLS2, S2).includes(HIT_COL), "点検側の色分けには出す");
+}
+
+/* ---------- 記録の状況は、メモと点検項目を同じ重みで数える ---------- */
+/* メモを書かずに点検項目の印だけで記録する運用がある。メモだけを見ていたため、
+   **印を付けた石が「記録なし」になり、同じ石が「履歴:記録回数」では1回と数えられて
+   2枚の図が食い違っていた** */
+{
+  const NOW = ["はらみ出し", "ひび割れ", NOTE_COL];
+  const PREV = [REF_PREFIX + "はらみ出し", REF_PREFIX + NOTE_COL];
+  ok(rowComboState({ "はらみ出し": "あり" }, PREV, NOW) === COMBO_NOW,
+     "**点検項目の印だけでも「今回のみ」**(メモが無くても記録)");
+  ok(rowComboState({ [NOTE_COL]: "東面がはらむ" }, PREV, NOW) === COMBO_NOW, "メモだけでも「今回のみ」");
+  ok(rowComboState({ [REF_PREFIX + "はらみ出し"]: "あり" }, PREV, NOW) === COMBO_PREV,
+     "**前回の点検項目だけでも「前回のみ」**(回り残しとして赤で出す)");
+  ok(rowComboState({ [REF_PREFIX + NOTE_COL]: "割れ" }, PREV, NOW) === COMBO_PREV, "前回のメモだけでも「前回のみ」");
+  ok(rowComboState({ [REF_PREFIX + NOTE_COL]: "割れ", "ひび割れ": "あり" }, PREV, NOW) === COMBO_BOTH,
+     "前回はメモ・今回は点検項目でも「前回と今回」(書き方が変わっても同じ石)");
+  ok(rowComboState({}, PREV, NOW) === COMBO_NONE, "どちらも無ければ「記録なし」");
+  ok(rowComboState({ "石種": "花崗岩" }, PREV, NOW) === COMBO_NONE,
+     "**属性だけの石は記録にしない**(点検していない)");
+  ok(rowComboState({ "はらみ出し": "  " }, PREV, NOW) === COMBO_NONE, "空白だけは記録にしない");
+  ok(rowComboState(null, PREV, NOW) === COMBO_NONE, "行がnullでも落ちない");
+  ok(rowComboState({ "はらみ出し": "あり" }, [], []) === COMBO_NONE, "見る列が無ければ「記録なし」");
+}
+
+/* 前回の記録として数える列 */
+{
+  const cols = ["ID", "Width", "石種", "はらみ出し", NOTE_COL,
+                REF_PREFIX + NOTE_COL, REF_PREFIX + NOTE_FLAG_COL, REF_PREFIX + "はらみ出し",
+                REF_PREFIX + SURVEY_DATE_COL, REF_PREFIX + SURVEYOR_COL, HIST_PREFIX + "記録回数"];
+  const p = prevEntryColumns(cols);
+  ok(p.includes(REF_PREFIX + NOTE_COL) && p.includes(REF_PREFIX + "はらみ出し"),
+     "前回のメモと点検項目を数える", j(p));
+  ok(!p.includes(REF_PREFIX + NOTE_FLAG_COL),
+     "**「前回:メモの有無」は数えない**(記録が無くても「なし」が入るので、値の有無で判定できない)");
+  ok(!p.includes(REF_PREFIX + SURVEY_DATE_COL) && !p.includes(REF_PREFIX + SURVEYOR_COL),
+     "点検日と点検者は数えない(記録の鍵であって所見ではない)");
+  ok(!p.includes("はらみ出し") && !p.includes(NOTE_COL), "今回の列は入れない");
+  ok(!p.includes(HIST_PREFIX + "記録回数"), "履歴の列は入れない");
+  ok(j(prevEntryColumns(null)) === "[]", "nullでも落ちない");
+  // 「なし」が入っていても前回の記録にしない(列ごと外してあるため)
+  ok(rowComboState({ [REF_PREFIX + NOTE_FLAG_COL]: "なし" }, p, ["はらみ出し"]) === COMBO_NONE,
+     "**前回のメモの有無が「なし」の石を「前回のみ」にしない**");
 }
 
 console.log("");

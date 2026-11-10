@@ -815,7 +815,7 @@
     <ul>
       <li><strong>石を選ぶと、メモ欄の上に前回の記述が出ます。</strong>
         灰色の枠で表示され、書き換えることはできません</li>
-      <li><strong>「履歴:記録の状況」で色分けすると、前回メモの付いた石が赤くなります。</strong>
+      <li><strong>「履歴:記録の状況」で色分けすると、前回の記録がある石が赤くなります。</strong>
         残りは灰色です。今回追うべき石が、図の上で一目で分かります</li>
       <li>「前回:石種」のように、前回付けた分類でも色分け・フィルタができます</li>
       <li>前回のメモ本文は<strong>ラベル</strong>にも出せます</li>
@@ -847,9 +847,13 @@
 
     <h3>前回の指摘を、どこまで見たかを追う</h3>
     <p>
-      「3. 色分けする」の<strong>履歴:記録の状況</strong>が、点検中にいちばん
+      「点検記録」の「点検結果で色分けする」にある<strong>履歴:記録の状況</strong>が、点検中にいちばん
       役に立つ見方です。<strong>前回の記録が無い初回の点検でも使えます</strong>
       （そのときは「今回のみ」と「記録なし」の2つになります）。
+    </p>
+    <p>
+      ここでいう<strong>記録は、メモと点検項目の両方</strong>です。メモを書かずに
+      点検項目の印だけを付けた石も、記録のある石として数えます。
     </p>
     <ul>
       <li><strong>前回のみ（赤）</strong> — 前回に記録があり、<strong>今回まだ何も
@@ -1217,7 +1221,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.40.1";
+  const HELP_VERSION = "1.40.2";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

@@ -46,6 +46,8 @@ const FUNCS = [
   "openingAttribute",
   "accumulateFaceNormals",
   "comboState",
+  "prevEntryColumns",
+  "rowComboState",
   "surveyorLabel",
   "isColorizableColumn",
   "isDevHost",
