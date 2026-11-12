@@ -31,6 +31,7 @@ const TESTS = [
   ["test_rectline.js", "傾きライン"],
   ["test_anglehist.js", "傾きの分布"],
   ["test_legend.js", "凡例の集計"],
+  ["test_bgimage.js", "図面に入れる背景の画像"],
   ["test_palette.js", "カテゴリ色パレット"],
   ["test_fitview.js", "全体表示のフィット"],
   ["test_winding.js", "GLB法線の巻き順"],

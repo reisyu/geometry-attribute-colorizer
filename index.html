@@ -641,7 +641,7 @@
 
   /* 範囲が成立しないときの確認ダイアログ。利用者の設定を黙って変えないため、
      どうするかを選ばせる */
-  #range-dialog {
+  #range-dialog, #bg-dialog {
     position: absolute;
     inset: 0;
     display: none;
@@ -650,8 +650,8 @@
     background: rgba(23, 25, 29, 0.75);
     z-index: 11;
   }
-  #range-dialog.active { display: flex; }
-  #range-dialog-box {
+  #range-dialog.active, #bg-dialog.active { display: flex; }
+  #range-dialog-box, #bg-dialog-box {
     background: var(--panel);
     border: 1px solid var(--warn);
     border-radius: 8px;
@@ -660,18 +660,18 @@
     font-size: calc(13px * var(--ui-scale));
     line-height: 1.7;
   }
-  #range-dialog-box h3 {
+  #range-dialog-box h3, #bg-dialog-box h3 {
     font-size: calc(14px * var(--ui-scale));
     color: var(--warn);
     margin-bottom: 10px;
   }
-  #range-dialog-box .rd-detail {
+  #range-dialog-box .rd-detail, #bg-dialog-box .rd-detail {
     color: var(--ink-dim);
     font-size: calc(12px * var(--ui-scale));
     margin: 10px 0 16px;
   }
-  #range-dialog-box .rd-buttons { display: flex; gap: 8px; }
-  #range-dialog-box .rd-buttons button { margin-top: 0; }
+  #range-dialog-box .rd-buttons, #bg-dialog-box .rd-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  #range-dialog-box .rd-buttons button, #bg-dialog-box .rd-buttons button { margin-top: 0; }
   #progress-box {
     background: var(--panel);
     border: 1px solid var(--panel-edge);
@@ -1407,6 +1407,11 @@
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-labels"> ラベル(内容はステップ6の選択に従う)</label>
         <label class="checkbox-row"><input type="checkbox" id="svg-inc-lines" checked> 傾きラインと傾きの分布(色・太さはステップ4の設定に従う)</label>
         <label class="checkbox-row"><input type="checkbox" id="svg-no-fill"> 塗りつぶしなし(輪郭線のみの線画にする)</label>
+        <label class="checkbox-row"><input type="checkbox" id="svg-inc-bg" checked> 背景モデル(重ねて表示しているとき。画像として埋め込む)</label>
+      </div>
+      <div class="row hint">
+        背景モデルを入れると、石の塗りと背景の濃さは画面の「不透明度」の設定どおりになります。
+        図1枚が数MB大きくなります
       </div>
       <div class="row">
         <label class="small" for="svg-outline-width">オブジェクトの輪郭線の太さ(mm実寸。0で輪郭線なし)</label>
@@ -1475,6 +1480,19 @@
       <div class="rd-buttons">
         <button class="action" id="rd-use-data">データに合わせる</button>
         <button class="ghost" id="rd-keep">指定のままにする</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bg-dialog">
+    <div id="bg-dialog-box">
+      <h3>背景モデルを全部の図に入れますか</h3>
+      <div id="bgd-message"></div>
+      <div class="rd-detail" id="bgd-detail"></div>
+      <div class="rd-buttons">
+        <button class="action" id="bgd-with">背景を入れて書き出す</button>
+        <button class="ghost" id="bgd-without">背景なしで書き出す</button>
+        <button class="ghost" id="bgd-cancel">やめる</button>
       </div>
     </div>
   </div>
@@ -2002,7 +2020,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.40.6";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.41.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -3489,6 +3507,9 @@ function readSVGExportOptions() {
     incLabels: document.getElementById("svg-inc-labels").checked,
     incLines: document.getElementById("svg-inc-lines").checked,
     noFill: document.getElementById("svg-no-fill").checked,
+    // 背景モデルは、重ねて表示しているときだけ入れる(画面に無いものを図に足さない)
+    incBackground: document.getElementById("svg-inc-bg").checked &&
+                   !!backgroundRoot && backgroundRoot.visible,
     outlineMM: Number(document.getElementById("svg-outline-width").value),
     lineWidthMM: Number(document.getElementById("line-width").value),
   };
@@ -3503,6 +3524,7 @@ function readSVGExportOptions() {
      toX(x), toY(y),              抽象座標 -> SVGのpx座標
      projectLine(rl),             傾きラインの端点を抽象座標へ。描けなければ null
      scalebarSpan,                スケールバーの基準にする横幅(実寸)。null なら描かない
+     background,                  背景モデルの画像 { url, x, y, w, h }(SVGのpx)。無ければ入れない
    } */
 function buildExportSVG(items, view, opt) {
   const { margin, contentW, contentH, pxPerUnit, toX, toY } = view;
@@ -3518,8 +3540,22 @@ function buildExportSVG(items, view, opt) {
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const parts = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${Math.ceil(svgH)}" viewBox="0 0 ${svgW} ${Math.ceil(svgH)}" font-family="sans-serif">`);
+  /* 背景モデルの画像(§8.8)。石の下に敷く。
+     参照は xlink:href で書く。新しい書き方(href)はブラウザしか読めず、
+     Illustrator・Inkscape・Word は xlink:href を読む。ブラウザは両方読める。
+     **両方は書かない** — 画像のデータが2回入り、ファイルが倍になる(実際に倍になった)。
+     **背景を入れないときの出力は1バイトも変えない**(名前空間も足さない) */
+  const bg = view.background || null;
+  const xlinkNs = bg ? ` xmlns:xlink="http://www.w3.org/1999/xlink"` : "";
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg"${xlinkNs} width="${svgW}" height="${Math.ceil(svgH)}" viewBox="0 0 ${svgW} ${Math.ceil(svgH)}" font-family="sans-serif">`);
   parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
+  if (bg) {
+    parts.push(`<image x="${bg.x.toFixed(1)}" y="${bg.y.toFixed(1)}" width="${bg.w.toFixed(1)}" height="${bg.h.toFixed(1)}" preserveAspectRatio="none" xlink:href="${bg.url}"/>`);
+  }
+  /* 背景を入れたら、石の塗りは画面と同じだけ透かす(「輪郭の不透明度」の設定)。
+     不透明のままだと、石が壁を埋めているので写真が1つも見えない */
+  const fillOpacity = bg ? overlayOpacity() : 1;
+  const fillOpacityAttr = fillOpacity < 0.999 ? ` fill-opacity="${fillOpacity.toFixed(2)}"` : "";
 
   // --- オブジェクトのポリゴン ---
   let outlinePx = Number.isFinite(opt.outlineMM) && opt.outlineMM > 0
@@ -3531,7 +3567,7 @@ function buildExportSVG(items, view, opt) {
   for (const item of items) {
     const fill = opt.noFill ? "none" : "#" + item.mesh.material.color.getHexString();
     const ptsStr = item.pts.map(([x, y]) => `${toX(x).toFixed(2)},${toY(y).toFixed(2)}`).join(" ");
-    parts.push(`<polygon points="${ptsStr}" fill="${fill}" ${strokeAttr}/>`);
+    parts.push(`<polygon points="${ptsStr}" fill="${fill}"${opt.noFill ? "" : fillOpacityAttr} ${strokeAttr}/>`);
   }
 
   // --- 傾きライン(色・太さはステップ4の設定に従う) ---
@@ -4028,14 +4064,128 @@ function buildElevationSVG(opt) {
     }),
   };
 
-  return { svg: buildExportSVG(items, view, opt), count: items.length };
+  /* 背景モデルを、石と同じ正射投影で描いて敷く(§8.8)。
+     カメラの軸を right・up・N に合わせ、原点を通る位置に置くと、カメラ座標の x・y が
+     石の投影座標(sx・sy)と同じ値になる。視錐台の端を石の範囲+余白に合わせれば、
+     画像の1pxがSVGの1pxに対応し、**輪郭と写真の位置が一致する** */
+  if (opt.incBackground) {
+    const pad = margin / scale;   // 余白のぶんも写す(壁の周りの様子が分かる)
+    const cam = new THREE.OrthographicCamera(minSX - pad, maxSX + pad, maxSY + pad, minSY - pad, 0.01, 1);
+    const box = new THREE.Box3().setFromObject(backgroundRoot);
+    for (const item of items) box.expandByObject(item.mesh);
+    const corners = [box.min, box.max];
+    let nearN = Infinity, farN = -Infinity;
+    for (const cx of corners) for (const cy of corners) for (const cz of corners) {
+      const d = cx.x * N.x + cy.y * N.y + cz.z * N.z;
+      if (d < nearN) nearN = d; if (d > farN) farN = d;
+    }
+    const depth = Math.max(farN - nearN, 1e-6);
+    cam.position.copy(N).multiplyScalar(farN + depth * 0.05 + 0.01);
+    cam.up.copy(up);
+    cam.lookAt(cam.position.clone().sub(N));
+    cam.near = 0.001;
+    cam.far = depth * 1.1 + 0.02;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld(true);
+    const wPx = contentW + margin * 2, hPx = view.contentH + margin * 2;
+    const img = renderBackgroundImage(cam, wPx, hPx, opt.bgCache,
+      [minSX, maxSX, minSY, maxSY, N.x, N.z].map((v) => v.toFixed(4)).join(","));
+    if (img) view.background = { url: img.url, x: 0, y: 0, w: wPx, h: hPx };
+  }
+
+  return { svg: buildExportSVG(items, view, opt), count: items.length, background: view.background || null };
+}
+
+/* 背景モデルだけを、指定のカメラで画像にする(§8.8)。dataURL を返す。描けなければ null。
+
+   - グリッドは外し、地は白にする(図面の地色)
+   - 背景の濃さは画面の「背景の不透明度」のまま(材質に入っている値をそのまま使う)
+   - 画面と同じ renderer を使う。別に作ると、読み込んだテクスチャを共有できない
+   - 大きさは図の2倍の画素数まで(印刷で粗く見えないように)。上限は端末の制約と
+     ファイルの大きさから決める(backgroundImageSize)
+   cache を渡すと、同じ範囲の画像を使い回す(まとめ書き出しで枚数分描き直さない) */
+function renderBackgroundImage(cam, wPx, hPx, cache, cacheKey) {
+  if (!backgroundRoot || !backgroundRoot.visible) return null;
+  if (cache && cacheKey && cache.has(cacheKey)) return cache.get(cacheKey);
+  const maxTex = renderer.capabilities ? renderer.capabilities.maxTextureSize : 4096;
+  const size = backgroundImageSize(wPx, hPx, maxTex);
+  if (!size) return null;
+  const { w, h } = size;
+
+  const prevBg = bgScene.background;
+  const gridWasIn = grid.parent === bgScene;
+  const rt = new THREE.WebGLRenderTarget(w, h);
+  let url = null;
+  try {
+    bgScene.background = new THREE.Color(0xffffff);
+    if (gridWasIn) bgScene.remove(grid);
+    renderer.setRenderTarget(rt);
+    renderer.clear();
+    renderer.render(bgScene, cam);
+    const buf = new Uint8Array(w * h * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, w, h, buf);
+    // 読み出した画素は下から上に並ぶ。上下を返して2Dのキャンバスへ写す
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d");
+    const imgData = ctx.createImageData(w, h);
+    const rowBytes = w * 4;
+    for (let y = 0; y < h; y++) {
+      imgData.data.set(buf.subarray((h - 1 - y) * rowBytes, (h - y) * rowBytes), y * rowBytes);
+    }
+    ctx.putImageData(imgData, 0, 0);
+    url = cv.toDataURL("image/jpeg", 0.85);   // 写真なのでJPEG(PNGの数分の1になる)
+  } catch (e) {
+    url = null;   // 描けなかったら背景なしで続ける(呼び出し側が知らせる)
+  } finally {
+    renderer.setRenderTarget(null);
+    bgScene.background = prevBg;
+    if (gridWasIn) bgScene.add(grid);
+    rt.dispose();
+  }
+  if (!url || url.length < 100) return null;
+  const out = { url, w, h };
+  if (cache && cacheKey) cache.set(cacheKey, out);
+  return out;
+}
+
+/* 背景の画像を何画素で作るか。純関数。
+
+   図の2倍の画素数を基本にする(図は横1700px前後なので、横3400px前後)。
+   端末が扱える上限(maxTexture)と、こちらで決めた上限(長辺4096)の小さいほうで抑え、
+   縦横比は保つ。作れない大きさ(0以下・数でない)なら null */
+function backgroundImageSize(wPx, hPx, maxTexture) {
+  const w0 = Number(wPx), h0 = Number(hPx);
+  if (!(w0 > 0) || !(h0 > 0)) return null;
+  const limit = Math.min(4096, Number(maxTexture) > 0 ? Number(maxTexture) : 4096);
+  const k = Math.min(2, limit / w0, limit / h0);
+  return { w: Math.max(1, Math.round(w0 * k)), h: Math.max(1, Math.round(h0 * k)) };
+}
+
+/* dataURL の文字数から、ファイルに占めるおおよその大きさ(MB)を出す。純関数。
+   SVGの中では文字のまま入るので、文字数がほぼそのままバイト数になる */
+function approxMB(chars, sheets) {
+  const n = Number(chars) * Math.max(1, Number(sheets) || 1);
+  return Math.round(n / 1024 / 1024 * 10) / 10;
 }
 
 /* 立面図SVGを1枚だけ書き出して保存する */
+/* 背景モデルを入れたかどうかを、書き出しの知らせに足す。入れる設定なのに
+   入らなかったとき(描けなかった)は、**黙って背景なしの図を渡さない** */
+function bgExportNote(opt, view) {
+  if (!opt.incBackground) return "";
+  const NL = String.fromCharCode(10);
+  return view && view.background
+    ? NL + "背景モデルを画像として入れました(約 " + approxMB(view.background.url.length, 1) + " MB)。"
+    : NL + "※ 背景モデルを画像にできなかったため、背景なしで書き出しました。";
+}
+
 function exportElevationSVG() {
-  const r = buildElevationSVG(readSVGExportOptions());
+  const opt = readSVGExportOptions();
+  const r = buildElevationSVG(opt);
   if (!r) return;
-  downloadSVG(r.svg, exportFileName("elevation.svg"), `立面図SVGを書き出しました: ${r.count} オブジェクト`);
+  downloadSVG(r.svg, exportFileName("elevation.svg"), `立面図SVGを書き出しました: ${r.count} オブジェクト` +
+    bgExportNote(opt, r));
 }
 
 /* 塗りつぶしなし(線画)のときは色の凡例が意味を持たないため連動して外す */
@@ -4100,6 +4250,26 @@ async function exportBatchSVG() {
     return;
   }
 
+  /* 背景モデルを入れる設定なら、**枚数分大きくなることを先に確かめる**(§8.8)。
+     1枚なら数MBで済むが、まとめ書き出しは属性の数だけ同じ画像が入る。
+     黙って入れると、10枚で20MBを超えるZIPがいきなりできる。
+     大きさは見積もりではなく、**実際に1枚描いて測った値**を出す。
+     描いた画像は bgCache に残り、全部の図で使い回す(枚数分描き直さない) */
+  const baseOpt = readSVGExportOptions();
+  const bgCache = new Map();
+  let withBg = false;
+  if (baseOpt.incBackground) {
+    const sheets = attrs.length + (withLines ? 1 : 0);
+    const probe = buildElevationSVG({ ...baseOpt, incLines: false, bgCache });
+    if (probe && probe.background) {
+      const answer = await askBatchBackground(sheets, probe.background.url.length);
+      if (answer === "cancel") { setStatus("書き出しをやめました。"); return; }
+      withBg = answer === "with";
+    } else if (probe) {
+      setStatus("背景モデルを画像にできなかったため、背景なしで書き出します。", true);
+    }
+  }
+
   // 画面の状態を退避する(最後に必ず戻す)
   const sel = document.getElementById("attribute");
   const prevAttr = sel.value;
@@ -4129,7 +4299,7 @@ async function exportBatchSVG() {
          RectAngle を既定の属性から外しているのも二重になるからだった。
          v1.38.0 で SVG設定の傾きラインを既定オンにしたため、ここが
          設定をそのまま使っていると色分けの図すべてに線が乗ってしまう */
-      const r = buildElevationSVG({ ...readSVGExportOptions(), incLines: false });
+      const r = buildElevationSVG({ ...baseOpt, incLines: false, incBackground: withBg, bgCache });
       // 列名は利用者のCSV由来なので、そのままファイル名にしない。
       // 記号だけの列名で空になることもあるため、その場合は連番で代用する
       const part = safeFileNamePart(attr) || String(i + 1);
@@ -4141,7 +4311,8 @@ async function exportBatchSVG() {
       await new Promise((r) => setTimeout(r, 0));
       // 線画は塗りつぶさないので石の色は関係ない。色分けをやり直す必要はなく、
       // 凡例も色を説明するものなので外す
-      const lineOpt = { ...readSVGExportOptions(), noFill: true, incLines: true, incLegend: false, incLabels: false };
+      const lineOpt = { ...baseOpt, noFill: true, incLines: true, incLegend: false, incLabels: false,
+                        incBackground: withBg, bgCache };
       const r = buildElevationSVG(lineOpt);
       if (r) entries.push({ name: stem + "_lines.svg", text: r.svg });
     }
@@ -4183,6 +4354,25 @@ async function exportBatchSVG() {
     return;
   }
   downloadBlob(zip, name, msg);
+}
+
+/* まとめ書き出しで、背景モデルを全部の図に入れるかを訊く。
+   "with"(入れる) / "without"(入れない) / "cancel"(やめる) を返す。
+   2択の確認(OK・キャンセル)にしない。「キャンセル」が「背景なしで書き出す」なのか
+   「書き出し自体をやめる」なのか読み取れないため、3つとも言葉で書く */
+function askBatchBackground(sheets, chars) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById("bg-dialog");
+    document.getElementById("bgd-message").textContent =
+      "背景モデルを入れる設定になっています。まとめて書き出すと、" + sheets + " 枚の図それぞれに同じ画像が入ります。";
+    document.getElementById("bgd-detail").textContent =
+      "ZIPはおよそ " + approxMB(chars, sheets) + " MB 大きくなります(1枚あたり約 " + approxMB(chars, 1) + " MB)。";
+    const done = (answer) => { dlg.classList.remove("active"); resolve(answer); };
+    document.getElementById("bgd-with").onclick = () => done("with");
+    document.getElementById("bgd-without").onclick = () => done("without");
+    document.getElementById("bgd-cancel").onclick = () => done("cancel");
+    dlg.classList.add("active");
+  });
 }
 
 /* 作ったZIPの控え。共有シートを開くには次の一押しが要るため、
@@ -4292,8 +4482,15 @@ function exportCurrentViewSVG() {
     },
   };
 
-  const svg = buildExportSVG(items, view, readSVGExportOptions());
-  downloadSVG(svg, exportFileName("view.svg"), `現在のビューをSVGで書き出しました: ${items.length} オブジェクト`);
+  const svgOpt = readSVGExportOptions();
+  // 背景モデルは、いまのカメラでそのまま描く(石の投影と同じカメラなので位置が合う)
+  if (svgOpt.incBackground) {
+    const img = renderBackgroundImage(camera, contentW, contentH);
+    if (img) view.background = { url: img.url, x: margin, y: margin, w: contentW, h: contentH };
+  }
+  const svg = buildExportSVG(items, view, svgOpt);
+  downloadSVG(svg, exportFileName("view.svg"), `現在のビューをSVGで書き出しました: ${items.length} オブジェクト` +
+    bgExportNote(svgOpt, view));
 }
 
 document.getElementById("export-current-view-svg-btn").addEventListener("click", exportCurrentViewSVG);

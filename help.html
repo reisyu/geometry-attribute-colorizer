@@ -570,7 +570,10 @@
       <li><strong>属性をCSVで保存</strong> — 全属性を表形式で。BIツールやPythonでの分析用。</li>
       <li><strong>ID付きGLBで保存</strong> — 3Dモデルとして。他のツールでの再利用用。</li>
       <li><strong>立面図をSVGで保存</strong> — 報告書用のベクター図。含める要素（凡例・スケールバー・
-        ラベル・傾きライン）や輪郭線の太さを選べ、塗りなしの線画モードもあります。</li>
+        ラベル・傾きライン）や輪郭線の太さを選べ、塗りなしの線画モードもあります。
+        <strong>背景モデル（写真つきのOBJ）を重ねて表示しているときは、図にも背景として入ります</strong>。
+        石の塗りと写真の濃さは、画面の「不透明度」の設定どおりです。写真は画像として埋め込むので、
+        図1枚が数MB大きくなります。要らないときは「SVGの詳細設定」の「背景モデル」を外してください。</li>
       <li><strong>現在のビューをSVGで保存</strong> — 今画面に見えている構図のまま、
         パースあり（遠近感つき）のベクター図として保存します。角度をつけた説明図の作成に便利です。</li>
       <li><strong>まとめてZIPで保存</strong> — 属性ごとの立面図をまとめて1つのZIPに。
@@ -1223,7 +1226,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.40.6";
+  const HELP_VERSION = "1.41.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

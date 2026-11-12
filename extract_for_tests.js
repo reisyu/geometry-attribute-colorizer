@@ -31,6 +31,8 @@ const FUNCS = [
   "angleHistogram",
   "legendModel",
   "legendRowLabels",
+  "backgroundImageSize",
+  "approxMB",
   "classChipNextValue",
   "classChoices",
   "recordHeaderColumns",
