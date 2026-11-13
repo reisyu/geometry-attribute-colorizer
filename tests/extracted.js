@@ -102,6 +102,8 @@ const OTHER_COLOR = [0.55, 0.55, 0.55];
 
 const LEGEND_HIST_BINS = 24;
 
+const NOTE_YES = "あり", NOTE_NO = "なし";
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -785,6 +787,55 @@ function rowComboState(row, prevCols, nowCols) {
   return comboState(hasSurveyEntry(row, prevCols), hasSurveyEntry(row, nowCols));
 }
 
+function deriveInputColumns(rows, columns, surveySet, idCol) {
+  const list = rows || [];
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  const before = (columns || []).slice();
+  let cols = before.slice();
+  const drop = (name) => {
+    cols = cols.filter((c) => c !== name);
+    for (const row of list) delete row[name];
+  };
+
+  /* 1. 該当項目。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
+     「点検の図に切り替えたが、まだ何も記録がない」を表す。列が無いと点検結果の
+     色分けを選べず、初めて使う人は使おうとしたのを拒まれたように感じる) */
+  if (list.length === 0) {
+    drop(HIT_COL);
+  } else {
+    const items = cols.filter((c) => survey.has(c) && !isReservedColumn(c, idCol));
+    if (!cols.includes(HIT_COL)) cols.push(HIT_COL);
+    for (const row of list) row[HIT_COL] = surveyHitLabel(row, items);
+  }
+
+  /* 2. メモの有無。メモを一度も書いていないデータには作らない
+     (使わない列をCSVに増やさない) */
+  if (cols.includes(NOTE_COL)) {
+    if (!cols.includes(NOTE_FLAG_COL)) cols.push(NOTE_FLAG_COL);
+    for (const row of list) {
+      row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
+    }
+  }
+
+  /* 3. 記録の状況。
+     今回の記録 = メモか点検項目のどれかに値がある(記録行を作る条件と同じ)
+     前回の記録 = 前回のメモか、いま定義されている点検項目の前回分のどれかに値がある
+     **記録に使う列が1つも無いときだけ作らない**(今回の側にも前回の側にも)。
+     メモの列が無くても点検項目が1つあれば作る。前回の記録を重ねただけで、
+     今回まだ何も書いていないときも作る(回り残しを見たいのは書く前) */
+  const nowCols = surveyValueColumns(cols, survey);
+  const prevCols = prevEntryColumns(cols, survey);
+  if (list.length === 0 || (nowCols.length === 0 && prevCols.length === 0)) {
+    drop(COMBO_COL);
+  } else {
+    if (!cols.includes(COMBO_COL)) cols.push(COMBO_COL);
+    for (const row of list) row[COMBO_COL] = rowComboState(row, prevCols, nowCols);
+  }
+
+  const changed = cols.length !== before.length || cols.some((c, i) => c !== before[i]);
+  return { columns: cols, changed };
+}
+
 function surveyorLabel(names) {
   const uniq = [...new Set((names || [])
     .map((s) => String(s == null ? "" : s).trim())
@@ -1257,4 +1308,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

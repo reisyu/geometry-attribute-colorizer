@@ -4598,9 +4598,7 @@ function renumberIds() {
   // Course列を属性一覧に登録する(色分け・フィルタ・ラベル・CSV出力の対象になる)
   if (!csvColumns.includes("Course")) {
     csvColumns.push("Course");
-    refreshAttributeOptions();
-    refreshLabelContentOptions();
-    refreshFilterRuleOptions();
+    refreshColumnChoices();
   }
 
   /* 新IDで石と行を結び直す(ラベル・フィルタも連動して更新される)。
@@ -4937,24 +4935,17 @@ function loadCSVTable(rows, columns, displayName) {
         }
       }
 
-      // 読み戻したCSVにメモ列があれば「メモの有無」を作り直してから選択肢を組む
-      // (書き出したCSVを読み込んだとき、有無での色分けがそのまま使えるように)
-      /* 「該当項目」は表が入れ替わるたびに作り直す。
-         **syncNoteDerived に相乗りさせてはいけない** — あちらはメモ列が
-         無いと早期 return するので、起動直後(メモがまだ無い)に走らない */
-      syncSurveyDerived();
-      syncNoteDerived();
       // オブジェクトとCSVの行の対応を作り直す。ここで作らないと、
       // 色分けをやり直すまで**前のCSVの行を指したまま**になる。
       // インスペクタが古い属性を出すだけでなく、その状態で書いたメモは
       // 捨てられる行に入り、画面には出ているのに書き出しにも控えにも残らない
       buildAttributeMap();
       restoreWorldOffsetFromCSV();   // GLBで切れた測量座標との繋がりを戻す(§6.9)
+      /* 派生列を作り直す(§5.1.8)。読み込んだデータから作る列(前回)が先、
+         今回の入力から作る列(該当項目・メモの有無・記録の状況)が後 */
       applyReference();   // 行が入れ替わったので、前回分も重ね直す
-      syncComboDerived();  // 前回の列が揃ってから「前回と今回」を作る
-      refreshAttributeOptions();
-      refreshLabelContentOptions();
-      const droppedRules = refreshFilterRuleOptions();
+      rebuildInputDerived();
+      const droppedRules = refreshColumnChoices();
       renderClassColumnManager();   // 読み戻したCSVの分類列と、その値を一覧に出す
       renderClassifyUI();
       updateStepSummaries();
@@ -5220,8 +5211,9 @@ function applyRecordLog() {
   } else {
     refRows = []; refColumns = []; refLabel = "";
   }
+  /* 読み込んだデータから作る列(履歴・前回)だけをここで作る。今回の入力から作る列は、
+     呼び出し側が続けて呼ぶ afterReferenceChange が作る(§5.1.8) */
   syncRecordDerived(cols);
-  syncNoteDerived();
   const res = applyReference();
   return { restored, prevDate, prevRows: refRows.length, res };
 }
@@ -5422,13 +5414,9 @@ function applyReference() {
 
 /* 重ね直したあとの後始末。属性の選択肢・フィルタ・ラベル・画面を揃える */
 function afterReferenceChange(msgHead, res) {
-  /* 「前回と今回」は**前回の列が揃ってから**でないと作れない。
-     syncNoteDerived の中でも呼んでいるが、そちらは applyReference より前に
-     走るので前回の列がまだ無い。ここで組み直す */
-  syncSurveyDerived();   // 記録から戻った点検項目も数に入れる
-  refreshAttributeOptions();
-  refreshLabelContentOptions();
-  refreshFilterRuleOptions();
+  // 前回の列が入れ替わったので、今回の入力から作る列を作り直す(記録の状況が前回を見る)
+  rebuildInputDerived();
+  refreshColumnChoices();
   renderInspectorTable(noteTargetRow);
   bindNoteEditor(noteTargetRow);
   updateStepSummaries();
@@ -5758,21 +5746,6 @@ function labelableColumns(idCol) {
   return csvColumns.filter((c) => c !== idCol);
 }
 
-/* メモ本文から「メモの有無」列を作り直す。
-   全行に必ず値を入れるのが要点で、空欄のままにすると §4.3 の欠損値スキップで
-   その石だけ色が付かず、「なし」なのか「未計算」なのか見分けられなくなる。
-   メモを一度も書いていないデータには列を作らない(使わない列をCSVに増やさない) */
-function syncNoteDerived() {
-  if (!csvColumns.includes(NOTE_COL)) return false;
-  const added = !csvColumns.includes(NOTE_FLAG_COL);
-  if (added) csvColumns.push(NOTE_FLAG_COL);
-  for (const row of csvRows) {
-    row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
-  }
-  const comboAdded = syncComboDerived();
-  return added || comboAdded;
-}
-
 /* 手で書いた瞬間に塗り直す対象かどうか。書いた内容そのものが色なので、
    書いた瞬間に図が動かないと意味がない。
    メモの有無は色分けの選択肢から外したが、判定は残しておく(害が無く、
@@ -5817,59 +5790,94 @@ function surveyHitLabel(row, cols) {
   return HIT_MULTI;
 }
 
-/* 列を作り直す。**全行に必ず値を入れる**(空欄にすると欠損扱いで灰色になり、
-   「なし」と「未計算」が区別できない)。点検項目が1つも無ければ作らない */
-function syncSurveyHitDerived() {
-  const cols = surveyItemColumns();
-  if (csvRows.length === 0) {
-    const had = csvColumns.includes(HIT_COL);
-    csvColumns = csvColumns.filter((c) => c !== HIT_COL);
-    for (const row of csvRows) delete row[HIT_COL];
-    return had ? "removed" : false;
+/* ============================================================
+   今回の入力から作る列(§5.1.8)
+
+   メモと点検項目の値から作る3つの列を、**ここ1か所で、決まった順に**作り直す。
+
+     1. 該当項目      点検項目の値から(1つならその項目名、2つ以上なら「複数」)
+     2. メモの有無    メモ本文から
+     3. 記録の状況    1・2の元になる値と「前回:」の列から。**前回を見るので最後**
+
+   以前は3つを別々の関数で作り、呼ぶ側が組み合わせていた。組み合わせ方が場所ごとに
+   違い、次のことが起きた:
+   - 「該当項目」をメモ用の関数に相乗りさせたら、メモの列が無い起動直後に走らなかった
+   - 控えから復元したとき、「該当項目」と「記録の状況」を作り直していなかった
+   - 「記録の状況」は前回の列より後に作る必要があり、呼ぶ順番の注意書きが3か所にあった
+
+   **全行に必ず値を入れる。** 空欄にすると欠損扱いで灰色になり、「なし」と
+   「未計算」が区別できない。
+
+   「前回:」と「履歴:」は**読み込んだデータから作る列**で、ここでは作らない
+   (applyReference・syncRecordDerived)。入力のたびに作り直す必要は無く、
+   読み込みと前回の付け外しのときに、**これより先に**作っておく。
+
+   rows は書き換える。列名の配列は新しく返す。純関数
+   ============================================================ */
+function deriveInputColumns(rows, columns, surveySet, idCol) {
+  const list = rows || [];
+  const survey = surveySet instanceof Set ? surveySet : new Set(surveySet || []);
+  const before = (columns || []).slice();
+  let cols = before.slice();
+  const drop = (name) => {
+    cols = cols.filter((c) => c !== name);
+    for (const row of list) delete row[name];
+  };
+
+  /* 1. 該当項目。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
+     「点検の図に切り替えたが、まだ何も記録がない」を表す。列が無いと点検結果の
+     色分けを選べず、初めて使う人は使おうとしたのを拒まれたように感じる) */
+  if (list.length === 0) {
+    drop(HIT_COL);
+  } else {
+    const items = cols.filter((c) => survey.has(c) && !isReservedColumn(c, idCol));
+    if (!cols.includes(HIT_COL)) cols.push(HIT_COL);
+    for (const row of list) row[HIT_COL] = surveyHitLabel(row, items);
   }
-  /* **点検項目が1つも無くても作る。** 全石が「なし」=灰色一色になり、
-     それが「点検の図に切り替えたが、まだ何も記録がない」を表す。
-     列が無いと点検結果の色分けを選べず、初めて使う人は
-     使おうとしたのを拒まれたように感じる */
-  const added = !csvColumns.includes(HIT_COL);
-  if (added) csvColumns.push(HIT_COL);
-  for (const row of csvRows) row[HIT_COL] = surveyHitLabel(row, cols);
-  return added;
+
+  /* 2. メモの有無。メモを一度も書いていないデータには作らない
+     (使わない列をCSVに増やさない) */
+  if (cols.includes(NOTE_COL)) {
+    if (!cols.includes(NOTE_FLAG_COL)) cols.push(NOTE_FLAG_COL);
+    for (const row of list) {
+      row[NOTE_FLAG_COL] = String(row[NOTE_COL] ?? "").trim() !== "" ? NOTE_YES : NOTE_NO;
+    }
+  }
+
+  /* 3. 記録の状況。
+     今回の記録 = メモか点検項目のどれかに値がある(記録行を作る条件と同じ)
+     前回の記録 = 前回のメモか、いま定義されている点検項目の前回分のどれかに値がある
+     **記録に使う列が1つも無いときだけ作らない**(今回の側にも前回の側にも)。
+     メモの列が無くても点検項目が1つあれば作る。前回の記録を重ねただけで、
+     今回まだ何も書いていないときも作る(回り残しを見たいのは書く前) */
+  const nowCols = surveyValueColumns(cols, survey);
+  const prevCols = prevEntryColumns(cols, survey);
+  if (list.length === 0 || (nowCols.length === 0 && prevCols.length === 0)) {
+    drop(COMBO_COL);
+  } else {
+    if (!cols.includes(COMBO_COL)) cols.push(COMBO_COL);
+    for (const row of list) row[COMBO_COL] = rowComboState(row, prevCols, nowCols);
+  }
+
+  const changed = cols.length !== before.length || cols.some((c, i) => c !== before[i]);
+  return { columns: cols, changed };
 }
 
-/* 「記録の状況」の列を作り直す。
-
-   今回の記録 = メモか点検項目のどれかに値がある(記録行を作る条件と同じ)。
-   前回の記録 = 前回のメモか、いま定義されている点検項目の前回分のどれかに値がある。
-
-   **記録に使う列が1つも無いときだけ作らない**(今回の側にも前回の側にも)。
-   メモの列が無くても、点検項目が1つあれば作る。前回の記録を重ねただけで
-   今回まだ何も書いていないときも作る(回り残しを見たいのは書く前)。
-   前回の記録が無い初回の点検では「今回のみ」と「記録なし」の2値になる。
-   列が増減したら真を返す */
-function syncComboDerived() {
-  const nowCols = surveyValueColumns(csvColumns, surveyCols);
-  const prevCols = prevEntryColumns(csvColumns, surveyCols);
-  const had = csvColumns.includes(COMBO_COL);
-  if (csvRows.length === 0 || (nowCols.length === 0 && prevCols.length === 0)) {
-    csvColumns = csvColumns.filter((c) => c !== COMBO_COL);
-    for (const row of csvRows) delete row[COMBO_COL];
-    return had ? "removed" : false;
-  }
-  if (!had) csvColumns.push(COMBO_COL);
-  for (const row of csvRows) row[COMBO_COL] = rowComboState(row, prevCols, nowCols);
-  return !had;
+/* いまのデータで作り直す。列が増減したら真を返す(呼び出し側が選択肢を更新する) */
+function rebuildInputDerived() {
+  const r = deriveInputColumns(csvRows, csvColumns, surveyCols, idColumnName());
+  csvColumns = r.columns;
+  return r.changed;
 }
 
-/* 点検の記録から作る2枚の図(該当項目・記録の状況)を作り直す。
-
-   **必ず対で作り直す。** どちらも同じ入力(点検項目の値)から作るので、
-   片方だけ作り直すと2枚の図が食い違う。列が増減したら真を返す
-   (呼び出し側が選択肢を更新する) */
-function syncSurveyDerived() {
-  const hit = syncSurveyHitDerived();
-  const combo = syncComboDerived();
-  return !!(hit || combo);
+/* 列の一覧を出している選択肢(色分け・ラベル・フィルタ)をすべて作り直す。
+   **列が増減したら、3つとも必ず作り直す。** 1つだけ直すと、無くなった列が
+   別の選択肢に残る。以前は3行を10か所に並べて書いていた。
+   フィルタから外れた条件の一覧を返す(読み込みのときに知らせるため) */
+function refreshColumnChoices() {
+  refreshAttributeOptions();
+  refreshLabelContentOptions();
+  return refreshFilterRuleOptions();
 }
 
 function refreshAttributeOptions() {
@@ -7929,12 +7937,8 @@ function applyGroupNote() {
   let added = false;
   if (!csvColumns.includes(NOTE_COL)) { csvColumns.push(NOTE_COL); added = true; }
   for (const row of targets) row[NOTE_COL] = text;
-  if (syncNoteDerived()) added = true;
-  if (added) {
-    refreshAttributeOptions();
-    refreshLabelContentOptions();
-    refreshFilterRuleOptions();
-  }
+  if (rebuildInputDerived()) added = true;
+  if (added) refreshColumnChoices();
   scheduleSaveNotes();
   if (colorColumn && isLiveColorColumn(colorColumn)) applyColorize();
   else if (showLabelsCheckbox.checked) rebuildLabels();
@@ -8862,9 +8866,7 @@ function applyClassValue(col, rawValue) {
   if (!columnKind(col)) registerManualColumn(col, "static");
   rememberClassValue(col, value);
   if (added) {
-    refreshAttributeOptions();
-    refreshLabelContentOptions();
-    refreshFilterRuleOptions();
+    refreshColumnChoices();
   }
   afterManualEdit(col);
 
@@ -8879,14 +8881,8 @@ function applyClassValue(col, rawValue) {
 /* 手入力を書いた後の後始末。色分け・ラベル・未保存表示・控えを揃える。
    メモ欄と分類で同じ経路を通す(片方だけ更新すると表示と実態が食い違う) */
 function afterManualEdit(col) {
-  /* 点検項目を書き換えたら「該当項目」と「記録の状況」を作り直す。
-     列が増減したときは選択肢も更新する(片方だけ直すと実態と食い違う) */
-  const hit = syncSurveyDerived();
-  if (hit) {
-    refreshAttributeOptions();
-    refreshLabelContentOptions();
-    refreshFilterRuleOptions();
-  }
+  // 入力から作る列を作り直す。列が増減したときは選択肢も更新する
+  if (rebuildInputDerived()) refreshColumnChoices();
   scheduleSaveNotes();
   setUnsavedNotes(true);
   if (colorColumn && (colorColumn === col || isLiveColorColumn(colorColumn))) applyColorize();
@@ -8944,11 +8940,9 @@ function addManualColumn(kind) {
   }
   csvColumns.push(name);
   registerManualColumn(name, kind);
-  syncSurveyDerived();
+  rebuildInputDerived();
   input.value = "";
-  refreshAttributeOptions();
-  refreshLabelContentOptions();
-  refreshFilterRuleOptions();
+  refreshColumnChoices();
   renderClassColumnManager();
   renderClassifyUI();
   updateStepSummaries();
@@ -8998,10 +8992,8 @@ function renderColumnList(boxId, cols, kind) {
       b.textContent = other === "survey" ? "点検項目に変える" : "属性の列に変える";
       b.addEventListener("click", () => {
         registerManualColumn(col, other);
-        syncSurveyDerived();
-        refreshAttributeOptions();
-        refreshLabelContentOptions();
-        refreshFilterRuleOptions();
+        rebuildInputDerived();
+        refreshColumnChoices();
         renderClassColumnManager();
         renderClassifyUI();
         updateStepSummaries();
@@ -9096,11 +9088,9 @@ noteInput.addEventListener("input", () => {
   let added = false;
   if (!csvColumns.includes(NOTE_COL)) { csvColumns.push(NOTE_COL); added = true; }
   noteTargetRow[NOTE_COL] = noteInput.value;
-  if (syncNoteDerived()) added = true;   // 「メモの有無」も同時に作られる
+  if (rebuildInputDerived()) added = true;   // 「メモの有無」も同時に作られる
   if (added) {
-    refreshAttributeOptions();
-    refreshLabelContentOptions();
-    refreshFilterRuleOptions();
+    refreshColumnChoices();
   }
   renderInspectorTable(noteTargetRow);   // HasNoteの表示を実際の値に追従させる
   scheduleSaveNotes();
@@ -9380,11 +9370,8 @@ function offerNoteRestore() {
   }
   if (restored === 0) { setStatus("復元できる入力がありませんでした。", true); return; }
 
-  syncNoteDerived();
-  syncSurveyDerived();   // 復元した点検項目の値も図に入れる
-  refreshAttributeOptions();
-  refreshLabelContentOptions();
-  refreshFilterRuleOptions();
+  rebuildInputDerived();   // 復元した値を図に入れる
+  refreshColumnChoices();
   // 色分け済みなら図に反映する。未実行なら勝手に着色しない(利用者の操作を待つ)
   if (colorColumn) applyColorize();
   setUnsavedNotes(true);   // 復元しただけではCSVに落ちていない
