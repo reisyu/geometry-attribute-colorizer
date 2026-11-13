@@ -531,11 +531,11 @@
   }
   /* まとまりの中は枠を共有して1部品に見せる(同じ種類だと分かる+幅も詰まる) */
   .tb-group { display: flex; }
-  .tb-group button { border-radius: 0; margin-left: -1px; }
-  .tb-group button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-  .tb-group button:last-child { border-radius: 0 6px 6px 0; }
-  .tb-group button:only-child { border-radius: 6px; }
-  #view-toolbar button {
+  .tb-group > * { border-radius: 0; margin-left: -1px; }
+  .tb-group > *:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .tb-group > *:last-child { border-radius: 0 6px 6px 0; }
+  .tb-group > *:only-child { border-radius: 6px; }
+  #view-toolbar button, #view-toolbar select {
     background: rgba(33, 36, 42, 0.88);
     border: 1px solid var(--panel-edge);
     border-radius: 6px;
@@ -545,18 +545,29 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  #view-toolbar button:hover { color: var(--ink); border-color: var(--accent-dim); }
-  body.light #view-toolbar button { background: rgba(255, 255, 255, 0.88); }
+  #view-toolbar button:hover, #view-toolbar select:hover { color: var(--ink); border-color: var(--accent-dim); }
+  body.light #view-toolbar button, body.light #view-toolbar select { background-color: rgba(255, 255, 255, 0.88); }
+  /* 見え方(パース・平行投影・正面・上面)。選んだものを文字で出す。
+     **幅は一番長い「平行投影」に合わせて固定する**。選ぶたびに幅が変わると、
+     隣のボタンが左右に動く。矢印は自前で描く(端末ごとの既定の矢印は形も幅も違う) */
+  #view-toolbar select {
+    -webkit-appearance: none; appearance: none;
+    width: calc(4em + 36px);
+    padding: 5px 24px 5px 12px;
+    color: var(--ink);
+    line-height: inherit;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa0a8' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+  }
   /* 状態が続くボタン(選択モード・位置情報モード)は、点いていることを面色で示す */
   #view-toolbar button.on,
   body.light #view-toolbar button.on {
     background: var(--accent); color: #16181b; border-color: var(--accent); font-weight: 700;
   }
 
-  /* 右下: 軸ギズモ(常時表示)+投影方式キャプション(平行投影のときだけ文字が見える)。
-     キャプションはvisibility切り替え(display切り替えではない)で常にスペースを確保し、
-     表示/非表示でギズモの位置がずれないようにする。ボタンと誤認されないよう、
-     枠線・背景のピル形状は使わず、ただの文字ラベルにする */
+  /* 右下: 軸ギズモ(常時表示)。投影の方式は、左上の「見え方」の選択肢が文字で示す
+     (以前はここに「平行投影」の小さな文字を出していたが、選択肢と同じことを言うので外した) */
   #viewport-gizmo {
     position: absolute;
     right: 16px;
@@ -617,15 +628,6 @@
     transform: translate(-50%, -50%);
   }
 
-  #proj-indicator {
-    visibility: hidden;
-    font-size: calc(10px * var(--ui-scale));
-    color: var(--ink-dim);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-    white-space: nowrap;
-  }
-  #proj-indicator.active { visibility: visible; }
-  body.light #proj-indicator { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
 
   /* ---------- プログレス表示 ---------- */
   #progress-overlay {
@@ -1378,7 +1380,7 @@
       <button class="ghost" id="export-current-view-svg-btn" disabled style="margin-top:0">現在のビューをSVGで保存</button>
     </div>
     <div class="row hint">
-      画面に見えている通りに書き出します(透視投影ならパースあり、平行投影ならパースなし)。スケールバーは非対応です
+      画面に見えている通りに書き出します(見え方がパースならパースあり、平行投影・正面・上面ならパースなし)。スケールバーは非対応です
     </div>
 
     <div class="row">
@@ -1429,12 +1431,15 @@
 
   <div id="view-toolbar">
     <div class="tb-group">
-      <button id="view-front" title="モデルの正面(立面図SVGと同じ向き)から見る">正面</button>
-      <button id="view-top" title="モデルの真上から見る">上面</button>
+      <select id="view-mode" aria-label="見え方" title="見え方。パース(遠近感あり)・平行投影(遠近感なし)・正面(立面図と同じ見え方)・上面(真上から)">
+        <option value="persp">パース</option>
+        <option value="ortho">平行投影</option>
+        <option value="front">正面</option>
+        <option value="top">上面</option>
+      </select>
       <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
     </div>
     <div class="tb-group">
-      <button id="proj-toggle" title="透視投影⇄平行投影を切り替え">平行投影</button>
       <button id="theme-toggle" title="背景色を切り替える">☀</button>
       <button id="text-size" title="文字の大きさを切り替える">文字</button>
     </div>
@@ -1469,7 +1474,6 @@
 
   <div id="viewport-gizmo">
     <svg id="axis-gizmo" viewBox="-32 -32 64 64"></svg>
-    <div id="proj-indicator">平行投影</div>
   </div>
 
   <div id="range-dialog">
@@ -1830,6 +1834,7 @@ canvas.addEventListener("pointermove", (e) => {
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if (dragMode === "rotate") {
+    viewDirectionChanged();
     orbit.spherical.theta -= dx * 0.006;
     orbit.spherical.phi = Math.min(Math.PI - 0.05, Math.max(0.05, orbit.spherical.phi - dy * 0.006));
   } else {
@@ -2020,7 +2025,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.41.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.42.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -7401,6 +7406,8 @@ function updateHighlightUniforms() {
    早期リターンより前にリセットするのは、モデルが無い状態でも
    「色分け済み」フラグが残らないようにするため */
 function disposeModel() {
+  // 新しいモデルは向きが違うので、「正面」「上面」のままにしない
+  viewDirectionChanged();
   // 新しいモデルは未着色。実行ボタンを「色分けを実行」(塗りつぶし)に戻す
   colorColumn = null;
   updateApplyBtnProminence();
@@ -8542,6 +8549,7 @@ function gotoNearestObject() {
   orbit.spherical.setFromVector3(N.multiplyScalar(orbit.spherical.radius));
   orbit.target.copy(best.v);
   orbit.update();
+  viewDirectionChanged();   // 向きを変えたので、「上面」のままにしない
   const NL = String.fromCharCode(10);
   setStatus("現在地に最も近いオブジェクト(約" + Math.round(bestD) + "m)を、正面から見ています。" + NL +
             "実際の現在地とは誤差 約" + Math.round(geoFix.acc) + "m 程度のずれがある可能性があります。");
@@ -10051,30 +10059,30 @@ function wallFrontDirection() {
 }
 
 function viewFront() {
-  if (meshes.length === 0) return;
+  if (meshes.length === 0) return false;
   const N = wallFrontDirection();
 
   const box = new THREE.Box3();
   if (modelRoot) box.expandByObject(modelRoot);
-  if (box.isEmpty()) return;
+  if (box.isEmpty()) return false;
   // 視線方向を確定してから、その向きでのフィット(距離+リセンタリング)を行う
   orbit.spherical.setFromVector3(N);
   applyFraming(box, N.clone().negate());
+  return true;
 }
 
 /* モデルの真上から見下ろす(平面図的な視点) */
 function viewTop() {
-  if (meshes.length === 0) return;
+  if (meshes.length === 0) return false;
   const box = new THREE.Box3();
   if (modelRoot) box.expandByObject(modelRoot);
-  if (box.isEmpty()) return;
+  if (box.isEmpty()) return false;
   const N = new THREE.Vector3(0, 1, 0);
   orbit.spherical.setFromVector3(N);
   applyFraming(box, N.clone().negate());
+  return true;
 }
 
-document.getElementById("view-front").addEventListener("click", viewFront);
-document.getElementById("view-top").addEventListener("click", viewTop);
 document.getElementById("view-fit").addEventListener("click", frameAll);
 
 /* ============================================================
@@ -10098,15 +10106,55 @@ function setProjection(mode) {
     orbit.update();
   }
 
-  // ボタンは他の視点ボタンと同じく「文言=遷移先」のみで色は変えない(現在の状態は
-  // ボタンではなく下のキャプションだけで示す。役割を分けて混同を防ぐ)
-  document.getElementById("proj-toggle").textContent = mode === "ortho" ? "透視投影" : "平行投影";
-  // 透視投影が既定のため、平行投影のときだけ文字を主張する(既定モードでは非表示)
-  document.getElementById("proj-indicator").classList.toggle("active", mode === "ortho");
   scheduleSaveSettings();
 }
-document.getElementById("proj-toggle").addEventListener("click", () => {
-  setProjection(projectionMode === "ortho" ? "persp" : "ortho");
+
+/* ============================================================
+   見え方(§10.8)。投影の方式と、正面・上面の視点を1つの選択肢にまとめる
+
+     パース    透視投影。向きはそのまま
+     平行投影  平行投影。向きはそのまま
+     正面      正面から平行投影で見る(立面図SVGと同じ見え方)
+     上面      真上から平行投影で見る(平面図と同じ見え方)
+
+   **選択肢の文字は、いつ見ても画面の状態と合わせる。** 正面・上面は状態ではなく
+   「その向きに動かす」1回きりの操作なので、画面を回したら(向きが変わったら)
+   文字を「平行投影」に戻す。戻さないと、斜めから見ているのに「正面」と出る。
+   もう一度正面に戻したいときは、「正面」を選び直せばよい。
+
+   正面・上面を平行投影にするのは、正面から見たいのが立面図と見比べるときだから。
+   以前は投影の切り替えと視点のボタンが別々で、「正面をパースで見る」こともできたが、
+   立面図(平行投影)と同じ見え方にはならなかった
+============================================================ */
+let viewMode = "persp";   // "persp" | "ortho" | "front" | "top"
+
+function setViewMode(mode) {
+  if (mode === "front" || mode === "top") {
+    setProjection("ortho");
+    const moved = mode === "front" ? viewFront() : viewTop();
+    viewMode = moved ? mode : "ortho";   // モデルが無くて動けなければ、正面とは言わない
+  } else {
+    setProjection(mode === "ortho" ? "ortho" : "persp");
+    viewMode = projectionMode;
+  }
+  syncViewModeUI();
+}
+
+/* 正面・上面から向きが変わったら、文字を投影の方式に戻す */
+function viewDirectionChanged() {
+  if (viewMode !== "front" && viewMode !== "top") return;
+  viewMode = projectionMode;
+  syncViewModeUI();
+}
+
+function syncViewModeUI() {
+  const sel = document.getElementById("view-mode");
+  if (sel && sel.value !== viewMode) sel.value = viewMode;
+}
+
+document.getElementById("view-mode").addEventListener("change", (e) => {
+  setViewMode(e.target.value);
+  e.target.blur();   // 選んだあと、矢印キーで別の見え方に変わらないようにする
 });
 
 /* ============================================================
@@ -10367,7 +10415,7 @@ function restoreSettings() {
       if (ev) el.dispatchEvent(new Event(ev, { bubbles: true }));
     }
     if (data.theme === "light") applyTheme(true);
-    if (data.projection === "ortho") setProjection("ortho");
+    if (data.projection === "ortho") setViewMode("ortho");
     if (data.panelCollapsed) setPanelCollapsed(true);
     if (typeof data.surveyor === "string") document.getElementById("surveyor").value = data.surveyor;
     setInspectorTab(data.inspectorTab === "attr" ? "attr" : "survey");
