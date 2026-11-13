@@ -562,9 +562,14 @@
   #view-toolbar .tb-pick select {
     position: absolute; inset: 0; width: 100%; height: 100%;
     opacity: 0; cursor: pointer; margin: 0; border: 0; padding: 0;
-    /* iPadで、押したときに画面が拡大されないように16px以上にする(16px未満だと拡大する)。
-       文字の大きさの倍率にも従わせる(§10.8.1。test_uiscale.js) */
-    font-size: max(16px, calc(12px * var(--ui-scale)));
+    /* 開いた一覧の文字は、ほかのボタンと同じ大きさにする。
+       以前は常に16px以上にしていたため、PCでは一覧だけ文字が大きかった */
+    font-size: calc(12px * var(--ui-scale));
+  }
+  /* 指で触る端末(iPadなど)では16px以上にする。16px未満の入力欄を押すと画面が拡大される。
+     その端末では一覧は標準の選択画面で出るので、ここの大きさは見た目に効かない */
+  @media (pointer: coarse) {
+    #view-toolbar .tb-pick select { font-size: max(16px, calc(12px * var(--ui-scale))); }
   }
   #view-toolbar .tb-pick:focus-within { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
   #view-toolbar .tb-pick.on,
@@ -1492,12 +1497,7 @@
       <div class="tb-pick" id="select-pick" title="選択: ブラシ(なぞる)か投げ縄(囲む)で、複数の石を選ぶ(Escで解除)">
         <span id="select-face" aria-hidden="true"></span>
         <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6l6 -6"/></svg>
-        <select id="select-mode" aria-label="選択">
-          <option value="" disabled>選択</option>
-          <option value="brush">ブラシ(なぞって選ぶ)</option>
-          <option value="lasso">投げ縄(囲んで選ぶ)</option>
-          <option value="off">選択をやめる</option>
-        </select>
+        <select id="select-mode" aria-label="選択"></select>
       </div>
     </div>
   </div>
@@ -7917,7 +7917,7 @@ function setSelectTool(tool) {
   scheduleSaveSettings();
 }
 
-/* ツールバーの「選択」(§10.8.3)。押すと「ブラシ」「投げ縄」「選択をやめる」から選ぶ。
+/* ツールバーの「選択」(§10.8.3)。押すと「ブラシ」「投げ縄」(オンのときは「選択を解除して終える」も)から選ぶ。
    絵は、オフなら矢印、オンなら選んでいる選び方(筆・投げ縄)。オンのときは面を緑にする。
    選択肢の値と絵は、選択モードと選び方を映すだけ(ここで状態を持たない) */
 const SELECT_ICONS = {
@@ -7935,8 +7935,26 @@ function syncSelectPick() {
   document.getElementById("select-face").innerHTML =
     '<svg class="ico" viewBox="0 0 24 24">' + SELECT_ICONS[icon].map((d) => '<path d="' + d + '"/>').join("") + "</svg>";
   pick.classList.toggle("on", selectMode);
-  sel.value = selectMode ? selectTool : "";
-  sel.querySelector('option[value="off"]').disabled = !selectMode;   // オフのときにやめるものは無い
+  /* 一覧は、いま選べるものだけにする。
+     - 押せない項目は置かない。以前は先頭に「選択」(オフのときの値)を、オフのときにも
+       「選択をやめる」を薄い文字で並べていて、何の項目か分からなかった
+     - 終える項目は、何が起きるかを言う。終えると選んだ石も外れる(setSelectMode)
+     - オフのときはどれも選ばれていない状態にする(-1)。同じ項目を選んでも
+       変更として届かないので、そうしないと「ブラシ」を選んでも入れないことがある */
+  const items = [["brush", "ブラシ(なぞって選ぶ)"], ["lasso", "投げ縄(囲んで選ぶ)"]];
+  if (selectMode) items.push(["off", "選択を解除して終える"]);
+  const key = items.map((x) => x[0]).join(",");
+  if (sel.dataset.items !== key) {
+    sel.innerHTML = "";
+    for (const [v, t] of items) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = t;
+      sel.appendChild(o);
+    }
+    sel.dataset.items = key;
+  }
+  if (selectMode) sel.value = selectTool;
+  else sel.selectedIndex = -1;
   const label = !selectMode ? "選択" : "選択中: " + (selectTool === "lasso" ? "投げ縄" : "ブラシ");
   sel.setAttribute("aria-label", label);
 }
