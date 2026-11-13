@@ -535,7 +535,7 @@
   .tb-group > *:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
   .tb-group > *:last-child { border-radius: 0 6px 6px 0; }
   .tb-group > *:only-child { border-radius: 6px; }
-  #view-toolbar button, #view-toolbar select {
+  #view-toolbar button, #view-toolbar #view-mode, #view-toolbar .tb-pick {
     background: rgba(33, 36, 42, 0.88);
     border: 1px solid var(--panel-edge);
     border-radius: 6px;
@@ -545,12 +545,34 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  #view-toolbar button:hover, #view-toolbar select:hover { color: var(--ink); border-color: var(--accent-dim); }
-  body.light #view-toolbar button, body.light #view-toolbar select { background-color: rgba(255, 255, 255, 0.88); }
+  #view-toolbar button:hover, #view-toolbar #view-mode:hover, #view-toolbar .tb-pick:hover { color: var(--ink); border-color: var(--accent-dim); }
+  body.light #view-toolbar button, body.light #view-toolbar #view-mode, body.light #view-toolbar .tb-pick { background-color: rgba(255, 255, 255, 0.88); }
+  /* アイコンのボタン(全体・文字・現在地・選択)。線の絵は文字の大きさに合わせて伸び縮みする。
+     **iPadでは説明(title)が出ない**ので、何のボタンかは操作ガイドの一覧で引けるようにしてある */
+  #view-toolbar .ic { padding: 5px 8px; line-height: 0; }
+  #view-toolbar .ico {
+    display: inline-block; width: 1.35em; height: 1.35em; vertical-align: middle;
+    fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* 選択。見た目は絵と矢印、その上に透明な選択肢(select)を重ねる。
+     標準の選択肢は閉じた状態に絵を出せないので、絵は下の部品で見せ、押すのは選択肢にする
+     (iPadでは指で選びやすい標準の選択画面がそのまま出る) */
+  #view-toolbar .tb-pick { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 5px 6px 5px 8px; line-height: 0; }
+  #view-toolbar .tb-pick .chev { width: 0.8em; height: 0.8em; stroke-width: 2.5; }
+  #view-toolbar .tb-pick select {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; margin: 0; border: 0; padding: 0;
+    /* iPadで、押したときに画面が拡大されないように16px以上にする(16px未満だと拡大する)。
+       文字の大きさの倍率にも従わせる(§10.8.1。test_uiscale.js) */
+    font-size: max(16px, calc(12px * var(--ui-scale)));
+  }
+  #view-toolbar .tb-pick:focus-within { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+  #view-toolbar .tb-pick.on,
+  body.light #view-toolbar .tb-pick.on { background: var(--accent); color: #16181b; border-color: var(--accent); }
   /* 見え方(パース・平行投影・正面・上面)。選んだものを文字で出す。
      **幅は一番長い「平行投影」に合わせて固定する**。選ぶたびに幅が変わると、
      隣のボタンが左右に動く。矢印は自前で描く(端末ごとの既定の矢印は形も幅も違う) */
-  #view-toolbar select {
+  #view-toolbar #view-mode {
     -webkit-appearance: none; appearance: none;
     width: calc(4.3em + 36px);   /* 文字が「特大」でも矢印と重ならない幅 */
     padding: 5px 24px 5px 12px;
@@ -615,30 +637,6 @@
   }
   body.light #select-badge { background: rgba(255, 255, 255, 0.9); }
 
-  /* 選び方(ブラシ/投げ縄)。選択モードのときだけ、バッジの下に出す。
-     ツールバーには置かない(選択モードでしか意味が無く、ツールバーの幅も増やさない) */
-  #select-tool {
-    display: none;
-    pointer-events: auto;   /* バッジの並びは素通しなので、これだけ押せるようにする */
-    border: 1px solid var(--accent-dim);
-    border-radius: 999px;
-    overflow: hidden;
-    background: rgba(33, 36, 42, 0.85);
-  }
-  #select-tool.show { display: inline-flex; }
-  body.light #select-tool { background: rgba(255, 255, 255, 0.9); }
-  #select-tool button {
-    margin: 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--ink-dim);
-    font-size: calc(11px * var(--ui-scale));
-    min-height: 26px;
-    padding: 3px 12px;
-    cursor: pointer;
-  }
-  #select-tool button.on { background: var(--accent); color: #16181b; font-weight: 700; }
 
   /* 投げ縄で囲んでいる線。指を離すまで見せる */
   #lasso-path {
@@ -1483,15 +1481,24 @@
         <option value="front">正面</option>
         <option value="top">上面</option>
       </select>
-      <button id="view-fit" title="モデル全体が収まるようにズームする">全体</button>
+      <button id="view-fit" class="ic" title="全体: モデル全体が収まるようにズームする" aria-label="全体"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8v-2a2 2 0 0 1 2 -2h2"/><path d="M4 16v2a2 2 0 0 0 2 2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M16 20h2a2 2 0 0 0 2 -2v-2"/></svg></button>
     </div>
     <div class="tb-group">
       <button id="theme-toggle" title="背景色を切り替える">☀</button>
-      <button id="text-size" title="文字の大きさを切り替える">文字</button>
+      <button id="text-size" class="ic" title="文字の大きさを切り替える" aria-label="文字の大きさ"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 15.5m-3.5 0a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0"/><path d="M3 19v-10.5a3.5 3.5 0 0 1 7 0v10.5"/><path d="M3 13h7"/><path d="M21 12v7"/></svg></button>
     </div>
     <div class="tb-group">
-      <button id="geo-btn" title="位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)">現在地</button>
-      <button id="select-mode-toggle" title="ブラシで複数のオブジェクトを選ぶ(Escで解除)">選択</button>
+      <button id="geo-btn" class="ic" aria-label="現在地" title="現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0"/><path d="M12 2l0 2"/><path d="M12 20l0 2"/><path d="M20 12l2 0"/><path d="M2 12l2 0"/></svg></button>
+      <div class="tb-pick" id="select-pick" title="選択: ブラシ(なぞる)か投げ縄(囲む)で、複数の石を選ぶ(Escで解除)">
+        <span id="select-face" aria-hidden="true"></span>
+        <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6l6 -6"/></svg>
+        <select id="select-mode" aria-label="選択">
+          <option value="" disabled>選択</option>
+          <option value="brush">ブラシ(なぞって選ぶ)</option>
+          <option value="lasso">投げ縄(囲んで選ぶ)</option>
+          <option value="off">選択をやめる</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -1503,10 +1510,6 @@
   <div id="viewport-badges">
     <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
     <div id="select-badge">選択モード</div>
-    <div id="select-tool" role="group" aria-label="選び方">
-      <button type="button" data-tool="brush" title="なぞった線の近くにある石を選ぶ">ブラシ</button>
-      <button type="button" data-tool="lasso" title="線で囲んだ範囲にある石を選ぶ">投げ縄</button>
-    </div>
     <div id="sample-badge">サンプルデータを表示中</div>
     <!-- 知らせは最後に置く。手前に置くと、出るたびに下のバッジが動いてしまう -->
     <div id="toast"></div>
@@ -2084,7 +2087,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.43.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.44.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -7908,14 +7911,43 @@ function setSelectTool(tool) {
   selectTool = tool === "lasso" ? "lasso" : "brush";
   endLassoStroke(false);
   endBrushStroke();
-  document.querySelectorAll("#select-tool button").forEach((b) =>
-    b.classList.toggle("on", b.dataset.tool === selectTool));
   document.getElementById("brush-cursor").style.display = "none";
+  syncSelectPick();
   updateSelectionPanels();
   scheduleSaveSettings();
 }
-document.querySelectorAll("#select-tool button").forEach((b) =>
-  b.addEventListener("click", () => setSelectTool(b.dataset.tool)));
+
+/* ツールバーの「選択」(§10.8.3)。押すと「ブラシ」「投げ縄」「選択をやめる」から選ぶ。
+   絵は、オフなら矢印、オンなら選んでいる選び方(筆・投げ縄)。オンのときは面を緑にする。
+   選択肢の値と絵は、選択モードと選び方を映すだけ(ここで状態を持たない) */
+const SELECT_ICONS = {
+  // Tabler Icons(MIT License)の形。24×24、線で描く
+  pointer: ["M7.904 17.563a1.2 1.2 0 0 0 2.228 .308l2.09 -3.093l4.907 4.907a1.067 1.067 0 0 0 1.509 0l1.047 -1.047a1.067 1.067 0 0 0 0 -1.509l-4.907 -4.907l3.113 -2.09a1.2 1.2 0 0 0 -.309 -2.228l-13.582 -3.904l3.904 13.563z"],
+  brush: ["M3 21v-4a4 4 0 1 1 4 4h-4", "M21 3a16 16 0 0 0 -12.8 10.2", "M21 3a16 16 0 0 1 -10.2 12.8", "M10.6 9a9 9 0 0 1 4.4 4.4"],
+  lasso: ["M4.028 13.252c-.657 -.972 -1.028 -2.078 -1.028 -3.252c0 -3.866 4.03 -7 9 -7s9 3.134 9 7s-4.03 7 -9 7c-1.913 0 -3.686 -.464 -5.144 -1.255",
+          "M5 15m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M5 17c0 1.42 .316 2.805 1 4"],
+};
+function syncSelectPick() {
+  const pick = document.getElementById("select-pick");
+  const sel = document.getElementById("select-mode");
+  if (!pick || !sel) return;
+  const icon = selectMode ? selectTool : "pointer";
+  document.getElementById("select-face").innerHTML =
+    '<svg class="ico" viewBox="0 0 24 24">' + SELECT_ICONS[icon].map((d) => '<path d="' + d + '"/>').join("") + "</svg>";
+  pick.classList.toggle("on", selectMode);
+  sel.value = selectMode ? selectTool : "";
+  sel.querySelector('option[value="off"]').disabled = !selectMode;   // オフのときにやめるものは無い
+  const label = !selectMode ? "選択" : "選択中: " + (selectTool === "lasso" ? "投げ縄" : "ブラシ");
+  sel.setAttribute("aria-label", label);
+}
+document.getElementById("select-mode").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (v === "off") setSelectMode(false);
+  else if (v === "brush" || v === "lasso") { setSelectTool(v); setSelectMode(true); }
+  syncSelectPick();
+  e.target.blur();   // 選んだあと、矢印キーで選び方が変わらないようにする
+});
+syncSelectPick();   // 起動時の絵(設定が保存されていなくても出す)
 
 /* ---- 選択の出し入れ ---- */
 
@@ -8006,7 +8038,7 @@ function rebuildSelectionOutline() {
 function setSelectMode(on) {
   if (selectMode === on) return;
   selectMode = on;
-  document.getElementById("select-mode-toggle").classList.toggle("on", on);
+  syncSelectPick();
   document.getElementById("brush-cursor").style.display = "none";
   canvas.style.cursor = on ? "crosshair" : "";
   if (!on) {
@@ -8024,7 +8056,6 @@ function setSelectMode(on) {
   updateSelectionUI();
 }
 
-document.getElementById("select-mode-toggle").addEventListener("click", () => setSelectMode(!selectMode));
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && selectMode) setSelectMode(false);
 });
@@ -8059,7 +8090,6 @@ function updateSelectionPanels() {
   badge.textContent = !selectMode ? n + "個を選択中"
     : (n > 0 ? "選択モード ● " + n + "個"
              : "選択モード ● " + (selectTool === "lasso" ? "囲んで選ぶ" : "なぞって選ぶ"));
-  document.getElementById("select-tool").classList.toggle("show", selectMode);
 
   const group = document.getElementById("insp-group");
   const single = document.getElementById("insp-note-box");
@@ -10172,8 +10202,9 @@ function applyUIScale(i) {
   uiScaleIndex = (Number.isInteger(i) && i >= 0 && i < UI_SCALES.length) ? i : 0;
   document.documentElement.style.setProperty("--ui-scale", String(UI_SCALES[uiScaleIndex]));
   const b = document.getElementById("text-size");
-  b.textContent = uiScaleIndex === 0 ? "文字" : "文字 " + UI_SCALE_NAMES[uiScaleIndex];
+  // 絵(Aa)は書き換えない。いまの大きさは説明と、押したときの知らせで伝える
   b.title = "文字の大きさ: " + UI_SCALE_NAMES[uiScaleIndex] + "(押すと切り替わります)";
+  b.setAttribute("aria-label", "文字の大きさ: " + UI_SCALE_NAMES[uiScaleIndex]);
   layoutOverlays();   // 文字が大きくなると部品の高さが変わる。四隅の配置を取り直す
   scheduleSaveSettings();
 }
