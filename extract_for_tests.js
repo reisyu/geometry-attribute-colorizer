@@ -77,6 +77,8 @@ const FUNCS = [
   "contourToSegments",
   "thickLineAttributes",
   "distToSegmentSq",
+  "pointInPolygon",
+  "polygonArea",
   "normalizeClassValue",
   "isReservedColumn",
   "columnRole",

@@ -47,6 +47,7 @@ const TESTS = [
   ["test_bundlecsv.js", "点検データのCSV"],
   ["test_thickline.js", "選択の輪郭線(太線)"],
   ["test_selection.js", "ブラシ選択の当たり判定"],
+  ["test_lasso.js", "投げ縄で選ぶ"],
   ["test_classify.js", "分類の列(手入力)"],
   ["test_colkind.js", "属性と点検項目の分離"],
   ["test_derived.js", "今回の入力から作る列"],

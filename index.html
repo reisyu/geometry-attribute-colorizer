@@ -552,7 +552,7 @@
      隣のボタンが左右に動く。矢印は自前で描く(端末ごとの既定の矢印は形も幅も違う) */
   #view-toolbar select {
     -webkit-appearance: none; appearance: none;
-    width: calc(4em + 36px);
+    width: calc(4.3em + 36px);   /* 文字が「特大」でも矢印と重ならない幅 */
     padding: 5px 24px 5px 12px;
     color: var(--ink);
     line-height: inherit;
@@ -614,6 +614,51 @@
     pointer-events: none;
   }
   body.light #select-badge { background: rgba(255, 255, 255, 0.9); }
+
+  /* 選び方(ブラシ/投げ縄)。選択モードのときだけ、バッジの下に出す。
+     ツールバーには置かない(選択モードでしか意味が無く、ツールバーの幅も増やさない) */
+  #select-tool {
+    display: none;
+    pointer-events: auto;   /* バッジの並びは素通しなので、これだけ押せるようにする */
+    border: 1px solid var(--accent-dim);
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(33, 36, 42, 0.85);
+  }
+  #select-tool.show { display: inline-flex; }
+  body.light #select-tool { background: rgba(255, 255, 255, 0.9); }
+  #select-tool button {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-dim);
+    font-size: calc(11px * var(--ui-scale));
+    min-height: 26px;
+    padding: 3px 12px;
+    cursor: pointer;
+  }
+  #select-tool button.on { background: var(--accent); color: #16181b; font-weight: 700; }
+
+  /* 投げ縄で囲んでいる線。指を離すまで見せる */
+  #lasso-path {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    pointer-events: none;
+    z-index: 4;
+  }
+  /* 線は2本重ねる。下に太い暗い線、上に色の線。色とりどりの石の上でも見えるように
+     (色の線1本だと、塗った石の色に紛れて見えなかった) */
+  #lasso-path polygon { fill: none; stroke-linejoin: round; }
+  #lasso-path .halo { stroke: rgba(10, 12, 14, 0.75); stroke-width: 5; }
+  #lasso-path .line {
+    fill: color-mix(in srgb, var(--accent) 18%, transparent);
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
 
   /* ブラシの太さを見えるようにする円。指やカーソルの先に付いて回る。
      どこまで拾うかが分からないまま塗るのは怖いので、範囲を必ず見せる */
@@ -1428,6 +1473,7 @@
   <div id="labels"></div>
   <div id="dropzone-hint">ファイルをここにドロップ(GLB / DXF / OBJ / CSV)</div>
   <div id="brush-cursor"></div>
+  <svg id="lasso-path"><polygon class="halo" points=""/><polygon class="line" points=""/></svg>
 
   <div id="view-toolbar">
     <div class="tb-group">
@@ -1457,6 +1503,10 @@
   <div id="viewport-badges">
     <div id="note-badge" title="メモをCSVで保存するとこの表示は消えます">● メモ未保存</div>
     <div id="select-badge">選択モード</div>
+    <div id="select-tool" role="group" aria-label="選び方">
+      <button type="button" data-tool="brush" title="なぞった線の近くにある石を選ぶ">ブラシ</button>
+      <button type="button" data-tool="lasso" title="線で囲んだ範囲にある石を選ぶ">投げ縄</button>
+    </div>
     <div id="sample-badge">サンプルデータを表示中</div>
     <!-- 知らせは最後に置く。手前に置くと、出るたびに下のバッジが動いてしまう -->
     <div id="toast"></div>
@@ -1781,13 +1831,19 @@ canvas.addEventListener("pointerdown", (e) => {
     pinchLastDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
     pinchLastMid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
     endBrushStroke();   // 2本目が触れたらズーム/パンに切り替わる。筆はここで区切る
+    endLassoStroke(false);   // 投げ縄は選ばずに捨てる(囲みかけの範囲で選ばない)
     dragMode = null;
   } else if (activePointers.size === 1) {
     // 選択モードでは左ドラッグが筆になる。奪うのは回転だけで、
     // 右ドラッグのパンとホイールのズームは通常モードのまま使える
     if (selectMode && e.button === 0 && !e.shiftKey) {
-      dragMode = "brush";
-      beginBrushStroke(e.clientX, e.clientY);
+      if (selectTool === "lasso") {
+        dragMode = "lasso";
+        beginLassoStroke(e.clientX, e.clientY);
+      } else {
+        dragMode = "brush";
+        beginBrushStroke(e.clientX, e.clientY);
+      }
     } else {
       // 右ボタン(2)・中ボタン(1)・Shift+左 は平行移動、それ以外(左)は回転
       dragMode = (e.button === 1 || e.button === 2 || e.shiftKey) ? "pan" : "rotate";
@@ -1831,6 +1887,7 @@ canvas.addEventListener("pointermove", (e) => {
 
   if (!dragMode) return;
   if (dragMode === "brush") { paintTo(e.clientX, e.clientY); return; }
+  if (dragMode === "lasso") { extendLasso(e.clientX, e.clientY); return; }
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if (dragMode === "rotate") {
@@ -1855,6 +1912,7 @@ function releasePointer(e) {
   }
   if (activePointers.size === 0) {
     if (dragMode === "brush") endBrushStroke();
+    if (dragMode === "lasso") endLassoStroke(true);
     dragMode = null;
   }
 }
@@ -1954,6 +2012,7 @@ let highlightMaterial = null;
 /* 複数選択の状態も同じ理由で前に出す(不透明度の計算から参照されるため)。
    中身は「複数選択(ブラシ)」の節で扱う */
 let selectMode = false;
+let selectTool = "brush";   // 選び方 "brush" | "lasso"(§6.8.1)
 const selection = new Set();
 
 /* ツールバーの実際の高さを、ビューポート上の重なり計算に配る。
@@ -2025,7 +2084,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.42.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.43.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -7742,6 +7801,122 @@ function paintSegment(x0, y0, x1, y1) {
   if (selection.size !== prevSize) afterSelectionChange(prevSize);
 }
 
+/* ============================================================
+   投げ縄(§6.8.1)。囲んだ範囲にある石を選ぶ
+
+   ブラシは「なぞった線の近く」を拾うので、線と線の間に残った石を
+   取りこぼすことがあった。投げ縄は**範囲**で拾うので、まとまった区画を
+   漏れなく選べる。ブラシは細い列や点在する石を拾うのに向くので残す。
+
+   判定はブラシと同じく**重心が囲みの中に入ったか**。輪郭が少しでも入ったら
+   拾う方式は、囲みの縁にかかった隣の石まで巻き込む。
+   候補はブラシと同じ(表示中で、裏を向いていない石)。
+
+   選ぶのは指を離したとき。囲んでいる途中では選ばない(線が閉じるまで範囲が
+   決まらないため)。始点と終点は直線で結んで閉じる
+============================================================ */
+let lassoStroke = null;   // { pts: [[x,y],...] } 囲んでいる間だけ入る
+
+function beginLassoStroke(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  lassoStroke = { pts: [[clientX - rect.left, clientY - rect.top]] };
+  drawLasso();
+}
+
+/* 3px以上動いたときだけ点を足す(細かすぎる点は判定を重くするだけ) */
+function extendLasso(clientX, clientY) {
+  if (!lassoStroke) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left, y = clientY - rect.top;
+  const last = lassoStroke.pts[lassoStroke.pts.length - 1];
+  if (Math.hypot(x - last[0], y - last[1]) < 3) return;
+  lassoStroke.pts.push([x, y]);
+  drawLasso();
+}
+
+function drawLasso() {
+  const svg = document.getElementById("lasso-path");
+  if (!lassoStroke) { svg.style.display = "none"; return; }
+  svg.style.display = "block";
+  const pts = lassoStroke.pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+  for (const poly of svg.querySelectorAll("polygon")) poly.setAttribute("points", pts);
+}
+
+/* 囲みを閉じて選ぶ。apply が偽なら選ばずに捨てる(2本指に切り替わったときなど) */
+function endLassoStroke(apply) {
+  const stroke = lassoStroke;
+  lassoStroke = null;
+  drawLasso();
+  if (!apply || !stroke) return;
+  /* 小さすぎる囲みは選ばない。タップや手ぶれで線がわずかに引かれただけのときは、
+     タップの処理(1個ずつの足し引き)に任せる */
+  if (stroke.pts.length < 3 || Math.abs(polygonArea(stroke.pts)) < LASSO_MIN_AREA) return;
+
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const prevSize = selection.size;
+  let inside = 0, undoPushed = false;
+  for (const item of buildBrushCandidates()) {
+    _brushProj.copy(item.c).project(camera);
+    if (_brushProj.z > 1) continue;   // カメラの後ろ
+    const px = (_brushProj.x + 1) / 2 * w;
+    const py = (-_brushProj.y + 1) / 2 * h;
+    if (!pointInPolygon(px, py, stroke.pts)) continue;
+    inside++;
+    if (selection.has(item.mesh)) continue;
+    if (!undoPushed) { pushSelectionUndo(); undoPushed = true; }   // 1回の囲みで1回分だけ控える
+    selection.add(item.mesh);
+    setMeshSelectionAppearance(item.mesh);
+  }
+  // 離したときのタップ処理に「もう選んだ」と伝える(わずかに動いた扱いで外さないように)
+  if (undoPushed) lastStrokePainted = true;
+  if (selection.size !== prevSize) afterSelectionChange(prevSize);
+  // 何も入らなかったときは黙らない。囲んだのに何も起きないと、理由が分からない
+  if (inside === 0) {
+    setStatus("囲んだ範囲に、石の中心がありませんでした。" + String.fromCharCode(10) +
+              "石の真ん中が入るように囲んでください。", true);
+  }
+}
+
+/* これより小さい囲み(画面上の面積)は、投げ縄ではなくタップとみなす。
+   1辺8px四方ほど。指先の揺れで描ける大きさを超えたら囲みとして扱う */
+const LASSO_MIN_AREA = 64;
+
+/* 点が多角形の中にあるか。純関数。偶奇判定(交差の回数)で決める。
+   線が交差した「8の字」の囲みでは、重なった部分が外になる(画面の塗りと同じ) */
+function pointInPolygon(x, y, poly) {
+  const pts = poly || [];
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/* 多角形の面積(符号つき)。純関数。向きで符号が変わるので、使う側で絶対値を取る */
+function polygonArea(poly) {
+  const pts = poly || [];
+  let a = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    a += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
+  }
+  return a / 2;
+}
+
+/* 選び方を切り替える。囲みかけ・塗りかけのものは捨てる */
+function setSelectTool(tool) {
+  selectTool = tool === "lasso" ? "lasso" : "brush";
+  endLassoStroke(false);
+  endBrushStroke();
+  document.querySelectorAll("#select-tool button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.tool === selectTool));
+  document.getElementById("brush-cursor").style.display = "none";
+  updateSelectionPanels();
+  scheduleSaveSettings();
+}
+document.querySelectorAll("#select-tool button").forEach((b) =>
+  b.addEventListener("click", () => setSelectTool(b.dataset.tool)));
+
 /* ---- 選択の出し入れ ---- */
 
 function pushSelectionUndo() {
@@ -7836,6 +8011,7 @@ function setSelectMode(on) {
   canvas.style.cursor = on ? "crosshair" : "";
   if (!on) {
     endBrushStroke();
+    endLassoStroke(false);
     // モードを抜けたら選択も解除する。残したままだと、通常モードでは
     // 解除する手段が画面に出ておらず、減光と縁取りだけが残って理由が分からなくなる。
     // 何個消えたかは必ず知らせる(黙って捨てない)
@@ -7859,6 +8035,7 @@ brushCursor.style.width = (BRUSH_RADIUS_PX * 2) + "px";
 brushCursor.style.height = (BRUSH_RADIUS_PX * 2) + "px";
 canvas.addEventListener("pointermove", (e) => {
   if (!selectMode) return;
+  if (selectTool !== "brush") { brushCursor.style.display = "none"; return; }   // 投げ縄に筆の太さは無い
   const rect = wrap.getBoundingClientRect();
   brushCursor.style.display = "block";
   brushCursor.style.left = (e.clientX - rect.left) + "px";
@@ -7880,7 +8057,9 @@ function updateSelectionPanels() {
   const badge = document.getElementById("select-badge");
   badge.style.display = (selectMode || n > 0) ? "block" : "none";
   badge.textContent = !selectMode ? n + "個を選択中"
-    : (n > 0 ? "選択モード ● " + n + "個" : "選択モード ● なぞって選ぶ");
+    : (n > 0 ? "選択モード ● " + n + "個"
+             : "選択モード ● " + (selectTool === "lasso" ? "囲んで選ぶ" : "なぞって選ぶ"));
+  document.getElementById("select-tool").classList.toggle("show", selectMode);
 
   const group = document.getElementById("insp-group");
   const single = document.getElementById("insp-note-box");
@@ -10379,6 +10558,7 @@ function saveSettings() {
       // 点検者は人に紐づくもので、データには紐づかない。毎回打ち直させない
       surveyor: document.getElementById("surveyor").value,
       inspectorTab,
+      selectTool,   // 選び方は人の好み。データに紐づかない
       uiScale: uiScaleIndex,
     };
     for (const [id, kind] of SAVED_SETTINGS) {
@@ -10419,6 +10599,7 @@ function restoreSettings() {
     if (data.panelCollapsed) setPanelCollapsed(true);
     if (typeof data.surveyor === "string") document.getElementById("surveyor").value = data.surveyor;
     setInspectorTab(data.inspectorTab === "attr" ? "attr" : "survey");
+    setSelectTool(data.selectTool === "lasso" ? "lasso" : "brush");
     applyUIScale(typeof data.uiScale === "number" ? data.uiScale : 0);
   }
 
