@@ -115,7 +115,7 @@ const TOUR_STEPS = [
       ![...document.getElementById("attribute").options].some((o) => o.value === "Area") },
   { target: "#legend",
     text: "図の色と、左下の凡例が変わりました。凡例には、値ごとの石の数(分布)も出ます。" },
-  { target: "#viewport-wrap canvas",
+  { target: "#viewport-wrap canvas", place: "view",
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => !!highlightObj || selection.size > 0 },
@@ -142,7 +142,7 @@ const COLUMN_TOUR_STEPS = [
     text: "列の名前に「石種」と入れて、「列を作る」を押してください。",
     hint: "名前は何でもかまいません。",
     ok: (c) => !!c.col },
-  { target: "#viewport-wrap canvas",
+  { target: "#viewport-wrap canvas", place: "view",
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => classifyTargets().rows.length > 0 },
@@ -163,8 +163,23 @@ const COLUMN_TOUR_STEPS = [
     text: (c) => "「" + (c.value || "砂岩") + "」を押すと、複数の石にまとめて情報が付与されます。",
     hint: "「上書きされます」と出ても、そのまま押してかまいません。",
     ok: (c) => tourValueCount(c.col, c.value) >= 2 },
-  { target: "#attribute", panel: true, open: "color",
-    text: (c) => "色分けする属性を「" + (c.col || "石種") + "」に変えると、付与された値で色分けされます。",
+  // 2種類目を付ける。投げ縄は今の選択に**足す**ので、囲む前に選択を外しておく。
+  // 外さないと、砂岩の石まで花崗岩で上書きされ、色分けが1色に戻る
+  { target: "#viewport-wrap canvas", place: "view", enter: () => tourClearForSecond(),
+    text: "今度は、別のところの石を投げ縄で囲んでください。",
+    hint: (c) => "「" + (c.value || "砂岩") + "」を付けていない石を囲んでください。",
+    ok: (c) => {
+      const rows = classifyTargets().rows;
+      return rows.length >= 2 && rows.some((r) => normalizeClassValue(r[c.col]) !== c.value);
+    } },
+  { target: "#insp-attr-input", tab: "attr", unfold: "give", find: (c) => tourClassRow(c.col),
+    text: "「＋」を押し、「花崗岩」と入れて「追加」を押してください。囲んだ石すべてに付与されます。",
+    hint: "「上書きされます」と出ても、そのまま押してかまいません。",
+    ok: (c) => tourValueCount(c.col, c.value2) >= 2 },
+  // 選択したままだと、選んだ石が減光と縁取りで覆われて色が見分けにくい(作者の指摘)。外してから見せる
+  { target: "#attribute", panel: true, open: "color", enter: () => tourClearForColor(),
+    text: (c) => "色分けする属性を「" + (c.col || "石種") + "」に変えると、" + (c.value || "砂岩") + "と" +
+      (c.value2 || "花崗岩") + "が別の色で表示されます。付与していない石は灰色です。",
     hint: (c) => "押すと一覧が開きます。「" + (c.col || "石種") + "」を選んでください。",
     ok: (c) => !!c.col && colorColumn === c.col },
   { target: "#export-bundle-btn", panel: true, open: "export",

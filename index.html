@@ -2166,7 +2166,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.47.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.48.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -10886,7 +10886,7 @@ const TOUR_STEPS = [
       ![...document.getElementById("attribute").options].some((o) => o.value === "Area") },
   { target: "#legend",
     text: "図の色と、左下の凡例が変わりました。凡例には、値ごとの石の数(分布)も出ます。" },
-  { target: "#viewport-wrap canvas",
+  { target: "#viewport-wrap canvas", place: "view",
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => !!highlightObj || selection.size > 0 },
@@ -10906,8 +10906,10 @@ const TOUR_STEPS = [
     text: "くわしい説明は、いつでもここから開けます。この案内も、操作ガイドから始め直せます。" },
 ];
 
-/* 2本目「属性を付ける」(§10.10.1)。列を作り、石に値を付与し、その列で色分けして、
-   ZIPで保存するところまで。**文面は作者が確かめたもの**(2026-11-15)。変えるときは作者に見せる。
+/* 2本目「属性を付ける」(§10.10.1)。列を作り、石に2種類の値(砂岩・花崗岩)を付与し、
+   その列で色分けして、ZIPで保存するところまで。値が1種類だと色分けしても1色になり、
+   色分けの意味が伝わらない(作者の指摘、v1.48.0 で2種類にした)。
+   **文面は作者が確かめたもの**(2026-11-15)。変えるときは作者に見せる。
 
    - 文面の {列} {値} には、利用者が実際に入れた名前が入る(関数で書く。c は案内の控え)
    - 練習用の列を作って値を書き込むので、**サンプルを表示しているときだけ**進める。
@@ -10921,7 +10923,7 @@ const COLUMN_TOUR_STEPS = [
     text: "列の名前に「石種」と入れて、「列を作る」を押してください。",
     hint: "名前は何でもかまいません。",
     ok: (c) => !!c.col },
-  { target: "#viewport-wrap canvas",
+  { target: "#viewport-wrap canvas", place: "view",
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => classifyTargets().rows.length > 0 },
@@ -10942,8 +10944,23 @@ const COLUMN_TOUR_STEPS = [
     text: (c) => "「" + (c.value || "砂岩") + "」を押すと、複数の石にまとめて情報が付与されます。",
     hint: "「上書きされます」と出ても、そのまま押してかまいません。",
     ok: (c) => tourValueCount(c.col, c.value) >= 2 },
-  { target: "#attribute", panel: true, open: "color",
-    text: (c) => "色分けする属性を「" + (c.col || "石種") + "」に変えると、付与された値で色分けされます。",
+  // 2種類目を付ける。投げ縄は今の選択に**足す**ので、囲む前に選択を外しておく。
+  // 外さないと、砂岩の石まで花崗岩で上書きされ、色分けが1色に戻る
+  { target: "#viewport-wrap canvas", place: "view", enter: () => tourClearForSecond(),
+    text: "今度は、別のところの石を投げ縄で囲んでください。",
+    hint: (c) => "「" + (c.value || "砂岩") + "」を付けていない石を囲んでください。",
+    ok: (c) => {
+      const rows = classifyTargets().rows;
+      return rows.length >= 2 && rows.some((r) => normalizeClassValue(r[c.col]) !== c.value);
+    } },
+  { target: "#insp-attr-input", tab: "attr", unfold: "give", find: (c) => tourClassRow(c.col),
+    text: "「＋」を押し、「花崗岩」と入れて「追加」を押してください。囲んだ石すべてに付与されます。",
+    hint: "「上書きされます」と出ても、そのまま押してかまいません。",
+    ok: (c) => tourValueCount(c.col, c.value2) >= 2 },
+  // 選択したままだと、選んだ石が減光と縁取りで覆われて色が見分けにくい(作者の指摘)。外してから見せる
+  { target: "#attribute", panel: true, open: "color", enter: () => tourClearForColor(),
+    text: (c) => "色分けする属性を「" + (c.col || "石種") + "」に変えると、" + (c.value || "砂岩") + "と" +
+      (c.value2 || "花崗岩") + "が別の色で表示されます。付与していない石は灰色です。",
     hint: (c) => "押すと一覧が開きます。「" + (c.col || "石種") + "」を選んでください。",
     ok: (c) => !!c.col && colorColumn === c.col },
   { target: "#export-bundle-btn", panel: true, open: "export",
@@ -10994,6 +11011,21 @@ function columnTourUpdate(c) {
     const counts = classValueCounts(c.col);
     if (counts.length) c.value = counts[0][0];
   }
+  // 2種類目(花崗岩)。1種類目と違う値が付いたら、それを控える
+  if (c.col && c.value && !c.value2) {
+    const other = classValueCounts(c.col).find((e) => e[0] !== c.value);
+    if (other) c.value2 = other[0];
+  }
+}
+/* 8手目に入るとき: 選択を外す(投げ縄は足すだけなので)。選択モードを抜けていたら戻す */
+function tourClearForSecond() {
+  if (!selectMode) setSelectMode(true);
+  clearSelection();
+}
+/* 10手目に入るとき: 選択を外し、選択モードも抜ける。色分けの色をそのまま見せるため */
+function tourClearForColor() {
+  if (selectMode) setSelectMode(false);   // 抜けると選択も外れる
+  else clearSelection();
 }
 function tourValueCount(col, value) {
   if (!col || !value) return 0;
@@ -11046,10 +11078,10 @@ function columnTourEnd(c) {
   const made = tourCreatedColumns(c);
   if (made.length === 0) return;
   const names = made.map((x) => "「" + x + "」").join("");
-  tourCard("練習で作った" + names + "を消しますか？",
-    "消すと、付与した値もなくなり、色分けも元に戻ります。",
-    [["消して終わる", () => removeTourColumns(c, made), true], ["残して終わる", null, false]],
-    "残した列は、次にサンプルを開いたときにも出ます。");
+  tourCard("練習で作った" + names + "の情報を削除しますか？",
+    "削除すると、付与した値もなくなり、色分けも元に戻ります。",
+    [["削除して終了する", () => removeTourColumns(c, made), true], ["残して終了する", null, false]],
+    "残した情報は、次にサンプルを開いたときにも読み込まれます。");
 }
 
 function removeTourColumns(c, made) {
@@ -11083,7 +11115,7 @@ function removeTourColumns(c, made) {
   renderClassColumnManager();
   renderClassifyUI();
   updateStepSummaries();
-  setStatus("練習で作った" + made.map((x) => "「" + x + "」").join("") + "を消しました。");
+  setStatus("練習で作った" + made.map((x) => "「" + x + "」").join("") + "の情報を削除しました。");
 }
 
 function sampleShown() {
@@ -11182,6 +11214,7 @@ function tourEnterStep(step) {
   }
   if (step.tab) setInspectorTab(step.tab);
   if (step.unfold) setInspFold(step.unfold, false);   // 畳まれていると指す先が見えない
+  if (step.enter) step.enter(tour.ctx);                // その手を始める前の下ごしらえ
   const el = tourTargets(step)[0];
   if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });   // 端に寄ると、切り抜きが画面の縁で欠ける
   const bub = document.getElementById("tour-bubble");
@@ -11250,6 +11283,16 @@ function tourFrame() {
     const top = vv ? vv.offsetTop : 0, bottom = vv ? vv.offsetTop + vv.height : vh;
     x = (vw - bw) / 2;
     y = r.top + r.height / 2 > (top + bottom) / 2 ? top + m : bottom - bh - m;
+  } else if (step.place === "view") {
+    /* ビュー(石垣)を指す手は、**ビューの中の左上**に置く(作者の指定で統一)。
+       ビュー全体を指すと横にも上下にも置く場所が無く、決まった位置が無かった。
+       左上の状態表示(未保存・選択中・サンプル)の下に置き、表示を隠さない */
+    x = r.left + 16;
+    y = r.top + 16;
+    const badges = document.getElementById("viewport-badges");
+    const br = badges ? badges.getBoundingClientRect() : null;
+    if (br && br.height > 0) y = Math.max(y, br.bottom + 10);
+    y = Math.max(m, Math.min(y, vh - bh - m));
   } else {
     x = r.right + gap; y = r.top;
     if (x + bw > vw - m) x = r.left - bw - gap;

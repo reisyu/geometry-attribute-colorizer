@@ -74,30 +74,51 @@ ok(TOUR_STEPS[4].tab === "attr" && TOUR_STEPS[4].unfold === "list", "**5手目�
 
 /* ===== 2本目: 属性を付ける ===== */
 console.log("--- 2本目(属性を付ける) ---");
-ok(Array.isArray(COLUMN_TOUR_STEPS) && COLUMN_TOUR_STEPS.length === 9, "案内は9手",
+ok(Array.isArray(COLUMN_TOUR_STEPS) && COLUMN_TOUR_STEPS.length === 11, "案内は11手(v1.48.0 で2種類の値を付与する流れに)",
    String(COLUMN_TOUR_STEPS && COLUMN_TOUR_STEPS.length));
 checkTargets("2本目 ", COLUMN_TOUR_STEPS);
 checkTexts("2本目 ", COLUMN_TOUR_STEPS);
 {
-  /* 作者と決めたのは: 列を作る・石を選ぶ・値を付与する・投げ縄で囲む・まとめて付与する・その列で色分けする */
+  /* 作者と決めたのは: 列を作る・石を選ぶ・値を付与する・投げ縄で囲む・まとめて付与する・
+     別の石を囲む・2種類目を付与する・その列で色分けする */
   const acts = COLUMN_TOUR_STEPS.map((s, i) => (s.ok ? i + 1 : null)).filter(Boolean);
-  ok(JSON.stringify(acts) === "[2,3,4,6,7,8]", "**やると進む手は 2・3・4・6・7・8 手目**", JSON.stringify(acts));
+  ok(JSON.stringify(acts) === "[2,3,4,6,7,8,9,10]", "**やると進む手は 2・3・4・6・7・8・9・10 手目**", JSON.stringify(acts));
 }
 /* 文面には利用者が実際に入れた名前が入る(「石種」「砂岩」以外でも進められる) */
 {
-  const other = { col: "エリア", value: "北面" };
-  const t4 = COLUMN_TOUR_STEPS[3].text(other), t8 = COLUMN_TOUR_STEPS[7].text(other);
-  ok(t4.includes("「エリア」") && t8.includes("「エリア」"), "4・8手目の文面は、作った列の名前を使う", t4);
+  const other = { col: "エリア", value: "北面", value2: "南面" };
+  const t4 = COLUMN_TOUR_STEPS[3].text(other), t10 = COLUMN_TOUR_STEPS[9].text(other);
+  ok(t4.includes("「エリア」") && t10.includes("「エリア」"), "4・10手目の文面は、作った列の名前を使う", t4);
   ok(COLUMN_TOUR_STEPS[4].text(other).includes("「北面」"), "5手目の文面は、付与した値を使う");
-  ok(COLUMN_TOUR_STEPS[7].hint(other).includes("「エリア」"), "8手目の補足は、選ぶ列を名指しする");
+  ok(COLUMN_TOUR_STEPS[7].hint(other).includes("「北面」"), "8手目の補足は、1種類目の値を名指しする");
+  ok(t10.includes("北面と南面"), "10手目は、付与した2種類の値を名指しする", t10);
+  ok(COLUMN_TOUR_STEPS[9].hint(other).includes("「エリア」"), "10手目の補足は、選ぶ列を名指しする");
 }
 /* 作者が直した言い回し(2026-11-15)。「付ける」ではなく「付与」 */
 ok(asText(COLUMN_TOUR_STEPS[0].text) === "石垣の属性は追加することができます。（石種など）", "1手目は作者の文面のまま");
-ok(asText(COLUMN_TOUR_STEPS[8].text).includes("復元されます"), "9手目はZIPで復元できることを言う");
+ok(asText(COLUMN_TOUR_STEPS[10].text).includes("復元されます"), "11手目はZIPで復元できることを言う");
+/* 2種類目(v1.48.0)。投げ縄は今の選択に足すので、8手目に入るとき選択を外す。
+   外さないと砂岩の石まで花崗岩で上書きされ、色分けが1色に戻る */
+ok(COLUMN_TOUR_STEPS[7].enter && /function tourClearForSecond\(\) \{\s*if \(!selectMode\) setSelectMode\(true\);\s*clearSelection\(\);/.test(html),
+   "**8手目に入るとき、選択を外す**(砂岩の石を花崗岩で上書きしない)");
+ok(asText(COLUMN_TOUR_STEPS[8].text).includes("「花崗岩」"), "9手目は2種類目に「花崗岩」を入れさせる");
+/* ビュー(石垣)を指す手は、吹き出しをビューの中の左上に置く(作者の指定で統一) */
+{
+  const onView = [...TOUR_STEPS, ...COLUMN_TOUR_STEPS].filter((s) => s.target === "#viewport-wrap canvas");
+  ok(onView.length === 3 && onView.every((s) => s.place === "view"), "**ビューを指す手(1本目4手目・2本目3・8手目)は、吹き出しをビューの左上に置く**",
+     String(onView.length));
+  ok(html.includes('} else if (step.place === "view") {') && html.includes('getElementById("viewport-badges")'),
+     "左上の状態表示の下に置く(表示を隠さない)");
+}
+/* 選択したままだと色が見分けにくい(作者の指摘)。10手目に入るとき選択を外し、モードも抜ける */
+ok(COLUMN_TOUR_STEPS[9].enter && /function tourClearForColor\(\) \{\s*if \(selectMode\) setSelectMode\(false\);/.test(html),
+   "**10手目に入るとき、選択を外す**(色分けの色が見分けられるように)");
+ok(asText(COLUMN_TOUR_STEPS[9].text).includes("灰色"), "10手目は、付与していない石が灰色になることを言う");
+ok(html.includes("if (step.enter) step.enter(tour.ctx);"), "手に入るときの下ごしらえ(enter)を呼ぶ");
 /* 属性を付与する欄は「属性」タブにある(v1.47.0)。案内の側で開かないと、点検タブを開いていた人や
    欄を畳んでいた人には見えない */
-ok([3, 4, 6].every((i) => COLUMN_TOUR_STEPS[i].tab === "attr" && COLUMN_TOUR_STEPS[i].unfold === "give"),
-   "4・5・7手目は「属性」タブと「属性を付与する」を開く");
+ok([3, 4, 6, 8].every((i) => COLUMN_TOUR_STEPS[i].tab === "attr" && COLUMN_TOUR_STEPS[i].unfold === "give"),
+   "4・5・7・9手目は「属性」タブと「属性を付与する」を開く");
 /* 値をもう一度押しても外れない(v1.47.0)。5手目は外し方を「空にする」で言う(作者の指摘) */
 {
   const t5 = asText(COLUMN_TOUR_STEPS[4].text);
@@ -128,8 +149,13 @@ ok(html.includes("if (step.unfold) setInspFold(step.unfold, false);"), "案内�
 }
 /* 練習の列を作るので、サンプルのときだけ進め、終わるときに後始末を尋ねる */
 ok(/columns: \{ steps: COLUMN_TOUR_STEPS, sampleOnly: true,/.test(html), "**2本目はサンプルのときだけ進める**");
-ok(/function columnTourEnd\(/.test(html) && html.includes("消して終わる") && html.includes("残して終わる"),
-   "終わるとき、練習で作った列を消すか残すかを尋ねる");
+ok(/function columnTourEnd\(/.test(html) && html.includes("削除して終了する") && html.includes("残して終了する"),
+   "終わるとき、練習で作った列を削除するか残すかを尋ねる");
+/* 確認の文面は作者が書いたもの(2026-11-15) */
+ok(html.includes('"の情報を削除しますか？"') &&
+   html.includes('"削除すると、付与した値もなくなり、色分けも元に戻ります。"') &&
+   html.includes('"残した情報は、次にサンプルを開いたときにも読み込まれます。"'),
+   "終わるときの確認は作者の文面のまま");
 
 /* ---------- インスペクタの最初の表示 ---------- */
 /* 5手目は右上の属性表示を初めての人に見せる。設定の控えが無いときはタブを切り替える

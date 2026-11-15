@@ -273,10 +273,11 @@
       <p>色分けする属性を変える、凡例を読む、石を選んで属性を見る、見え方を「正面」にする、
         まとめて選ぶ、書き出す、までを案内します。いま開いているデータのまま進みます。</p>
       <p><a class="back-to-app" href="index.html?tour=1" data-start-tour>▶ 基本の操作を案内する</a></p>
-      <p style="margin-top:18px"><span class="step-num">2</span><strong>属性の付け方</strong>（9手・3〜4分）</p>
-      <p>属性の列（石種など）を作り、石に値を付与して、その値で色分けし、ZIPに保存するまでを案内します。
+      <p style="margin-top:18px"><span class="step-num">2</span><strong>属性の付け方</strong>（11手・4〜5分）</p>
+      <p>属性の列（石種など）を作り、石に砂岩と花崗岩の2種類の値を付与して、その値で色分けし、
+        ZIPに保存するまでを案内します。
         サンプルの石垣で進めます（自分のデータを開いているときは、新しいタブでサンプルを開きます）。
-        練習で作った列は、最後に消せます。</p>
+        練習で作った列は、最後に削除できます。</p>
       <p><a class="back-to-app" href="index.html?tour=columns" data-start-tour="columns">▶ 属性の付け方を案内する</a></p>
     </div>
 
@@ -724,11 +725,11 @@
     <!-- ============ 属性を付ける ============ -->
     <h2 id="classify">属性を付ける</h2>
     <p>
-      <a class="back-to-app" href="index.html?tour=columns" data-start-tour="columns">▶ アプリの画面で属性の付け方を案内する（3〜4分）</a>
+      <a class="back-to-app" href="index.html?tour=columns" data-start-tour="columns">▶ アプリの画面で属性の付け方を案内する（4〜5分）</a>
     </p>
     <p>
-      サンプルの石垣で、属性の列を作り、石に値を付与して、その値で色分けするところまでを案内します。
-      練習で作った列は、最後に消せます。
+      サンプルの石垣で、属性の列を作り、石に砂岩と花崗岩の2種類の値を付与して、その値で色分けするところまでを案内します。
+      練習で作った列は、最後に削除できます。
     </p>
     <p>
       石種やエリアのように<strong>計算では出せない、石そのものの性質</strong>を手で付けるための機能です。
@@ -1369,7 +1370,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.47.0";
+  const HELP_VERSION = "1.48.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
