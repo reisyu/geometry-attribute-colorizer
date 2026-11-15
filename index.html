@@ -963,7 +963,7 @@
 
   /* スマホ用の部品(§10.11)。幅700px未満のときだけ出す */
   #insp-sheet-handle, #insp-sheet-sum, #insp-sheet-close, #legend-toggle { display: none; }
-  #phone-top, #phone-bar { display: none; }
+  #phone-top, #phone-bar, #menu-head { display: none; }
 
   /* ---------- 属性インスペクタ ---------- */
   #inspector {
@@ -1155,8 +1155,29 @@
 
   @media (max-width: 700px) {
     body { flex-direction: column; }
-    #sidebar { width: 100%; min-width: 0; height: 45%; border-right: none; border-bottom: 1px solid var(--panel-edge); }
-    #viewport-wrap { height: 55%; }
+    /* ---- スマホ: 左のパネルを全画面のメニューにする(§10.11.3、v1.54.0) ----
+       石垣は常に画面いっぱいに出す。パネルは上の帯の「≡」で開き、画面の上にかぶせる。
+       v1.53.2 までは画面の上45%を占めていて、石垣が下の半分にしか見えなかった */
+    #sidebar {
+      position: fixed; inset: 0; z-index: 20;
+      width: 100%; min-width: 0; height: 100%; border: 0;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+    #viewport-wrap { height: 100%; }
+    #menu-head {
+      display: flex; align-items: center; justify-content: space-between;
+      /* パネルの上の余白(16px)のぶんを引く。0 だと余白の下で止まり、見出しの上に隙間が空く */
+      position: sticky; top: -16px; z-index: 2;
+      margin: -16px -14px 12px; padding: calc(6px + env(safe-area-inset-top, 0px)) 4px 6px 14px;
+      background: var(--panel); border-bottom: 1px solid var(--panel-edge);
+      font-weight: 700; font-size: calc(14px * var(--ui-scale));
+    }
+    #menu-close {
+      width: 40px; height: 40px; background: none; border: 0; color: var(--ink);
+      font-size: calc(22px * var(--ui-scale)); cursor: pointer;
+    }
+    /* 読み込み中の表示と確認の窓は、メニューを開いたまま出ても見えるように手前に出す */
+    #progress-overlay, #range-dialog, #bg-dialog { z-index: 25; }
     /* 縦積みではパネルが上にあるので、つまみも上端に回す */
     #panel-toggle {
       left: 50%; top: 0;
@@ -1308,6 +1329,8 @@
 <body>
 
 <aside id="sidebar">
+  <!-- スマホでは、このパネルが全画面のメニューになる(§10.11.3)。見出しと閉じるボタンはスマホでだけ出す -->
+  <div id="menu-head"><span>メニュー</span><button id="menu-close" type="button" aria-label="メニューを閉じる">×</button></div>
   <h1>Geometry Attribute Colorizer</h1>
   <div class="subtitle">3Dジオメトリの属性計算・色分けビューアー <span id="app-version"></span><span id="dev-badge" title="安定版ではありません">開発版</span></div>
   <a href="help.html" target="gac-help" id="help-link">? 操作ガイド</a>
@@ -2418,7 +2441,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.53.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.54.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -2480,6 +2503,8 @@ function beginLoading() {
     return false;
   }
   isLoading = true;
+  // スマホ: メニューを閉じて、読み込みの進み具合と読み込んだ石垣を見せる(§10.11.3)
+  if (isNarrowScreen()) setPanelCollapsed(true);
   return true;
 }
 function endLoading() { isLoading = false; }
@@ -6529,8 +6554,8 @@ function applySheet() {
   const narrow = isNarrowScreen();
   wrap.classList.toggle("sheet-open", open);
   wrap.classList.toggle("sheet-low", open && st === "low");
-  /* シートが出たら左のパネルを畳む。開いたままだと、パネル(上45%)とシートに挟まれて
-     石垣がほとんど見えない。畳んだ状態は上端のつまみで戻せる */
+  /* シートが出たらメニュー(左のパネル)を閉じる。メニューは全画面なので、開いたままだと
+     シートも石垣も見えない。上の帯の「≡」で開き直せる */
   if (narrow && open && !sheetWasOpen && !document.body.classList.contains("panel-collapsed")) {
     setPanelCollapsed(true);
   }
@@ -6639,6 +6664,7 @@ function applyPhoneColor(v) {
   document.getElementById("phone-menu").addEventListener("click", () => {
     setPanelCollapsed(!document.body.classList.contains("panel-collapsed"));
   });
+  document.getElementById("menu-close").addEventListener("click", () => setPanelCollapsed(true));
   const pc = document.getElementById("phone-color");
   // 開く直前に作り直す(列は読み込み・項目の追加・派生列の作り直しで何か所からも変わる)
   pc.addEventListener("pointerdown", syncPhoneColor);
@@ -11392,6 +11418,9 @@ function restoreSettings() {
     setSelectTool(data.selectTool === "lasso" ? "lasso" : "brush");
     applyUIScale(typeof data.uiScale === "number" ? data.uiScale : 0);
   }
+  /* スマホでは、メニュー(左のパネル)を閉じた状態から始める(§10.11.3)。石垣を画面いっぱいに見せる。
+     パネルを開いていたかどうかの記憶は、パソコン・iPadの画面のためのもの */
+  if (isNarrowScreen()) setPanelCollapsed(true);
   /* スマホで、覚えたタブが無いとき(初めて開いた)は「点検」を開く(§10.11)。
      スマホは現場の点検に使うので、シートを開いてすぐ印とメモを付けられるようにする */
   if (isNarrowScreen() && !(data && (data.inspectorTab === "attr" || data.inspectorTab === "survey"))) {
@@ -11871,6 +11900,8 @@ function endTour() {
     const el = document.getElementById(id);
     if (el) el.remove();
   }
+  // スマホ: 案内がメニューを開いたまま終わると、石垣が見えない。閉じて終わる(§10.11.3)
+  if (isNarrowScreen()) setPanelCollapsed(true);
   // 案内の前に開いていたタブと畳みに戻す(v1.51.0)
   if (t.restore) {
     setInspectorTab(t.restore.tab);
@@ -11902,6 +11933,14 @@ function tourTargetRect(step) {
 /* 手に入ったとき1回だけ: 閉じている部品を開き、見える位置まで送る */
 function tourEnterStep(step) {
   if (step.panel && document.body.classList.contains("panel-collapsed")) setPanelCollapsed(false);
+  /* スマホではパネルが全画面のメニューなので、開いたままだと石垣・ツールバー・シートを指せない。
+     パネルを指さない手に入ったら閉じる(§10.11.3) */
+  if (!step.panel && isNarrowScreen() && !document.body.classList.contains("panel-collapsed")) setPanelCollapsed(true);
+  // スマホでは凡例を札に畳んでいる。凡例を指す手では開く
+  if (/#legend\b/.test(step.target)) {
+    document.getElementById("legend-stack").classList.remove("legend-folded");
+    document.getElementById("legend-toggle").setAttribute("aria-expanded", "true");
+  }
   if (step.open) {
     const st = document.querySelector('[data-step="' + step.open + '"]');
     if (st) st.classList.remove("collapsed");
@@ -11944,6 +11983,10 @@ function tourFrame() {
 
   const done = !step.ok || !!step.ok(tour.ctx);
   if (done !== tour.done) {
+    /* スマホ: メニューの中の操作(属性を変える・列を作る)が済んだら、メニューを閉じる。
+       結果は石垣に出るのに、メニューが覆っていて見えない(§10.11.3)。
+       手に入った時点で済んでいた場合(tour.done が null)は閉じない */
+    if (done && tour.done === false && step.ok && step.panel && isNarrowScreen()) setPanelCollapsed(true);
     tour.done = done;
     const hint = document.querySelector("#tour-bubble .tour-hint");
     hint.textContent = !done && step.hint ? tourText(step.hint) : "";

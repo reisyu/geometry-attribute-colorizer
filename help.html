@@ -356,11 +356,16 @@
       スマホ（画面の幅が狭いとき）は、点検しやすい並びになります。
     </p>
     <ul>
-      <li><strong>上の帯</strong> — 左から「≡」（手順の一覧を開け閉め）、<strong>点検日・点検者</strong>、未保存の件数。
+      <li><strong>上の帯</strong> — 左から「≡」（メニューを開く）、<strong>点検日・点検者</strong>、未保存の件数。
         記録はここの点検日と点検者で残ります。</li>
       <li><strong>下のバー</strong> — <strong>選択</strong>（ブラシ・投げ縄）、<strong>色分け</strong>（記録の状況・点検項目まとめ・属性から選ぶ）、
         <strong>現在地</strong>、<strong>保存</strong>（作業データをZIPで保存）。未保存があると「保存」に件数が出ます。</li>
     </ul>
+    <p>
+      石垣は画面いっぱいに出ます。<strong>手順の一覧（読み込み・属性の追加・色分け・フィルタ・ラベル・点検記録・書き出し）は、
+      「≡」を押すと全画面のメニューとして開きます</strong>。閉じるときは右上の「×」です。
+      ファイルを読み込み始めると、メニューは自動で閉じます。
+    </p>
     <p>
       石を選ぶと、<strong>下のバーの上にパネルが出ます</strong>。片手の親指で、印とメモを付けられます。
     </p>
@@ -375,7 +380,7 @@
       <li>選んだ石がパネルの陰になるときは、<strong>石が見える位置まで石垣が自動で上にずれます</strong>。</li>
       <li>パネルが出ている間に石垣を回すと、<strong>見えている範囲の中心</strong>を軸に回ります（パネルに隠れた画面の中央ではなく）。</li>
       <li>右上の<strong>「×」</strong>でパネルを閉じます（選択も外れます）。</li>
-      <li>パネルが出ると、<strong>上のパネル（手順の一覧）は自動で畳まれます</strong>。上の帯の「≡」で戻せます。</li>
+      <li>メニューを開いていても、石を選ぶパネルが出るとメニューは閉じます。</li>
       <li>まとめて選ぶ間は、石垣をなぞれるよう「低」から始まります。印を付けるときに、つまみを押して開いてください。</li>
       <li><strong>凡例は左下の「凡例」の札</strong>に畳まれています。押すと開きます。</li>
     </ul>
@@ -1414,7 +1419,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.53.2";
+  const HELP_VERSION = "1.54.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

@@ -153,7 +153,7 @@ ok(html.includes("renderSheetSummary(row);") && html.includes("renderSheetSummar
      "上の帯に、左のパネルの開け閉めと未保存の件数がある");
 
   /* パソコン・iPadには出さない */
-  ok(/#phone-top, #phone-bar \{ display: none; \}/.test(outside), "**上の帯と下のバーは、ふだんは出さない**");
+  ok(/#phone-top, #phone-bar, #menu-head \{ display: none; \}/.test(outside), "**上の帯と下のバーは、ふだんは出さない**");
   ok(!/--bar-h/.test(outside) && !/--band-h/.test(outside), "帯とバーの高さの決まりが @media の外に無い");
   ok(/#panel-toggle \{ display: none; \}/.test(inside) && /#note-badge \{ display: none !important; \}/.test(inside) && /#tb-tools \{ display: none; \}/.test(inside),
      "スマホでは、つまみ・左上の未保存バッジ・ツールバーの現在地と選択を出さない(帯とバーが代わりをする)");
@@ -190,6 +190,36 @@ ok(html.includes("renderSheetSummary(row);") && html.includes("renderSheetSummar
   ok(/\[\["点検", "s:", document\.getElementById\("survey-attribute"\)\],\s*\["属性", "a:", document\.getElementById\("attribute"\)\]\]/.test(html),
      "「色分け」の一覧は、点検側を先に並べる");
   ok(html.includes('pc.addEventListener("pointerdown", syncPhoneColor);'), "一覧は開く直前に作り直す");
+}
+
+/* ========== 段階3: 左のパネルを全画面のメニューにする(§10.11.3、v1.54.0) ========== */
+{
+  const mediaAt = css.lastIndexOf("@media (max-width: 700px)");
+  const outside = css.slice(0, mediaAt), inside = css.slice(mediaAt);
+  const at = (id) => body.indexOf('id="' + id + '"');
+
+  ok(at("menu-head") > at("sidebar") && at("menu-close") > at("menu-head") && at("menu-close") < at("help-link"),
+     "メニューの見出しと閉じるボタンは、パネルの先頭にある");
+  ok(/#phone-top, #phone-bar, #menu-head \{ display: none; \}/.test(outside), "**メニューの見出しは、ふだんは出さない**");
+  ok(!/position: fixed; inset: 0; z-index: 20;/.test(outside), "パネルを画面にかぶせる決まりが @media の外に無い");
+  ok(/#sidebar \{\s*position: fixed; inset: 0; z-index: 20;/.test(inside) && /#viewport-wrap \{ height: 100%; \}/.test(inside),
+     "**スマホでは、パネルを画面にかぶせ、石垣は常に画面いっぱいに出す**");
+  ok(!/height: 45%/.test(inside) && !/height: 55%/.test(inside), "パネルが画面の上45%を占める組み方は無くなった");
+  ok(/#progress-overlay, #range-dialog, #bg-dialog \{ z-index: 25; \}/.test(inside),
+     "読み込み中の表示と確認の窓は、メニューより手前に出す");
+  ok(/#tour-hole \{[^}]*z-index: 30;/.test(css), "案内の切り抜きは、メニューより手前に出る");
+
+  ok(html.includes('document.getElementById("menu-close").addEventListener("click", () => setPanelCollapsed(true));'), "「×」でメニューを閉じる");
+  ok(/if \(isNarrowScreen\(\)\) setPanelCollapsed\(true\);\s*\/\* スマホで、覚えたタブが無いとき/.test(html),
+     "**スマホでは、メニューを閉じた状態から始める**");
+  ok(html.includes("// スマホ: メニューを閉じて、読み込みの進み具合と読み込んだ石垣を見せる(§10.11.3)"), "読み込みを始めたらメニューを閉じる");
+  /* 案内: メニューが全画面なので、開いたままだと石垣・ツールバー・シートを指せない */
+  ok(html.includes('if (!step.panel && isNarrowScreen() && !document.body.classList.contains("panel-collapsed")) setPanelCollapsed(true);'),
+     "**案内がパネルを指さない手に入ったら、メニューを閉じる**");
+  ok(html.includes("if (done && tour.done === false && step.ok && step.panel && isNarrowScreen()) setPanelCollapsed(true);"),
+     "**メニューの中の操作が済んだら、メニューを閉じて結果(石垣)を見せる**(手に入った時点で済んでいたら閉じない)");
+  ok(html.includes("// スマホ: 案内がメニューを開いたまま終わると、石垣が見えない。閉じて終わる(§10.11.3)"), "案内を終えたらメニューを閉じる");
+  ok(html.includes('document.getElementById("legend-stack").classList.remove("legend-folded");'), "案内が凡例を指す手では、畳んだ凡例を開く");
 }
 
 console.log("");
