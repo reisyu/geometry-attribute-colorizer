@@ -158,6 +158,8 @@ ok(!isReservedColumn("点検者メモ", ""), "鍵の名前を含むだけの列�
 {
   const html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
   ok(!html.includes("CSVで保存しないと残りません"), "**「CSVで保存しないと残りません」と促さない**");
+  /* 元ID(SrcID)が無く控えを取れないときも、ZIPで保存すれば残る(ZIPはIDで突き合わせる。v1.50.1で確認) */
+  ok(!html.includes("CSVで保存してください"), "**控えを取れないときの知らせも、CSVではなくZIPへ促す**");
   ok(html.includes("const btn = document.getElementById(\"export-bundle-btn\");") && !html.includes("document.getElementById(\"download-csv-btn\");\n  btn.classList"),
      "**未保存のとき目立たせるのは「作業データをZIPで保存」**");
   const bundleAt = html.indexOf('id="export-bundle-btn"'), csvAt = html.indexOf('id="download-csv-btn"'), hintAt = html.indexOf('id="note-unsaved"');
