@@ -1627,7 +1627,10 @@
       <button class="insp-tab" id="tab-attr" role="tab">属性</button>
       <button class="insp-tab on" id="tab-survey" role="tab">点検</button>
     </div>
-    <div id="insp-pane-attr">
+    <!-- 最初の表示はタブの既定(点検)に合わせて属性の面を隠しておく。設定の控えが無い
+         (初めて開いた・閲覧データを消した)ときは setInspectorTab が呼ばれないため、
+         ここが違うと両方の面が出る(v1.45.1で修正。test_tour.js が確かめる) -->
+    <div id="insp-pane-attr" style="display:none">
       <table id="insp-table"></table>
     </div>
     <div id="insp-pane-survey">
@@ -2127,7 +2130,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.45.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.45.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 

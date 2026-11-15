@@ -55,6 +55,18 @@ ok(TOUR_STEPS[1].hint && TOUR_STEPS[1].hint.includes("Area"), "2手目の補足�
   ok(JSON.stringify(acts) === "[2,4,6]", "**やると進む手は 2・4・6 手目**", JSON.stringify(acts));
 }
 
+/* ---------- インスペクタの最初の表示 ---------- */
+/* 5手目は右上の属性表示を初めての人に見せる。設定の控えが無いときはタブを切り替える
+   処理が呼ばれないので、本体に書いた最初の表示がそのまま出る。選ばれたタブと
+   見えている面が食い違うと、両方の面が並んで出る(v1.45.1で修正) */
+{
+  const tabOn = /class="insp-tab on" id="tab-survey"/.test(body) ? "survey" : "attr";
+  const hidden = (id) => new RegExp('id="' + id + '"[^>]*display:\\s*none').test(body);
+  ok(/let inspectorTab = "survey";/.test(html) && tabOn === "survey", "インスペクタの既定は「点検」タブ");
+  ok(hidden("insp-pane-attr") && !hidden("insp-pane-survey"),
+     "**最初は「点検」の面だけを出す**(設定の控えが無いときに両方が並ばない)");
+}
+
 /* ---------- 案内を始める入り口 ---------- */
 ok(/new URLSearchParams\(location\.search\)\.get\("tour"\) === "1"/.test(html), "?tour=1 で案内を始められる(操作ガイドから開いたとき)");
 ok(html.includes('e.data.type === "gac-start-tour"'), "操作ガイドからの合図で案内を始められる");
