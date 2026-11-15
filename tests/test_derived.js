@@ -3,14 +3,14 @@
  * 今回の入力から作る列(§5.1.8)。
  *
  * メモと点検項目の値から、3つの列を決まった順に作り直す。
- *   1. 該当項目    点検項目の値から
+ *   1. 点検項目まとめ    点検項目の値から
  *   2. メモの有無  メモ本文から
  *   3. 記録の状況  今回の記録と前回の記録から(前回を見るので最後)
  *
  * 以前は3つを別々の関数で作り、呼ぶ側が組み合わせていた。組み合わせ方が
  * 場所ごとに違い、次のことが起きた。
- *   - 「該当項目」をメモ用の関数に相乗りさせたら、メモの列が無い起動直後に走らなかった
- *   - 控えから復元したとき、「該当項目」と「記録の状況」を作り直していなかった
+ *   - 「点検項目まとめ」をメモ用の関数に相乗りさせたら、メモの列が無い起動直後に走らなかった
+ *   - 控えから復元したとき、「点検項目まとめ」と「記録の状況」を作り直していなかった
  *   - 「記録の状況」は前回の列より後に作る必要があり、順番の注意書きが3か所にあった
  * 作る場所を1つにしたので、順番と組み合わせをここで検査できる。
  */
@@ -28,7 +28,7 @@ const clone = (rows) => rows.map((r) => ({ ...r }));
 {
   const rows = [{ ID: "1", Width: "0.5" }, { ID: "2", Width: "0.7" }];
   const r = deriveInputColumns(rows, ["ID", "Width"], new Set(), "ID");
-  ok(r.columns.includes(HIT_COL), "**点検項目が無くても「該当項目」を作る**(押しても断られないように)", j(r.columns));
+  ok(r.columns.includes(HIT_COL), "**点検項目が無くても「点検項目まとめ」を作る**(押しても断られないように)", j(r.columns));
   ok(rows.every((x) => x[HIT_COL] === HIT_NONE), "全石が「なし」");
   ok(!r.columns.includes(NOTE_FLAG_COL), "メモの列が無ければ「メモの有無」は作らない");
   ok(!r.columns.includes(COMBO_COL), "記録に使う列が1つも無ければ「記録の状況」は作らない");
@@ -39,7 +39,7 @@ const clone = (rows) => rows.map((r) => ({ ...r }));
 {
   const rows = [{ ID: "1", "はらみ出し": "あり" }, { ID: "2", "はらみ出し": "" }, { ID: "3", "はらみ出し": "あり", "ひび割れ": "あり" }];
   const r = deriveInputColumns(rows, ["ID", "はらみ出し", "ひび割れ"], S, "ID");
-  ok(j(rows.map((x) => x[HIT_COL])) === j(["はらみ出し", HIT_NONE, HIT_MULTI]), "該当項目: 1つなら項目名、2つ以上なら複数", j(rows.map((x) => x[HIT_COL])));
+  ok(j(rows.map((x) => x[HIT_COL])) === j(["はらみ出し", HIT_NONE, HIT_MULTI]), "点検項目まとめ: 1つなら項目名、2つ以上なら複数", j(rows.map((x) => x[HIT_COL])));
   ok(r.columns.includes(COMBO_COL), "**メモの列が無くても「記録の状況」を作る**");
   ok(j(rows.map((x) => x[COMBO_COL])) === j([COMBO_NOW, COMBO_NONE, COMBO_NOW]), "**印だけの石は「今回のみ」**", j(rows.map((x) => x[COMBO_COL])));
   ok(!r.columns.includes(NOTE_FLAG_COL), "メモの有無は作らない");
@@ -83,7 +83,7 @@ const clone = (rows) => rows.map((r) => ({ ...r }));
 {
   const rows = [{ ID: "1", "石種": "花崗岩" }];
   const r = deriveInputColumns(rows, ["ID", "石種"], new Set(), "ID");
-  ok(rows[0][HIT_COL] === HIT_NONE, "**属性(石種)は該当項目に数えない**");
+  ok(rows[0][HIT_COL] === HIT_NONE, "**属性(石種)は点検項目まとめに数えない**");
   ok(!r.columns.includes(COMBO_COL), "属性だけでは「記録の状況」を作らない");
 }
 {
@@ -91,7 +91,7 @@ const clone = (rows) => rows.map((r) => ({ ...r }));
   const weird = new Set(["はらみ出し", "点検者", "Width", NOTE_COL]);
   const rows = [{ ID: "1", "点検者": "山田", Width: "0.5" }];
   deriveInputColumns(rows, ["ID", "点検者", "Width", "はらみ出し"], weird, "ID");
-  ok(rows[0][HIT_COL] === HIT_NONE, "**記録の鍵・自動計算の列は、該当項目に数えない**", rows[0][HIT_COL]);
+  ok(rows[0][HIT_COL] === HIT_NONE, "**記録の鍵・自動計算の列は、点検項目まとめに数えない**", rows[0][HIT_COL]);
 }
 
 /* ---------- 何度作り直しても同じ ---------- */
@@ -122,12 +122,12 @@ const clone = (rows) => rows.map((r) => ({ ...r }));
   const rows = [{ ID: "1", "はらみ出し": "あり", [COMBO_COL]: COMBO_NOW, [HIT_COL]: "はらみ出し" }];
   const r = deriveInputColumns(rows, ["ID", "はらみ出し", HIT_COL, COMBO_COL], new Set(), "ID");
   ok(!r.columns.includes(COMBO_COL) && rows[0][COMBO_COL] === undefined, "**記録に使う列が無くなったら「記録の状況」を消す**(値も残さない)", j(rows[0]));
-  ok(rows[0][HIT_COL] === HIT_NONE, "該当項目は「なし」に戻る");
+  ok(rows[0][HIT_COL] === HIT_NONE, "点検項目まとめは「なし」に戻る");
   ok(r.changed === true, "列が減ったら changed は真");
 }
 {
   const r = deriveInputColumns([], ["ID", HIT_COL, COMBO_COL], S, "ID");
-  ok(!r.columns.includes(HIT_COL) && !r.columns.includes(COMBO_COL), "行が無ければ、該当項目も記録の状況も作らない", j(r.columns));
+  ok(!r.columns.includes(HIT_COL) && !r.columns.includes(COMBO_COL), "行が無ければ、点検項目まとめも記録の状況も作らない", j(r.columns));
 }
 
 /* ---------- ほかの列には触らない ---------- */

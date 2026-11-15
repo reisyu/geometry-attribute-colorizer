@@ -1261,7 +1261,7 @@
     <div class="row hint">
       石種・エリアなど、<b>石そのものの性質</b>を手で付けるための列です。
       1石に1つで、点検日や点検者には紐づきません。
-      選択したオブジェクトへの入力はビュー上のパネルから行います
+      列を作ったら石を選び、右上の「属性」タブの「属性を付与する」から値を付与します
     </div>
     <div class="row">
       <input type="text" id="new-class-col" placeholder="例: 石種">
@@ -1447,10 +1447,11 @@
       <select id="survey-attribute"><option value="">(選択してください)</option></select>
     </div>
 
-    <div class="sub-header">前回までの記録(参考)</div>
+    <!-- 前回の作業データ(ZIP)を開けば前回の記録は自動で重なる。ここはZIPが無いときの入り口(v1.51.0) -->
+    <div class="sub-header">前回の記録をCSVから読む</div>
     <div class="row hint">
-      前回の点検で書き出したCSVを読むと、「前回:」の付いた列が増えます。
-      色分け・フィルタ・ラベルに使えるので、<b>前回メモの付いた石だけを光らせる</b>ことができます
+      前回の作業データ(ZIP)を開けば、前回の記録は自動で重なります。
+      ZIPが無く、記録のCSVだけを受け取ったときに使います。「前回:」の付いた列が増えます
     </div>
     <div class="row">
       <label class="filebtn" id="ref-btn" for="ref-input">クリックして前回の .csv を選択</label>
@@ -1712,7 +1713,7 @@
            iOS/Androidの標準キーボードの音声入力が使えるため(現場では打つより速い) -->
       <textarea id="insp-note" rows="3" placeholder="点検の所見などを記入"></textarea>
     </div>
-    <!-- 点検の記録から作る値(該当項目・履歴:・点検項目の前回:)。表示のみ。
+    <!-- 点検の記録から作る値(点検項目まとめ・履歴:・点検項目の前回:)。表示のみ。
          v1.49.0 までは「属性」タブの一覧に混ざっていた。属性と点検を分けた方針(§10.9)に合わせて移した -->
     <div id="insp-survey-view">
       <div class="insp-note-label">記録の集計</div>
@@ -2192,7 +2193,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.50.2";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.51.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -2331,6 +2332,12 @@ const ATTR_INFO = {
 };
 
 function attrLabel(col) {
+  /* メモとメモの有無は手入力の列なので、日本語だけで出す(点検項目まとめ・履歴:… と揃える)。
+     CSVの列名は Note・HasNote のまま */
+  for (const k of ["Note", "HasNote"]) {
+    if (col === k) return ATTR_INFO[k].jp;
+    if (col === "前回:" + k) return "前回:" + ATTR_INFO[k].jp;
+  }
   const info = ATTR_INFO[col];
   return info ? `${col}(${info.jp})` : col;
 }
@@ -5114,7 +5121,7 @@ function loadCSVTable(rows, columns, displayName) {
       buildAttributeMap();
       restoreWorldOffsetFromCSV();   // GLBで切れた測量座標との繋がりを戻す(§6.9)
       /* 派生列を作り直す(§5.1.8)。読み込んだデータから作る列(前回)が先、
-         今回の入力から作る列(該当項目・メモの有無・記録の状況)が後 */
+         今回の入力から作る列(点検項目まとめ・メモの有無・記録の状況)が後 */
       applyReference();   // 行が入れ替わったので、前回分も重ね直す
       rebuildInputDerived();
       const droppedRules = refreshColumnChoices();
@@ -5180,7 +5187,7 @@ function comboState(hasPrev, hasNow) {
 
    **前回のメモと、いま点検項目として定義されている列の前回分だけ。**
    「前回:」の付いた列をすべて数えてはいけない。「属性をCSVで保存」した
-   ファイルを前回として重ねると、石種のような属性や「該当項目」(全行に
+   ファイルを前回として重ねると、石種のような属性や「点検項目まとめ」(全行に
    「なし」が入る)まで前回の列になり、**全部の石が「前回のみ」の赤になる**
    (v1.40.2で実際に出した)。1枚のCSVからは属性と点検項目を見分けられないので、
    種別が分かっている列だけを数える(分からないものは静的に倒す §5.1.6) */
@@ -5469,10 +5476,11 @@ function currentRecordRows() {
    メモと「メモの有無」はATTR_INFOに載っているが、**人が書くもの**なので重ねる。
    ここを機械的にATTR_INFOで弾くと、いちばん運びたいメモが落ちる(実際に落とした)。純関数 */
 function refIsCarried(c, staticSet) {
+  if (c === OLD_HIT_COL) return false;   // 改名前の点検項目まとめ。今回の項目から作り直す派生列
   const role = columnRole(c, null);
   if (role === "note" || role === "noteFlag") return true;
-  /* 記録の鍵(点検日・点検者)・該当項目・自動計算の列は重ねない。
-     点検日は見出し(refLabel)に1回出すだけ。「該当項目」は「属性をCSVで保存」に
+  /* 記録の鍵(点検日・点検者)・点検項目まとめ・自動計算の列は重ねない。
+     点検日は見出し(refLabel)に1回出すだけ。「点検項目まとめ」は「属性をCSVで保存」に
      入るので前回のCSVに含まれうるが、今回の項目から作り直す派生列 */
   if (role !== "attr") return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
@@ -5496,7 +5504,7 @@ function refIsCarried(c, staticSet) {
      hist      記録の台帳から作る集計    履歴:記録回数、履歴:記録の状況
      note      メモ本文                Note
      noteFlag  メモの有無(メモから作る)  HasNote
-     hit       該当項目(点検項目から作る) 該当項目
+     hit       点検項目まとめ(点検項目から作る) 点検項目まとめ
      key       記録の鍵                InspectionDate、点検者
      computed  自動計算・仕組みの列      Width、SrcID、Dataset
      survey    点検項目                はらみ出し
@@ -5935,7 +5943,11 @@ function isLiveColorColumn(attr) {
    **接頭辞を付けない。** 「履歴:」にすると syncRecordDerived が
    HIST_PREFIX で始まる列を全部消すので、黙って消える。
    HasNote と同じく、名前で個別に扱う */
-const HIT_COL = "該当項目";
+const HIT_COL = "点検項目まとめ";
+/* v1.50.2 までの名前(作者の判断で v1.51.0 に改名)。「属性をCSVで保存」したCSVに入っているので、
+   それを前回として重ねたときに「前回:該当項目」を作らない(refIsCarried)。
+   点検の記録(ZIP)には派生列を入れないので、ZIPから開くときは関係しない */
+const OLD_HIT_COL = "\u8A72\u5F53\u9805\u76EE";   // 「該当項目」。一括置換で書き換わらないよう符号で書く
 const HIT_MULTI = "複数";
 const HIT_NONE = "なし";
 
@@ -5967,14 +5979,14 @@ function surveyHitLabel(row, cols) {
 
    メモと点検項目の値から作る3つの列を、**ここ1か所で、決まった順に**作り直す。
 
-     1. 該当項目      点検項目の値から(1つならその項目名、2つ以上なら「複数」)
+     1. 点検項目まとめ      点検項目の値から(1つならその項目名、2つ以上なら「複数」)
      2. メモの有無    メモ本文から
      3. 記録の状況    1・2の元になる値と「前回:」の列から。**前回を見るので最後**
 
    以前は3つを別々の関数で作り、呼ぶ側が組み合わせていた。組み合わせ方が場所ごとに
    違い、次のことが起きた:
-   - 「該当項目」をメモ用の関数に相乗りさせたら、メモの列が無い起動直後に走らなかった
-   - 控えから復元したとき、「該当項目」と「記録の状況」を作り直していなかった
+   - 「点検項目まとめ」をメモ用の関数に相乗りさせたら、メモの列が無い起動直後に走らなかった
+   - 控えから復元したとき、「点検項目まとめ」と「記録の状況」を作り直していなかった
    - 「記録の状況」は前回の列より後に作る必要があり、呼ぶ順番の注意書きが3か所にあった
 
    **全行に必ず値を入れる。** 空欄にすると欠損扱いで灰色になり、「なし」と
@@ -5996,7 +6008,7 @@ function deriveInputColumns(rows, columns, surveySet, idCol) {
     for (const row of list) delete row[name];
   };
 
-  /* 1. 該当項目。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
+  /* 1. 点検項目まとめ。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
      「点検の図に切り替えたが、まだ何も記録がない」を表す。列が無いと点検結果の
      色分けを選べず、初めて使う人は使おうとしたのを拒まれたように感じる) */
   if (list.length === 0) {
@@ -6499,7 +6511,7 @@ function applyColorize(col) {
         (SURVEYOR_NONE in counts) ? [SURVEYOR_NONE] : []);
     }
 
-    /* 「該当項目」は、複数に赤を当てる。**いちばん強い色を、いちばん重い石に**。
+    /* 「点検項目まとめ」は、複数に赤を当てる。**いちばん強い色を、いちばん重い石に**。
        なしはグレー(注目対象外)でこのアプリの語彙に揃える。
        項目の色はパレットの1番から順に当てる(0番の赤は複数に取っておく)。
        **列を作った順**で決めるので、どの石から数えても色が変わらない */
@@ -8449,7 +8461,7 @@ function renderInspectorTable(row) {
     tr.appendChild(td1); tr.appendChild(td2);
     (into || table).appendChild(tr);
   };
-  /* 点検の記録から作る列(該当項目・履歴:・点検項目の前回:)は「点検」タブの「記録の集計」に出す。
+  /* 点検の記録から作る列(点検項目まとめ・履歴:・点検項目の前回:)は「点検」タブの「記録の集計」に出す。
      点検項目そのものとメモの有無は、点検タブの入力欄とメモ欄に出ているので重ねない */
   const surveySide = new Set(surveyVisualColumns(Object.keys(row), surveyCols));
   let nSurvey = 0;
@@ -9040,7 +9052,7 @@ function isReservedColumn(name, idCol) {
   if (n === "") return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
-  /* 名前で種別が決まる列はすべて予約。自動計算の列、メモ、該当項目、
+  /* 名前で種別が決まる列はすべて予約。自動計算の列、メモ、点検項目まとめ、
      前回・履歴(§5.1.4)、そして記録の鍵 — 鍵の名前で点検項目を作ると、
      記録の行を組むときに鍵の値を上書きする(点検者の名前が「あり」に
      置き換わっていた) */
@@ -10621,7 +10633,7 @@ const STEP_TOGGLES = [
       if (!on) { clearColorize(); return; }
       applyColorize(document.getElementById("attribute").value);
     } },
-  /* 点検項目がまだ無くても押せる。「該当項目」は項目ゼロでも作られ、
+  /* 点検項目がまだ無くても押せる。「点検項目まとめ」は項目ゼロでも作られ、
      全石が「なし」=灰色一色になる。それが「点検の図に切り替えたが、
      まだ何も記録がない」を表す。押しても断られないようにしておく */
   { key: "survey", name: "点検結果での色分け",
@@ -11314,7 +11326,9 @@ function startTour(name) {
   bub.setAttribute("aria-live", "polite");
   document.body.appendChild(hole);
   document.body.appendChild(bub);
-  tour = { def, steps: def.steps, ctx, i: 0, entered: -1, done: null };
+  // 案内は「属性」「点検」のタブや畳みを開いて進む。終えたら元に戻す(利用者の設定を変えたままにしない)
+  const restore = { tab: inspectorTab, folded: { ...inspFolded } };
+  tour = { def, steps: def.steps, ctx, i: 0, entered: -1, done: null, restore };
   requestAnimationFrame(tourFrame);
 }
 
@@ -11325,6 +11339,11 @@ function endTour() {
   for (const id of ["tour-hole", "tour-bubble"]) {
     const el = document.getElementById(id);
     if (el) el.remove();
+  }
+  // 案内の前に開いていたタブと畳みに戻す(v1.51.0)
+  if (t.restore) {
+    setInspectorTab(t.restore.tab);
+    for (const k of Object.keys(t.restore.folded)) setInspFold(k, t.restore.folded[k]);
   }
   if (t.def.end) t.def.end(t.ctx);   // 2本目: 作った列を消すか尋ねる
 }

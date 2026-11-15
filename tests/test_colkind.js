@@ -13,7 +13,7 @@
  * 記録CSVに入っていた列は点検項目。新しい接頭辞も設定ファイルも持たない。
  * ここで検証するのは、その振り分けを決める純関数。
  */
-const { ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
+const { OLD_HIT_COL, ledgerColumns, surveyValueColumns, surveyVisualColumns, hasSurveyEntry,
         isSurveyHit, surveyHitLabel, HIT_COL, HIT_MULTI, HIT_NONE,
         prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
         SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, columnRole, prevBaseRole,
@@ -167,7 +167,7 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
 {
   const COLS2 = ["ID", "Width", "石種", "剥離", HIT_COL];
   const S2 = new Set(["剥離"]);
-  ok(!ledgerColumns(COLS2, S2).includes(HIT_COL), "**該当項目は台帳に書き出さない**(派生列)");
+  ok(!ledgerColumns(COLS2, S2).includes(HIT_COL), "**点検項目まとめは台帳に書き出さない**(派生列)");
   ok(!surveyValueColumns(COLS2, S2).includes(HIT_COL), "記録にも書き出さない");
   ok(surveyVisualColumns(COLS2, S2).includes(HIT_COL), "点検側の色分けには出す");
 }
@@ -210,20 +210,22 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(!p.includes("はらみ出し") && !p.includes(NOTE_COL), "今回の列は入れない");
   ok(!p.includes(HIST_PREFIX + "記録回数"), "履歴の列は入れない");
   ok(j(prevEntryColumns(null, null)) === "[]", "nullでも落ちない");
-  /* 「属性をCSVで保存」したファイルを前回として重ねたときの列。属性と該当項目が
+  /* 「属性をCSVで保存」したファイルを前回として重ねたときの列。属性と点検項目まとめが
      前回の列になる。**全行に値が入っているので、数えると全部の石が赤になる** */
   const flat = [REF_PREFIX + "石種", REF_PREFIX + HIT_COL, REF_PREFIX + NOTE_COL,
                 REF_PREFIX + NOTE_FLAG_COL, REF_PREFIX + "はらみ出し"];
   const pf = prevEntryColumns(flat, new Set(["はらみ出し"]));
   ok(!pf.includes(REF_PREFIX + "石種"), "**属性の前回分は数えない**(点検の記録ではない)");
-  ok(!pf.includes(REF_PREFIX + HIT_COL), "**「前回:該当項目」は数えない**(全行に「なし」が入る派生列)");
+  ok(!pf.includes(REF_PREFIX + HIT_COL), "**「前回:点検項目まとめ」は数えない**(全行に「なし」が入る派生列)");
   ok(j(pf) === j([REF_PREFIX + NOTE_COL, REF_PREFIX + "はらみ出し"]),
      "数えるのは前回のメモと、いま定義されている点検項目だけ", j(pf));
   ok(j(prevEntryColumns(flat, new Set())) === j([REF_PREFIX + NOTE_COL]),
      "点検項目が1つも無ければメモだけ");
   ok(rowComboState({ [REF_PREFIX + "石種"]: "花崗岩", [REF_PREFIX + HIT_COL]: "なし" }, pf, ["はらみ出し"]) === COMBO_NONE,
-     "**前回の属性と該当項目だけの石を「前回のみ」にしない**");
-  ok(!refIsCarried(HIT_COL, new Set()), "「該当項目」は前回の列として重ねない");
+     "**前回の属性と点検項目まとめだけの石を「前回のみ」にしない**");
+  ok(!refIsCarried(HIT_COL, new Set()), "「点検項目まとめ」は前回の列として重ねない");
+  /* v1.50.2 までの名前「該当項目」。古い「属性をCSVで保存」のCSVに入っている(v1.51.0で改名) */
+  ok(!refIsCarried(OLD_HIT_COL, new Set()) && OLD_HIT_COL === "該当項目", "**改名前の「該当項目」も前回の列として重ねない**");
   // 「なし」が入っていても前回の記録にしない(列ごと外してあるため)
   ok(rowComboState({ [REF_PREFIX + NOTE_FLAG_COL]: "なし" }, p, ["はらみ出し"]) === COMBO_NONE,
      "**前回のメモの有無が「なし」の石を「前回のみ」にしない**");
@@ -282,12 +284,12 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   const weird = new Set([NOTE_COL, NOTE_FLAG_COL, HIT_COL, SURVEYOR_COL, "Width", REF_PREFIX + "x"]);
   ok(columnRole(NOTE_COL, weird) === "note", "**メモは、点検項目に登録されていてもメモ**");
   ok(columnRole(NOTE_FLAG_COL, weird) === "noteFlag", "メモの有無も同じ");
-  ok(columnRole(HIT_COL, weird) === "hit", "該当項目も同じ");
+  ok(columnRole(HIT_COL, weird) === "hit", "点検項目まとめも同じ");
   ok(columnRole(SURVEYOR_COL, weird) === "key", "**記録の鍵は、点検項目に登録されていても鍵**");
   ok(columnRole("Width", weird) === "computed", "自動計算の列も同じ");
   ok(columnRole(REF_PREFIX + "x", weird) === "prev", "前回の列も同じ");
   ok(!surveyValueColumns([SURVEYOR_COL, NOTE_FLAG_COL, HIT_COL, "Width"], weird).length,
-     "**鍵・メモの有無・該当項目・自動計算の列は、記録の値の列にならない**");
+     "**鍵・メモの有無・点検項目まとめ・自動計算の列は、記録の値の列にならない**");
   ok(j(surveyValueColumns([NOTE_COL, "はらみ出し"], new Set([NOTE_COL, "はらみ出し"]))) === j([NOTE_COL, "はらみ出し"]),
      "メモと点検項目は記録の値の列");
 
@@ -313,7 +315,7 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(both.length === 0, "**台帳と記録の両方に入る列が無い**", j(both));
   const neither = all.filter((c) => !led.has(c) && !rec.has(c));
   ok(neither.every((c) => isDerivedColumn(c) || c === NOTE_FLAG_COL || c === HIT_COL),
-     "**どちらにも入らないのは、作り直せる列だけ**(前回・履歴・メモの有無・該当項目)", j(neither));
+     "**どちらにも入らないのは、作り直せる列だけ**(前回・履歴・メモの有無・点検項目まとめ)", j(neither));
 
   // 色分けの選択肢。属性側 = 色分けに出す列から点検側を除いたもの(画面と同じ組み立て)
   const colorable = all.filter((c) => isColorizableColumn(c, "ID"));
@@ -321,7 +323,7 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   const attrSide = colorable.filter((c) => !surveySide.has(c));
   ok(!attrSide.some((c) => S.has(c)), "**点検項目が属性側の色分けに出ない**", j(attrSide.filter((c) => S.has(c))));
   ok(!attrSide.some((c) => c.startsWith(HIST_PREFIX) || c === HIT_COL),
-     "履歴と該当項目が属性側の色分けに出ない");
+     "履歴と点検項目まとめが属性側の色分けに出ない");
   ok(![...surveySide].some((c) => c === "石種" || c === "Width"), "属性と幾何属性が点検側の色分けに出ない");
   ok(![...surveySide].some((c) => c === NOTE_FLAG_COL || c === REF_PREFIX + NOTE_FLAG_COL),
      "**メモの有無・前回のメモの有無は、点検側の色分けにも出ない**(記録の状況で読める)",
@@ -345,7 +347,7 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   ok(colorSideOf("Width", S) === "attr", "幾何属性は属性側");
   ok(colorSideOf("石種", S) === "attr", "手で作った属性は属性側");
   ok(colorSideOf("はらみ出し", S) === "survey", "点検項目は点検側");
-  ok(colorSideOf(HIT_COL, S) === "survey", "該当項目は点検側");
+  ok(colorSideOf(HIT_COL, S) === "survey", "点検項目まとめは点検側");
   ok(colorSideOf(COMBO_COL, S) === "survey", "記録の状況は点検側");
   ok(colorSideOf(HIST_PREFIX + "記録回数", S) === "survey", "履歴は点検側");
   ok(colorSideOf(REF_PREFIX + "はらみ出し", S) === "survey", "点検項目の前回分は点検側");

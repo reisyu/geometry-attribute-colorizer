@@ -197,6 +197,18 @@ ok(html.includes('"の情報を削除しますか？"') &&
    html.includes('"残した情報は、次にサンプルを開いたときにも読み込まれます。"'),
    "終わるときの確認は作者の文面のまま");
 
+/* ---------- v1.51.0 ---------- */
+ok(/const HIT_COL = "点検項目まとめ";/.test(html), "**「該当項目」は「点検項目まとめ」と呼ぶ**(作者の判断)");
+ok(html.includes('const OLD_HIT_COL = "\\u8A72\\u5F53\\u9805\\u76EE";') && html.includes("if (c === OLD_HIT_COL) return false;"),
+   "改名前の名前の列は、前回として重ねない(古い「属性をCSVで保存」のCSV)");
+ok(html.includes("列を作ったら石を選び、右上の「属性」タブの「属性を付与する」から値を付与します"), "属性の列の説明は、付与する場所を名指しする");
+ok(html.includes('<div class="sub-header">前回の記録をCSVから読む</div>') && html.includes("前回の作業データ(ZIP)を開けば、前回の記録は自動で重なります。"),
+   "前回の記録のCSVの入り口は、ZIPが無いときのものと読める");
+ok(html.includes('for (const k of ["Note", "HasNote"]) {') && html.includes("if (col === k) return ATTR_INFO[k].jp;"),
+   "メモとメモの有無は日本語だけで出す(列名は Note・HasNote のまま)");
+ok(/const restore = \{ tab: inspectorTab, folded: \{ \.\.\.inspFolded \} \};/.test(html) && /if \(t\.restore\) \{\s*setInspectorTab\(t\.restore\.tab\);/.test(html),
+   "**案内を終えたら、タブと畳みを始める前に戻す**");
+
 /* ---------- 右上のパネルの見出し(v1.50.0) ---------- */
 ok(/lab\.className = "insp-id"; lab\.textContent = "ID";/.test(html), "**右上のパネルの見出しは「ID 63」のように出す**(数字だけだと何の番号か分からない)");
 
@@ -207,7 +219,7 @@ ok(html.includes('<div class="step-label">2. 属性を追加する(任意)</div>
 ok(!/該当した石に印を付ける/.test(html), "点検項目の説明は「あり」で言う(「該当」でなく)");
 
 /* ---------- 点検の記録から作る値は「点検」タブに(v1.50.0) ---------- */
-/* 「属性」タブの一覧に、該当項目・履歴:記録の状況・前回:はらみ出しが混ざっていた。
+/* 「属性」タブの一覧に、点検項目まとめ・履歴:記録の状況・前回:はらみ出しが混ざっていた。
    属性と点検を分けた方針(§10.9)に合わせて、点検タブの「記録の集計」に出す */
 {
   const at = (id) => body.indexOf('id="' + id + '"');

@@ -569,7 +569,7 @@
       <strong>点検のたびに見る項目</strong>は「点検記録」ブロックで作り、
       点検日・点検者ごとの記録として積み上がります。
       点検結果での色分けも「点検記録」ブロックから選びます。
-      <strong>「該当項目」を選ぶと、点検項目をまとめた1枚の図になります。</strong>
+      <strong>「点検項目まとめ」を選ぶと、点検項目をまとめた1枚の図になります。</strong>
       印が1つの石はその項目の色、<strong>印が2つ以上の石は赤</strong>、
       印の無い石はグレーです。
       <strong>見つかった項目にだけ「あり」などの印を付けてください。</strong>
@@ -855,7 +855,7 @@
     <ul>
       <li><strong>属性</strong> — 属性の一覧（幅・高さ・面積など。付与した石種なども含む）と、属性を付与する欄です</li>
       <li><strong>点検</strong> — 点検日・点検者、点検項目、前回の記述、メモ欄と、
-        記録から作る値（該当項目・履歴:記録の状況など）の<strong>記録の集計</strong>です。
+        記録から作る値（点検項目まとめ・履歴:記録の状況など）の<strong>記録の集計</strong>です。
         現場で使うのはこちらです</li>
     </ul>
     <p>
@@ -921,7 +921,7 @@
     </p>
     <p>
       ZIPが無く、前回の記録をCSVだけで受け取ったときは、<strong>「点検記録」ブロック</strong>の
-      <strong>前回までの記録（参考）</strong>から読み込めます。
+      <strong>前回の記録をCSVから読む</strong>から読み込めます。
     </p>
     <ul>
       <li><strong>石を選ぶと、メモ欄の上に前回の記述が出ます。</strong>
@@ -1385,7 +1385,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.50.2";
+  const HELP_VERSION = "1.51.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

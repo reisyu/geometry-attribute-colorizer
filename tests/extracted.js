@@ -92,7 +92,9 @@ const SURVEY_DATE_COL = "InspectionDate";
 
 const SURVEYOR_COL = "点検者";
 
-const HIT_COL = "該当項目";
+const HIT_COL = "点検項目まとめ";
+
+const OLD_HIT_COL = "\u8A72\u5F53\u9805\u76EE";
 
 const HIT_MULTI = "複数";
 
@@ -921,7 +923,7 @@ function deriveInputColumns(rows, columns, surveySet, idCol) {
     for (const row of list) delete row[name];
   };
 
-  /* 1. 該当項目。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
+  /* 1. 点検項目まとめ。**点検項目が1つも無くても作る**(全石が「なし」=灰色一色になり、
      「点検の図に切り替えたが、まだ何も記録がない」を表す。列が無いと点検結果の
      色分けを選べず、初めて使う人は使おうとしたのを拒まれたように感じる) */
   if (list.length === 0) {
@@ -1328,7 +1330,7 @@ function isReservedColumn(name, idCol) {
   if (n === "") return true;
   if (idCol && n === idCol) return true;
   if (n.toLowerCase() === "id") return true;
-  /* 名前で種別が決まる列はすべて予約。自動計算の列、メモ、該当項目、
+  /* 名前で種別が決まる列はすべて予約。自動計算の列、メモ、点検項目まとめ、
      前回・履歴(§5.1.4)、そして記録の鍵 — 鍵の名前で点検項目を作ると、
      記録の行を組むときに鍵の値を上書きする(点検者の名前が「あり」に
      置き換わっていた) */
@@ -1359,10 +1361,11 @@ function isDerivedColumn(c) {
 }
 
 function refIsCarried(c, staticSet) {
+  if (c === OLD_HIT_COL) return false;   // 改名前の点検項目まとめ。今回の項目から作り直す派生列
   const role = columnRole(c, null);
   if (role === "note" || role === "noteFlag") return true;
-  /* 記録の鍵(点検日・点検者)・該当項目・自動計算の列は重ねない。
-     点検日は見出し(refLabel)に1回出すだけ。「該当項目」は「属性をCSVで保存」に
+  /* 記録の鍵(点検日・点検者)・点検項目まとめ・自動計算の列は重ねない。
+     点検日は見出し(refLabel)に1回出すだけ。「点検項目まとめ」は「属性をCSVで保存」に
      入るので前回のCSVに含まれうるが、今回の項目から作り直す派生列 */
   if (role !== "attr") return false;
   /* 静的な属性は重ねない(§5.1.6)。石種は前回と今回で同じ値になるので、
@@ -1451,4 +1454,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, OLD_HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
