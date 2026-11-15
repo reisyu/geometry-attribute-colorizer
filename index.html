@@ -966,6 +966,11 @@
     padding: 10px 12px;
     font-size: calc(12px * var(--ui-scale));
     font-family: var(--mono);
+    /* 幅は中身で決まる。属性の一覧を畳むと中身が見出しだけになり、パネルが細くなって
+       タブまで詰まった(作者の確認で見つかった)。畳んでも細くならない下限を置く。
+       270px は「点検」タブの幅(点検日と点検者の欄)に合わせた。タブを切り替えても幅が跳ねない。
+       狭い画面では画面の幅を超えないようにする */
+    min-width: min(calc(270px * var(--ui-scale)), calc(100% - 56px));
     max-width: 360px;
     max-height: calc(100% - 70px);
     overflow: auto;
@@ -1004,11 +1009,25 @@
   body.light #inspector textarea { background: rgba(0,0,0,.04); }
   #inspector textarea:disabled { opacity: .5; }
 
-  #insp-classify { display: none; margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 8px; }
-  #insp-classify .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
+  /* 手で付ける値の入力欄。属性は「属性」タブ、点検項目は「点検」タブに分けて置く(§10.9.1) */
+  .insp-input { display: none; }
+  #insp-classify { margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 8px; }
+  /* 属性タブの2段(一覧・付与)。見出しを押すと畳める */
+  #insp-attr-view { margin-bottom: 8px; border-bottom: 1px solid var(--panel-edge); padding-bottom: 6px; }
+  .insp-fold-head {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+    background: none; border: 0; padding: 2px 0; margin: 0 0 4px;
+    color: var(--ink-dim); font: inherit; text-align: left; cursor: pointer;
+  }
+  .insp-fold-head:hover { color: var(--ink); }
+  .insp-fold-head::before { content: "▾"; display: inline-block; width: 1em; }
+  .insp-fold.folded > .insp-fold-head::before { content: "▸"; }
+  .insp-fold.folded > .insp-fold-body { display: none; }
+  .insp-input .g-warn { color: var(--warn); white-space: normal; }
+  .insp-input .cls-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
   /* 列ごとに1行。列を選び直さずに、見えている全部の列へ入力できるようにする
      (点検項目のように列が増えると、切り替えの手数が入力そのものを支配する) */
-  #insp-classify .cls-group-head {
+  .insp-input .cls-group-head {
     font-size: calc(10.5px * var(--ui-scale));
     color: var(--accent);
     font-weight: 700;
@@ -1017,19 +1036,21 @@
     padding-bottom: 2px;
     border-bottom: 1px solid var(--panel-edge);
   }
-  #insp-classify .cls-group-head:first-child { margin-top: 2px; }
-  #insp-classify .cls-row { margin: 8px 0; }
-  #insp-classify .cls-row-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  #insp-classify .cls-row-name {
+  .insp-input .cls-group-head:first-child { margin-top: 2px; }
+  .insp-input .cls-row { margin: 8px 0; }
+  .insp-input .cls-row-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .insp-input .cls-row-name {
     font-size: calc(11.5px * var(--ui-scale));
     color: var(--ink);
     font-weight: 700;
     overflow-wrap: anywhere;
   }
-  #insp-classify .cls-row-warn { font-size: calc(10.5px * var(--ui-scale)); color: var(--warn); }
-  #insp-classify .cls-new { display: flex; gap: 6px; margin-top: 10px; }
-  #insp-classify .cls-new select, #insp-classify .cls-new input { flex: 1; min-width: 0; }
+  .insp-input .cls-row-warn { font-size: calc(10.5px * var(--ui-scale)); color: var(--warn); }
   #inspector .cls-chip.cls-add { font-weight: 700; padding: 3px 12px; }
+  /* 「＋」を押すと、その行の中に開く入力欄。列はその行で決まるので、列を選ぶ欄は置かない */
+  .insp-input .cls-newrow { display: flex; gap: 6px; margin-top: 6px; }
+  .insp-input .cls-newrow input { flex: 1; min-width: 0; }
+  .insp-input .cls-newrow .g-btn { flex: none; }
   /* 今回使ったが、いまは0件の候補。押せるが、データには無いことが分かるように薄く */
   #inspector .cls-chip.cls-ghost { opacity: .55; }
   #inspector .cls-chip.cls-ghost.on { opacity: 1; }
@@ -1085,9 +1106,6 @@
   /* 同じ点検日の他の人の記述は、過去の回と区別が付くようにする */
   #insp-note-prev .nl-same .nl-head::after { content: "（今回）"; color: var(--ink-dim); font-family: var(--sans); }
   #inspector .cls-chip .cls-n { opacity: .65; margin-left: 4px; }
-  #insp-classify .cls-new { display: flex; gap: 6px; }
-  #insp-classify .cls-new input { flex: 1; min-width: 0; }
-  #insp-classify .cls-new .g-btn { flex: none; }
 
   /* ステップ2の分類列の管理(値の一覧と統合) */
   .cls-col { border: 1px solid var(--panel-edge); border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; }
@@ -1097,9 +1115,13 @@
   .cls-val .cls-n { color: var(--ink-dim); font-size: calc(11px * var(--ui-scale)); white-space: nowrap; }
   .cls-val button { flex: none; margin-top: 0; }
 
-  #insp-group { display: none; }
+  #insp-group, #insp-sel { display: none; }
   #insp-group .g-warn { color: var(--warn); margin: 6px 0; white-space: normal; }
+  #insp-sel .g-row { display: flex; gap: 6px; margin-top: 8px; }
+  /* 選択の操作はタブの外に置く(どちらのタブを開いていても解除できるように) */
+  #insp-sel { border-top: 1px solid var(--panel-edge); margin-top: 8px; padding-top: 2px; }
   #insp-group .g-row { display: flex; gap: 6px; margin-top: 8px; }
+  #insp-attr-empty { display: none; font-size: calc(11px * var(--ui-scale)); color: var(--ink); line-height: 1.6; }
   #inspector .g-btn {
     flex: 1;
     background: rgba(127, 138, 150, 0.14);
@@ -1622,30 +1644,40 @@
   <div id="inspector">
     <div class="insp-name" id="insp-name"></div>
     <!-- 現場では属性表をほとんど見ず、デスクでは逆になる。役割で分けて、
-         最後に開いていたほうを次も開く(§10.9) -->
+         最後に開いていたほうを次も開く(§10.9)。初めては「属性」 -->
     <div class="insp-tabs" role="tablist">
-      <button class="insp-tab" id="tab-attr" role="tab">属性</button>
-      <button class="insp-tab on" id="tab-survey" role="tab">点検</button>
+      <button class="insp-tab on" id="tab-attr" role="tab">属性</button>
+      <button class="insp-tab" id="tab-survey" role="tab">点検</button>
     </div>
-    <!-- 最初の表示はタブの既定(点検)に合わせて属性の面を隠しておく。設定の控えが無い
+    <!-- 最初の表示はタブの既定(属性)に合わせて点検の面を隠しておく。設定の控えが無い
          (初めて開いた・閲覧データを消した)ときは setInspectorTab が呼ばれないため、
          ここが違うと両方の面が出る(v1.45.1で修正。test_tour.js が確かめる) -->
-    <div id="insp-pane-attr" style="display:none">
-      <table id="insp-table"></table>
+    <div id="insp-pane-attr">
+      <!-- 上に「属性の一覧」(計算した属性と手で付与した属性をすべて)、下に「属性を付与する」。
+           どちらも見出しで畳め、畳んだ状態は覚える(§10.9.1)。現場では一覧を一度畳めば、
+           以後は石を選ぶとすぐ付与の欄が見える -->
+      <div class="insp-fold" id="insp-attr-view" data-fold="list">
+        <button class="insp-fold-head" type="button" aria-expanded="true">属性の一覧</button>
+        <div class="insp-fold-body"><table id="insp-table"></table></div>
+      </div>
+      <div class="insp-input insp-fold" id="insp-attr-input" data-fold="give">
+        <button class="insp-fold-head" type="button" aria-expanded="true">属性を付与する</button>
+        <div class="insp-fold-body">
+          <div id="insp-attr-list"></div>
+          <div class="g-warn" id="insp-attr-warn"></div>
+        </div>
+      </div>
+      <div id="insp-attr-empty">属性の列を作ると、選んだ石にまとめて付与できます(「2. 属性データを読み込む」の「属性の列(手入力)」)。</div>
     </div>
-    <div id="insp-pane-survey">
+    <div id="insp-pane-survey" style="display:none">
     <div class="survey-head">
       <input type="date" id="survey-date" title="この日付で記録されます">
       <input type="text" id="surveyor" placeholder="点検者" title="記録はこの名前で残ります">
     </div>
-    <div id="insp-classify">
-      <label class="insp-note-label">入力</label>
+    <!-- 点検項目(はらみ出し・ひび割れ)。点検のたびの記録なので「点検」タブに置く -->
+    <div class="insp-input" id="insp-classify">
+      <label class="insp-note-label">点検項目</label>
       <div id="insp-class-list"></div>
-      <div class="cls-new">
-        <select id="insp-class-col" aria-label="値を追加する列"></select>
-        <input type="text" id="insp-class-new" placeholder="新しい値">
-        <button class="g-btn" id="insp-class-add">追加</button>
-      </div>
       <div class="g-warn" id="insp-class-warn"></div>
     </div>
     <div id="insp-group">
@@ -1655,10 +1687,6 @@
       <div class="g-row">
         <button class="g-btn primary" id="insp-group-apply">まとめて書く</button>
       </div>
-      <div class="g-row">
-        <button class="g-btn" id="insp-group-undo">直前を取り消す</button>
-        <button class="g-btn" id="insp-group-clear">選択を解除</button>
-      </div>
     </div>
     <div id="insp-note-box">
       <label class="insp-note-label" for="insp-note">メモ</label>
@@ -1667,6 +1695,14 @@
            iOS/Androidの標準キーボードの音声入力が使えるため(現場では打つより速い) -->
       <textarea id="insp-note" rows="3" placeholder="点検の所見などを記入"></textarea>
     </div>
+    </div>
+    <!-- 選択の操作はタブの外。以前は「点検」タブの中にあり、「属性」タブを開いていると
+         選択を解除するボタンが見えなかった -->
+    <div id="insp-sel">
+      <div class="g-row">
+        <button class="g-btn" id="insp-group-undo">直前を取り消す</button>
+        <button class="g-btn" id="insp-group-clear">選択を解除</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2130,7 +2166,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.46.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.47.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -6092,8 +6128,9 @@ document.getElementById("ref-input").addEventListener("change", (e) => {
 });
 document.getElementById("ref-clear").addEventListener("click", clearReference);
 /* インスペクタのタブ。現場では属性表をほとんど見ず、デスクでは逆になるので、
-   どちらを既定にするかは決め打ちせず**最後に開いていたほうを覚える** */
-let inspectorTab = "survey";
+   **最後に開いていたほうを覚える**。覚えたものが無い(初めて開いた)ときは「属性」。
+   初めての人は、まず石の属性を見る(作者の指摘で v1.47.0 から。それまでは「点検」) */
+let inspectorTab = "attr";
 function setInspectorTab(which) {
   inspectorTab = (which === "attr") ? "attr" : "survey";
   const attr = inspectorTab === "attr";
@@ -6106,6 +6143,25 @@ function setInspectorTab(which) {
 document.getElementById("surveyor").addEventListener("input", scheduleSaveSettings);
 document.getElementById("tab-attr").addEventListener("click", () => setInspectorTab("attr"));
 document.getElementById("tab-survey").addEventListener("click", () => setInspectorTab("survey"));
+
+/* 属性タブの「属性の一覧」「属性を付与する」の畳み。畳んだ状態は覚える(§10.9.1)。
+   人の好みでデータに紐づかないので、設定として保存する */
+const inspFolded = { list: false, give: false };
+function setInspFold(key, folded) {
+  if (!(key in inspFolded)) return;
+  inspFolded[key] = !!folded;
+  const box = document.querySelector('.insp-fold[data-fold="' + key + '"]');
+  if (box) {
+    box.classList.toggle("folded", inspFolded[key]);
+    const head = box.querySelector(".insp-fold-head");
+    if (head) head.setAttribute("aria-expanded", inspFolded[key] ? "false" : "true");
+  }
+  scheduleSaveSettings();
+}
+for (const box of document.querySelectorAll(".insp-fold[data-fold]")) {
+  const key = box.getAttribute("data-fold");
+  box.querySelector(".insp-fold-head").addEventListener("click", () => setInspFold(key, !inspFolded[key]));
+}
 
 document.getElementById("export-bundle-btn").addEventListener("click", () => {
   exportBundle().catch((e) => setStatus("点検データの書き出しに失敗しました: " + (e && e.message ? e.message : e), true));
@@ -8154,13 +8210,17 @@ function updateSelectionPanels() {
 
   const group = document.getElementById("insp-group");
   const single = document.getElementById("insp-note-box");
-  const table = document.getElementById("insp-table");
+  const table = document.getElementById("insp-attr-view");   // 属性の一覧(見出しごと)
+  const selActs = document.getElementById("insp-sel");
+  const attrEmpty = document.getElementById("insp-attr-empty");
 
   if (n < 2) {
     // 直前まで一括入力を出していたかどうか。モードを抜けて解除した場合、
     // ここに来た時点で既に selectMode は false になっている
     const wasGroup = group.style.display === "block";
     group.style.display = "none";
+    selActs.style.display = "none";
+    attrEmpty.style.display = "none";
     table.style.display = "";
     single.style.display = "";
     if (n === 1) { showInspectorFor([...selection][0]); return; }
@@ -8179,6 +8239,9 @@ function updateSelectionPanels() {
   table.style.display = "none";
   single.style.display = "none";
   group.style.display = "block";
+  selActs.style.display = "block";
+  // 「属性」タブで複数を選んだとき、付与できる列が無いと何も出ず、壊れたように見える
+  attrEmpty.style.display = staticClassColumns().length === 0 ? "block" : "none";
 
   // 既にメモがあるものを数える。黙って上書きしない(§5.1.2)
   let withNote = 0, noRow = 0;
@@ -8339,16 +8402,21 @@ function renderInspectorTable(row) {
     return;
   }
   const idCol = document.getElementById("id-column").value;
-  for (const [k, v] of Object.entries(row)) {
-    if (k === idCol) continue;     // IDは上の見出しに表示済みなので繰り返さない
-    if (k === NOTE_COL) continue;  // メモは下の編集欄で扱うので表には出さない
+  const addRow = (k, v) => {
     const tr = document.createElement("tr");
     const td1 = document.createElement("td"); td1.textContent = attrLabel(k);
     const td2 = document.createElement("td"); td2.textContent = v;
     td2.title = v;  // 省略された場合に備えて全文をツールチップで見せる
     tr.appendChild(td1); tr.appendChild(td2);
     table.appendChild(tr);
+  };
+  for (const [k, v] of Object.entries(row)) {
+    if (k === idCol) continue;     // IDは上の見出しに表示済みなので繰り返さない
+    if (k === NOTE_COL) continue;  // メモは下の編集欄で扱うので表には出さない
+    addRow(k, v);
   }
+  // 手で付与する属性は、まだ付与していない石でも行を出す(一覧は属性をすべて見せる場所。§10.9.1)
+  for (const k of staticClassColumns()) if (!(k in row)) addRow(k, "");
 }
 
 /* ============================================================
@@ -9012,58 +9080,52 @@ function classChoices(counted, recent) {
   return out;
 }
 
-/* 点灯しているチップをもう一度押したときに書く値。
-   選んでいるものが全部その値なら空に戻す = チェックを外す感触になる。
-   混ざっているときは、まずその値に揃える(いきなり空にしない)。純関数 */
-function classChipNextValue(currentValues, tapped) {
+/* 値のチップを押したときに書く値。null なら書き換えるものが無い(もう全部その値)。
+   **点灯している値をもう一度押しても外さない**(v1.47.0、作者の指摘)。押すたびに
+   付いたり外れたりすると、付与したつもりで外していることがある。外すのは「空にする」だけ。
+   v1.47.0 より前は、全部その値なら空に戻していた(チェックのように使えた)。純関数 */
+function classChipWrite(currentValues, tapped) {
   const t = String(tapped == null ? "" : tapped);
-  if (t === "") return "";
   const vals = Array.from(currentValues || []);
-  if (vals.length === 0) return t;
-  for (const v of vals) if (String(v == null ? "" : v) !== t) return t;
-  return "";
+  if (vals.length > 0 && vals.every((v) => String(v == null ? "" : v) === t)) return null;
+  return t;
 }
 
+/* 「＋」で開いている入力欄。どの列か・書きかけの文字・カーソルがあったか。
+   選択の増減などで描き直しても、書きかけを消さないために持つ */
+let classAddOpen = null;   // { col, draft } または null
+
+/* 属性と点検項目は別のもの(§5.1.6)なので、入力する場所もタブで分ける(§10.9.1)。
+   属性(石種)は「属性」タブ、点検項目(はらみ出し)は「点検」タブ。
+   以前は両方を「点検」タブに「入力」としてまとめていて、石そのものの性質を
+   点検の画面で入れることになり、どちらの話なのかが分からなかった */
 function renderClassifyUI() {
-  const box = document.getElementById("insp-classify");
-  const cols = classColumns();
   const { rows, total } = classifyTargets();
+  // 描き直す前に、開いている入力欄の文字とカーソルを控える
+  const openInp = document.querySelector(".insp-input .cls-newrow input");
+  const hadFocus = !!openInp && document.activeElement === openInp;
+  if (openInp && classAddOpen) classAddOpen.draft = openInp.value;
+  const statics = staticClassColumns(), items = surveyItemColumns();
+  if (classAddOpen && !statics.includes(classAddOpen.col) && !items.includes(classAddOpen.col)) classAddOpen = null;
+  renderInputBox("insp-attr-input", "insp-attr-list", "insp-attr-warn", statics, rows, total);
+  renderInputBox("insp-classify", "insp-class-list", "insp-class-warn", items, rows, total);
+  if (hadFocus) {
+    const inp = document.querySelector(".insp-input .cls-newrow input");
+    if (inp) inp.focus();
+  }
+}
+
+function renderInputBox(boxId, listId, warnId, cols, rows, total) {
+  const box = document.getElementById(boxId);
+  const list = document.getElementById(listId);
+  list.innerHTML = "";
   if (cols.length === 0 || total === 0) { box.style.display = "none"; return; }
   box.style.display = "block";
-
-  /* 属性と点検項目は別のもの(§5.1.6)なので、入力するときも分けて見せる。
-     石種とはらみ出しが同じ並びにあると、1石に1つなのか点検のたびに
-     増えるのかが読み取れない。片方しか無ければ見出しは出さない */
-  const list = document.getElementById("insp-class-list");
-  list.innerHTML = "";
-  const groups = [
-    ["属性", staticClassColumns()],
-    ["点検項目", surveyItemColumns()],
-  ].filter(([, cs]) => cs.length > 0);
-  for (const [name, cs] of groups) {
-    if (groups.length > 1) {
-      const h = document.createElement("div");
-      h.className = "cls-group-head";
-      h.textContent = name;
-      list.appendChild(h);
-    }
-    for (const col of cs) list.appendChild(buildClassRow(col, rows, total));
-  }
-
-  // 新しい値を足す先。行末の「＋」を押すとここが切り替わる
-  const sel = document.getElementById("insp-class-col");
-  const prev = sel.value;
-  sel.innerHTML = "";
-  for (const c of cols) {
-    const o = document.createElement("option");
-    o.value = c; o.textContent = c;
-    sel.appendChild(o);
-  }
-  sel.value = cols.includes(prev) ? prev : cols[0];
+  for (const col of cols) list.appendChild(buildClassRow(col, rows, total));
 
   // 行では言えない知らせ(どの列にも書けない)は、まとめてここに出す
   const skipped = total - rows.length;
-  document.getElementById("insp-class-warn").textContent =
+  document.getElementById(warnId).textContent =
     skipped > 0 ? skipped + "個は属性データと結び付いていないため書けません" : "";
 }
 
@@ -9102,30 +9164,77 @@ function buildClassRow(col, rows, total) {
     const cn = document.createElement("span");
     cn.className = "cls-n"; cn.textContent = n;
     b.appendChild(cn);
-    b.title = "点灯しているときにもう一度押すと外します";
-    b.addEventListener("click", () => applyClassValue(col, classChipNextValue(current, v)));
+    b.title = "選んだ石にこの値を付与します";
+    // 点灯している値をもう一度押しても外さない。外すのは「空にする」だけ(classChipWrite)
+    b.addEventListener("click", () => {
+      const w = classChipWrite(current, v);
+      if (w !== null) applyClassValue(col, w);
+    });
     chips.appendChild(b);
   }
   // 「空にする」は、外せる値が実際にあるときだけ出す(行が増えるので常時は邪魔)
   if (filled > 0) {
     const clr = document.createElement("button");
-    clr.className = "cls-chip";
+    clr.className = "cls-chip cls-clear";
     clr.textContent = "空にする";
+    clr.title = "選んだ石から、この列の値を消します";
     clr.addEventListener("click", () => applyClassValue(col, ""));
     chips.appendChild(clr);
   }
+  /* 「＋」を押すと、この行の中に入力欄を開く(もう一度押すと閉じる)。
+     以前は下に常に入力欄と列の選択欄があり、「＋」は列を切り替えてカーソルを
+     移すだけだった。列が1つだと押しても何も変わらず、意味の無いボタンに見えた */
+  const open = !!classAddOpen && classAddOpen.col === col;
   const add = document.createElement("button");
-  add.className = "cls-chip cls-add";
+  add.className = "cls-chip cls-add" + (open ? " on" : "");
   add.textContent = "＋";
   add.title = "この列に新しい値を追加";
+  add.setAttribute("aria-expanded", open ? "true" : "false");
   add.addEventListener("click", () => {
-    document.getElementById("insp-class-col").value = col;
-    document.getElementById("insp-class-new").focus();
+    classAddOpen = open ? null : { col, draft: "" };
+    renderClassifyUI();
+    const inp = document.querySelector(".insp-input .cls-newrow input");
+    if (inp) inp.focus();
   });
   chips.appendChild(add);
-
   wrap.appendChild(chips);
+
+  if (open) {
+    const nr = document.createElement("div");
+    nr.className = "cls-newrow";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.placeholder = "新しい値";
+    inp.setAttribute("aria-label", col + "の新しい値");
+    inp.value = classAddOpen.draft || "";
+    const ok = document.createElement("button");
+    ok.className = "g-btn";
+    ok.textContent = "追加";
+    const x = document.createElement("button");
+    x.className = "g-btn";
+    x.textContent = "×";
+    x.title = "閉じる";
+    x.setAttribute("aria-label", "閉じる");
+    const close = () => { classAddOpen = null; renderClassifyUI(); };
+    ok.addEventListener("click", () => addClassValue(col, inp.value));
+    x.addEventListener("click", close);
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); addClassValue(col, inp.value); }
+      // Escは入力欄を閉じるだけにする(選択モードや案内を終わらせない)
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+    });
+    nr.append(inp, ok, x);
+    wrap.appendChild(nr);
+  }
   return wrap;
+}
+
+/* 「＋」で開いた欄から値を足す。足したら欄を閉じる(付いた値はボタンとして並ぶ) */
+function addClassValue(col, raw) {
+  const v = normalizeClassValue(raw);
+  if (v === "") { setStatus("値を入力してください。", true); return; }
+  classAddOpen = null;
+  applyClassValue(col, v);
 }
 
 function applyClassValue(col, rawValue) {
@@ -9170,19 +9279,7 @@ function afterManualEdit(col) {
   renderClassColumnManager();
 }
 
-document.getElementById("insp-class-add").addEventListener("click", addClassValueFromInput);
-document.getElementById("insp-class-new").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); addClassValueFromInput(); }
-});
 
-function addClassValueFromInput() {
-  const inp = document.getElementById("insp-class-new");
-  const v = normalizeClassValue(inp.value);
-  if (v === "") { setStatus("値を入力してください。", true); return; }
-  const col = document.getElementById("insp-class-col").value;
-  inp.value = "";
-  applyClassValue(col, v);
-}
 
 /* ---- ステップ2(列を作る・値を整える) ---- */
 
@@ -9223,11 +9320,12 @@ function addManualColumn(kind) {
   refreshColumnChoices();
   renderClassColumnManager();
   renderClassifyUI();
+  if (noteTargetRow) renderInspectorTable(noteTargetRow);   // 属性の一覧にも、作った列の行を出す
   updateStepSummaries();
   const where = kind === "survey"
     ? "ビュー上でオブジェクトを選び、「点検」タブから印を付けます。" + NL +
       "付けた内容は、その日その人の記録として残ります。"
-    : "ビュー上でオブジェクトを選ぶと、値を付けられます。";
+    : "ビュー上でオブジェクトを選び、「属性」タブの「属性を付与する」から値を付与します。";
   setStatus(what + "「" + name + "」を作りました。" + NL + where);
 }
 
@@ -10650,6 +10748,7 @@ function saveSettings() {
       // 点検者は人に紐づくもので、データには紐づかない。毎回打ち直させない
       surveyor: document.getElementById("surveyor").value,
       inspectorTab,
+      inspFolded: { ...inspFolded },
       selectTool,   // 選び方は人の好み。データに紐づかない
       uiScale: uiScaleIndex,
     };
@@ -10690,7 +10789,11 @@ function restoreSettings() {
     if (data.projection === "ortho") setViewMode("ortho");
     if (data.panelCollapsed) setPanelCollapsed(true);
     if (typeof data.surveyor === "string") document.getElementById("surveyor").value = data.surveyor;
-    setInspectorTab(data.inspectorTab === "attr" ? "attr" : "survey");
+    // 覚えたものが無ければ既定(属性)のまま
+    if (data.inspectorTab === "attr" || data.inspectorTab === "survey") setInspectorTab(data.inspectorTab);
+    if (data.inspFolded && typeof data.inspFolded === "object") {
+      for (const k of Object.keys(inspFolded)) if (k in data.inspFolded) setInspFold(k, !!data.inspFolded[k]);
+    }
     setSelectTool(data.selectTool === "lasso" ? "lasso" : "brush");
     applyUIScale(typeof data.uiScale === "number" ? data.uiScale : 0);
   }
@@ -10787,8 +10890,9 @@ const TOUR_STEPS = [
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => !!highlightObj || selection.size > 0 },
-  // 文面は属性の表が見えている前提。右上の既定は「点検」タブなので、案内の側で「属性」を開く
-  { target: "#inspector", tab: "attr",
+  // 文面は属性の一覧が見えている前提。「点検」タブを開いていた人や、一覧を畳んでいた人もいるので、
+  // 案内の側で「属性」タブと一覧を開く
+  { target: "#inspector", tab: "attr", unfold: "list",
     text: "選んだ石の属性が、ここに出ます。点検の記録も、ここから書き込みます。" },
   { target: "#view-mode",
     text: "見え方を「正面」にすると、立面図と同じ向きで見られます。",
@@ -10821,19 +10925,20 @@ const COLUMN_TOUR_STEPS = [
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => classifyTargets().rows.length > 0 },
-  // 選んだ石の入力欄は「点検」タブにあるので、案内の側で開く
-  { target: "#insp-classify", tab: "survey",
+  // 属性を付与する欄は「属性」タブにある(v1.47.0)。案内の側でタブと欄を開く
+  { target: "#insp-attr-input", tab: "attr", unfold: "give",
     text: (c) => "「" + (c.col || "石種") + "」の行ができました。「＋」を押し、「砂岩」と入れて「追加」を押してください。",
     hint: "値は何でもかまいません。",
     ok: (c) => !!c.value },
-  { target: "#insp-classify", tab: "survey", find: (c) => tourChip(c.col, c.value),
-    text: (c) => "選んだ石に「" + (c.value || "砂岩") + "」が付与されました。数字は、この値が付与された石の数です。もう一度押すと外れます。" },
+  // 値をもう一度押しても外れない(v1.47.0)。外すのは「空にする」
+  { target: "#insp-attr-input", tab: "attr", unfold: "give", find: (c) => tourChip(c.col, c.value),
+    text: (c) => "選んだ石に「" + (c.value || "砂岩") + "」が付与されました。数字は、この値が付与された石の数です。間違えたときは、「空にする」を押すと付与が取り消されます。" },
   { target: "#select-pick",
     text: "「投げ縄」を選び、石をいくつか囲んでください。",
     hint: "押すと一覧が開きます。「投げ縄(囲んで選ぶ)」を選んでから、ドラッグで囲みます。",
     ok: () => selection.size >= 2 },
   // 最初に付けた石を囲みに含めると「1個に値あり(上書きされます)」と出て迷わせるので、補足で断る
-  { target: "#insp-classify", tab: "survey", find: (c) => tourClassRow(c.col),
+  { target: "#insp-attr-input", tab: "attr", unfold: "give", find: (c) => tourClassRow(c.col),
     text: (c) => "「" + (c.value || "砂岩") + "」を押すと、複数の石にまとめて情報が付与されます。",
     hint: "「上書きされます」と出ても、そのまま押してかまいません。",
     ok: (c) => tourValueCount(c.col, c.value) >= 2 },
@@ -10894,9 +10999,9 @@ function tourValueCount(col, value) {
   if (!col || !value) return 0;
   return csvRows.filter((r) => normalizeClassValue(r[col]) === value).length;
 }
-/* 右上の「入力」の、その列の行。値のボタン(チップ)は先頭の文字が値 */
+/* 右上の入力欄の、その列の行。値のボタン(チップ)は先頭の文字が値 */
 function tourClassRow(col) {
-  for (const row of document.querySelectorAll("#insp-class-list .cls-row")) {
+  for (const row of document.querySelectorAll(".insp-input .cls-row")) {
     const nm = row.querySelector(".cls-row-name");
     if (nm && nm.textContent === col) return row;
   }
@@ -11076,6 +11181,7 @@ function tourEnterStep(step) {
     if (st) st.classList.remove("collapsed");
   }
   if (step.tab) setInspectorTab(step.tab);
+  if (step.unfold) setInspFold(step.unfold, false);   // 畳まれていると指す先が見えない
   const el = tourTargets(step)[0];
   if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });   // 端に寄ると、切り抜きが画面の縁で欠ける
   const bub = document.getElementById("tour-bubble");

@@ -8,7 +8,7 @@
  * の2つが要になる。実コードから抽出した関数で確かめる。
  */
 const { normalizeClassValue, isReservedColumn, ATTR_INFO, REF_PREFIX, HIST_PREFIX,
-        classChipNextValue, classChoices, recordHeaderColumns,
+        classChipWrite, classChoices, recordHeaderColumns,
         SURVEY_DATE_COL, SURVEYOR_COL } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -78,32 +78,24 @@ ok(!isReservedColumn("劣化度", ""), "劣化度は使える");
 ok(!isReservedColumn("width", ""), "小文字のwidthは別の列として使える(計算列はWidth)");
 
 
-/* ---------- チップをもう一度押すと外れる ---------- */
-/* 点検項目のように値が「該当」1つしかない列では、チップがチェックボックス
-   そのものになる。押して付け、もう一度押して外せないと、外すために
-   「空にする」を探すことになり、項目の数だけ余計な操作が増える */
+/* ---------- チップをもう一度押しても外れない(v1.47.0) ---------- */
+/* 以前は、点灯している値をもう一度押すと外れた(チェックのように使えた)。
+   押すたびに付いたり外れたりすると、付与したつもりで外していることがあるので
+   やめた(作者の指摘)。外すのは「空にする」だけ。null は「書き換えるものが無い」 */
 {
   const eqv = (a, b, n) => ok(a === b, n + "  (" + JSON.stringify(a) + ")");
-  eqv(classChipNextValue([], "該当"), "該当", "まだ何も付いていなければ、その値を書く");
-  eqv(classChipNextValue([""], "該当"), "該当", "空なら、その値を書く");
-  eqv(classChipNextValue(["該当"], "該当"), "", "**同じ値をもう一度押すと外れる**");
-  eqv(classChipNextValue(["非該当"], "該当"), "該当", "別の値が付いていれば、押した値に変える");
-  eqv(classChipNextValue(new Set(["該当"]), "該当"), "", "Setで渡しても同じ(呼び出し側はSet)");
-
-  // 複数選択で値が混ざっているとき。いきなり空にすると、
-  // 「揃えたいだけ」の操作で**書いてあるものまで消える**
-  eqv(classChipNextValue(["該当", ""], "該当"), "該当", "**混ざっていれば、まず揃える**(空にしない)");
-  eqv(classChipNextValue(["該当", "非該当"], "該当"), "該当", "別の値が混ざっていても揃える");
-  eqv(classChipNextValue(["該当", "該当"], "該当"), "", "全部同じなら外れる");
-
-  // 「空にする」チップは常に空
-  eqv(classChipNextValue(["該当"], ""), "", "空を押せば空のまま");
-  eqv(classChipNextValue([], ""), "", "何も付いていないときに空を押しても空");
-
+  eqv(classChipWrite([], "該当"), "該当", "まだ何も付いていなければ、その値を書く");
+  eqv(classChipWrite([""], "該当"), "該当", "空なら、その値を書く");
+  eqv(classChipWrite(["該当"], "該当"), null, "**同じ値をもう一度押しても外れない**(何も書き換えない)");
+  eqv(classChipWrite(new Set(["該当"]), "該当"), null, "Setで渡しても同じ(呼び出し側はSet)");
+  eqv(classChipWrite(["該当", "該当"], "該当"), null, "全部同じ値でも外れない");
+  eqv(classChipWrite(["非該当"], "該当"), "該当", "別の値が付いていれば、押した値に変える");
+  // 複数選択で値が混ざっているときは、押した値に揃える
+  eqv(classChipWrite(["該当", ""], "該当"), "該当", "**混ざっていれば、押した値に揃える**");
+  eqv(classChipWrite(["該当", "非該当"], "該当"), "該当", "別の値が混ざっていても揃える");
   // 壊れた入力
-  eqv(classChipNextValue(null, "該当"), "該当", "nullでも落ちない");
-  eqv(classChipNextValue([null, null], "該当"), "該当", "値がnullなら、まだ付いていない扱い");
-  eqv(classChipNextValue(["該当"], null), "", "押した値がnullなら空");
+  eqv(classChipWrite(null, "該当"), "該当", "nullでも落ちない");
+  eqv(classChipWrite([null, null], "該当"), "該当", "値がnullなら、まだ付いていない扱い");
 }
 
 /* ---------- 外した値を候補に残す ---------- */

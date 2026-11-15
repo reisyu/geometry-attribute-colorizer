@@ -63,9 +63,9 @@ checkTargets("1本目 ", TOUR_STEPS);
 // 2手目は、Area の無いデータで読むだけの手になるため ok を持つが、補足の検査は名指しで行う
 checkTexts("1本目 ", TOUR_STEPS.map((s, i) => (i === 1 ? { ...s, ok: undefined } : s)));
 ok(TOUR_STEPS[1].hint && TOUR_STEPS[1].hint.includes("Area"), "2手目の補足は、選ぶ項目を名指しする");
-/* 5手目は「選んだ石の属性が、ここに出ます」。右上の既定は「点検」タブなので、
-   開かないと属性の表が見えず、文面と画面が食い違う(作者の確認で見つかった) */
-ok(TOUR_STEPS[4].tab === "attr", "**5手目は「属性」タブを開く**");
+/* 5手目は「選んだ石の属性が、ここに出ます」。「点検」タブを開いていた人や一覧を畳んでいた人には、
+   開かないと属性の一覧が見えず、文面と画面が食い違う(作者の確認で見つかった) */
+ok(TOUR_STEPS[4].tab === "attr" && TOUR_STEPS[4].unfold === "list", "**5手目は「属性」タブと属性の一覧を開く**");
 {
   /* 作者と決めたのは2・4・6手目(属性を変える・石をタップする・見え方を正面にする) */
   const acts = TOUR_STEPS.map((s, i) => (s.ok ? i + 1 : null)).filter(Boolean);
@@ -94,8 +94,38 @@ checkTexts("2本目 ", COLUMN_TOUR_STEPS);
 /* 作者が直した言い回し(2026-11-15)。「付ける」ではなく「付与」 */
 ok(asText(COLUMN_TOUR_STEPS[0].text) === "石垣の属性は追加することができます。（石種など）", "1手目は作者の文面のまま");
 ok(asText(COLUMN_TOUR_STEPS[8].text).includes("復元されます"), "9手目はZIPで復元できることを言う");
-/* 4手目の入力欄は「点検」タブにある。案内の側で開かないと、属性タブを開いていた人には見えない */
-ok(COLUMN_TOUR_STEPS[3].tab === "survey", "4手目は「点検」タブを開く");
+/* 属性を付与する欄は「属性」タブにある(v1.47.0)。案内の側で開かないと、点検タブを開いていた人や
+   欄を畳んでいた人には見えない */
+ok([3, 4, 6].every((i) => COLUMN_TOUR_STEPS[i].tab === "attr" && COLUMN_TOUR_STEPS[i].unfold === "give"),
+   "4・5・7手目は「属性」タブと「属性を付与する」を開く");
+/* 値をもう一度押しても外れない(v1.47.0)。5手目は外し方を「空にする」で言う(作者の指摘) */
+{
+  const t5 = asText(COLUMN_TOUR_STEPS[4].text);
+  ok(t5.includes("「空にする」") && !t5.includes("もう一度押すと外れ"), "5手目は、外し方を「空にする」で言う", t5);
+}
+ok(html.includes("if (step.unfold) setInspFold(step.unfold, false);"), "案内は、畳まれた段を開いてから指す");
+
+/* ---------- 右上の入力欄の置き場所(§10.9.1) ---------- */
+/* 属性(石種)は「属性」タブ、点検項目は「点検」タブ、選択の操作はタブの外 */
+{
+  const at = (id) => body.indexOf('id="' + id + '"');
+  const attrPane = [at("insp-pane-attr"), at("insp-pane-survey")];
+  const surveyEnd = at("insp-sel");
+  ok(at("insp-attr-input") > attrPane[0] && at("insp-attr-input") < attrPane[1], "**属性を付与する欄は「属性」タブの中**");
+  ok(at("insp-attr-view") < at("insp-table") && at("insp-table") < at("insp-attr-input"),
+     "**上に属性の一覧、下に属性を付与する欄**(作者の案)");
+  ok(/data-fold="list">\s*<button class="insp-fold-head"[^>]*>属性の一覧</.test(body) &&
+     /data-fold="give">\s*<button class="insp-fold-head"[^>]*>属性を付与する</.test(body),
+     "見出しは「属性の一覧」「属性を付与する」で、押すと畳める");
+  ok(!body.includes("手で付ける属性"), "「手で付ける属性」という見出しは使わない");
+  ok(html.includes("inspFolded: { ...inspFolded },"), "畳んだ状態は設定として覚える");
+  ok(/#inspector {[^}]*min-width:/.test(html), "**畳んでもパネルが細くならない**(幅の下限がある)");
+  ok(!/if \(staticCols\.has\(k\)\) continue;/.test(html), "**属性の一覧には、手で付与した属性も出す**");
+  ok(at("insp-classify") > attrPane[1] && at("insp-classify") < surveyEnd, "点検項目の入力欄は「点検」タブの中");
+  ok(surveyEnd > at("insp-note") && body.indexOf('id="insp-group-clear"') > surveyEnd, "**選択を解除するボタンはタブの外**(どちらのタブでも押せる)");
+  ok(!body.includes("insp-class-col") && !body.includes("insp-class-new"), "列を選ぶ欄と常に出ている入力欄は無い(＋で行の中に開く)");
+  ok(html.includes("classAddOpen = open ? null : { col, draft: \"\" }"), "＋はその行の入力欄を開け閉めする");
+}
 /* 練習の列を作るので、サンプルのときだけ進め、終わるときに後始末を尋ねる */
 ok(/columns: \{ steps: COLUMN_TOUR_STEPS, sampleOnly: true,/.test(html), "**2本目はサンプルのときだけ進める**");
 ok(/function columnTourEnd\(/.test(html) && html.includes("消して終わる") && html.includes("残して終わる"),
@@ -106,11 +136,13 @@ ok(/function columnTourEnd\(/.test(html) && html.includes("消して終わる") 
    処理が呼ばれないので、本体に書いた最初の表示がそのまま出る。選ばれたタブと
    見えている面が食い違うと、両方の面が並んで出る(v1.45.1で修正) */
 {
-  const tabOn = /class="insp-tab on" id="tab-survey"/.test(body) ? "survey" : "attr";
+  const tabOn = /class="insp-tab on" id="tab-attr"/.test(body) ? "attr" : "survey";
   const hidden = (id) => new RegExp('id="' + id + '"[^>]*display:\\s*none').test(body);
-  ok(/let inspectorTab = "survey";/.test(html) && tabOn === "survey", "インスペクタの既定は「点検」タブ");
-  ok(hidden("insp-pane-attr") && !hidden("insp-pane-survey"),
-     "**最初は「点検」の面だけを出す**(設定の控えが無いときに両方が並ばない)");
+  ok(/let inspectorTab = "attr";/.test(html) && tabOn === "attr", "**インスペクタの既定は「属性」タブ**(作者の指摘で v1.47.0 から)");
+  ok(!hidden("insp-pane-attr") && hidden("insp-pane-survey"),
+     "**最初は「属性」の面だけを出す**(設定の控えが無いときに両方が並ばない)");
+  ok(html.includes('if (data.inspectorTab === "attr" || data.inspectorTab === "survey") setInspectorTab(data.inspectorTab);'),
+     "覚えたタブが無いときは、既定(属性)のまま");
 }
 
 /* ---------- 案内を始める入り口 ---------- */

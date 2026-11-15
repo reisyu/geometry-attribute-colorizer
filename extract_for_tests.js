@@ -33,7 +33,7 @@ const FUNCS = [
   "legendRowLabels",
   "backgroundImageSize",
   "approxMB",
-  "classChipNextValue",
+  "classChipWrite",
   "classChoices",
   "recordHeaderColumns",
   "ledgerColumns",
