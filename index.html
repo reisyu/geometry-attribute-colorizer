@@ -1220,7 +1220,7 @@
       <button class="ghost" id="renumber-btn" style="margin-top:0">IDを振り直す(立面図の左下から)</button>
     </div>
 
-    <div class="sub-header">属性の列(手入力)</div>
+    <div class="sub-header" id="class-col-head">属性の列(手入力)</div>
     <div class="row hint">
       石種・エリアなど、<b>石そのものの性質</b>を手で付けるための列です。
       1石に1つで、点検日や点検者には紐づきません。
@@ -2130,7 +2130,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.45.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.46.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -10787,7 +10787,8 @@ const TOUR_STEPS = [
     text: "石を1つタップしてください。",
     hint: "どの石でもかまいません。",
     ok: () => !!highlightObj || selection.size > 0 },
-  { target: "#inspector",
+  // 文面は属性の表が見えている前提。右上の既定は「点検」タブなので、案内の側で「属性」を開く
+  { target: "#inspector", tab: "attr",
     text: "選んだ石の属性が、ここに出ます。点検の記録も、ここから書き込みます。" },
   { target: "#view-mode",
     text: "見え方を「正面」にすると、立面図と同じ向きで見られます。",
@@ -10800,6 +10801,196 @@ const TOUR_STEPS = [
   { target: "#help-link", panel: true,
     text: "くわしい説明は、いつでもここから開けます。この案内も、操作ガイドから始め直せます。" },
 ];
+
+/* 2本目「属性を付ける」(§10.10.1)。列を作り、石に値を付与し、その列で色分けして、
+   ZIPで保存するところまで。**文面は作者が確かめたもの**(2026-11-15)。変えるときは作者に見せる。
+
+   - 文面の {列} {値} には、利用者が実際に入れた名前が入る(関数で書く。c は案内の控え)
+   - 練習用の列を作って値を書き込むので、**サンプルを表示しているときだけ**進める。
+     自分のデータを開いているときは、新しいタブでサンプルを開いて案内する
+   - 終わるとき(途中でやめたときも)、案内の間に作った列を消すか残すかを尋ねる
+   - 点検項目(開発中)は入れない。別の案内にする */
+const COLUMN_TOUR_STEPS = [
+  { target: "#class-col-head, #new-class-col, #add-class-col", all: true, panel: true, open: "attr",
+    text: "石垣の属性は追加することができます。（石種など）" },
+  { target: "#new-class-col, #add-class-col", all: true, panel: true, open: "attr",
+    text: "列の名前に「石種」と入れて、「列を作る」を押してください。",
+    hint: "名前は何でもかまいません。",
+    ok: (c) => !!c.col },
+  { target: "#viewport-wrap canvas",
+    text: "石を1つタップしてください。",
+    hint: "どの石でもかまいません。",
+    ok: () => classifyTargets().rows.length > 0 },
+  // 選んだ石の入力欄は「点検」タブにあるので、案内の側で開く
+  { target: "#insp-classify", tab: "survey",
+    text: (c) => "「" + (c.col || "石種") + "」の行ができました。「＋」を押し、「砂岩」と入れて「追加」を押してください。",
+    hint: "値は何でもかまいません。",
+    ok: (c) => !!c.value },
+  { target: "#insp-classify", tab: "survey", find: (c) => tourChip(c.col, c.value),
+    text: (c) => "選んだ石に「" + (c.value || "砂岩") + "」が付与されました。数字は、この値が付与された石の数です。もう一度押すと外れます。" },
+  { target: "#select-pick",
+    text: "「投げ縄」を選び、石をいくつか囲んでください。",
+    hint: "押すと一覧が開きます。「投げ縄(囲んで選ぶ)」を選んでから、ドラッグで囲みます。",
+    ok: () => selection.size >= 2 },
+  // 最初に付けた石を囲みに含めると「1個に値あり(上書きされます)」と出て迷わせるので、補足で断る
+  { target: "#insp-classify", tab: "survey", find: (c) => tourClassRow(c.col),
+    text: (c) => "「" + (c.value || "砂岩") + "」を押すと、複数の石にまとめて情報が付与されます。",
+    hint: "「上書きされます」と出ても、そのまま押してかまいません。",
+    ok: (c) => tourValueCount(c.col, c.value) >= 2 },
+  { target: "#attribute", panel: true, open: "color",
+    text: (c) => "色分けする属性を「" + (c.col || "石種") + "」に変えると、付与された値で色分けされます。",
+    hint: (c) => "押すと一覧が開きます。「" + (c.col || "石種") + "」を選んでください。",
+    ok: (c) => !!c.col && colorColumn === c.col },
+  { target: "#export-bundle-btn", panel: true, open: "export",
+    text: "値を付与したら、ここでZIPに保存してください。次は、そのZIPをアプリに読み込むだけで、追加した列も値も復元されます。" },
+];
+
+/* 案内の一覧。URLの ?tour= と、操作ガイドからの合図はこの名前で指す
+   (?tour=1 は1本目。操作ガイドの古いリンクのため残す) */
+const TOURS = {
+  basic: { steps: TOUR_STEPS, begin: basicTourBegin },
+  columns: { steps: COLUMN_TOUR_STEPS, sampleOnly: true,
+             begin: columnTourBegin, update: columnTourUpdate, end: columnTourEnd },
+};
+function tourByName(name) {
+  return Object.prototype.hasOwnProperty.call(TOURS, name) ? name : "basic";
+}
+
+function basicTourBegin() {
+  // 色分けしていなければ、いまの属性で塗っておく(凡例を見せる手があるため)
+  if (!colorColumn && csvRows.length) applyColorize(document.getElementById("attribute").value);
+  tourMarkSeen();
+  return {};
+}
+
+/* ---- 2本目の控えと後始末 ----
+   始める前の状態を控え、終わるときに**案内の間に作った列だけ**を消せるようにする。
+   アプリには列を消す機能が無い。ここでも、案内で作った列以外は消さない */
+function columnTourBegin() {
+  // ブラウザの控え(手入力の自動保存)を、いまの状態に揃えてから写しておく
+  clearTimeout(saveNotesTimer);
+  saveNotes();
+  let slot = null;
+  try {
+    const key = noteSlotKey(noteFingerprint());
+    const s = readNoteStore().slots[key];
+    slot = { key, json: s ? JSON.stringify(s) : null };
+  } catch (e) { slot = null; }
+  return { before: new Set([...staticCols, ...surveyCols]), beforeColor: colorColumn,
+           beforeUnsaved: hasUnsavedNotes, slot, col: null, value: null };
+}
+function tourCreatedColumns(c) {
+  return [...staticCols, ...surveyCols].filter((col) => !c.before.has(col) && csvColumns.includes(col));
+}
+/* 毎フレーム: 作った列の名前と、最初に付与した値を拾う(文面と条件に使う) */
+function columnTourUpdate(c) {
+  if (!c.col) c.col = tourCreatedColumns(c)[0] || null;
+  if (c.col && !c.value) {
+    const counts = classValueCounts(c.col);
+    if (counts.length) c.value = counts[0][0];
+  }
+}
+function tourValueCount(col, value) {
+  if (!col || !value) return 0;
+  return csvRows.filter((r) => normalizeClassValue(r[col]) === value).length;
+}
+/* 右上の「入力」の、その列の行。値のボタン(チップ)は先頭の文字が値 */
+function tourClassRow(col) {
+  for (const row of document.querySelectorAll("#insp-class-list .cls-row")) {
+    const nm = row.querySelector(".cls-row-name");
+    if (nm && nm.textContent === col) return row;
+  }
+  return null;
+}
+function tourChip(col, value) {
+  const row = tourClassRow(col);
+  if (!row) return null;
+  for (const b of row.querySelectorAll(".cls-chip")) {
+    if (b.firstChild && b.firstChild.nodeValue === value) return b;
+  }
+  return row;
+}
+
+/* 案内用の確かめ(画面の中央に出す)。acts は [文字, 押したとき, 強調するか] */
+function tourCard(title, body, acts, note) {
+  const dim = document.createElement("div");
+  dim.id = "tour-dim";
+  const card = document.createElement("div");
+  card.id = "tour-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "操作の案内");
+  const h = document.createElement("h3"); h.textContent = title;
+  const p = document.createElement("div"); p.textContent = body;
+  const row = document.createElement("div"); row.className = "tour-acts";
+  card.append(h, p, row);
+  const close = () => { dim.remove(); card.remove(); };
+  for (const [label, fn, main] of acts) {
+    const b = document.createElement("button");
+    b.className = main ? "action" : "ghost";
+    b.textContent = label;
+    b.addEventListener("click", () => { close(); if (fn) fn(); });
+    row.appendChild(b);
+  }
+  if (note) { const n = document.createElement("div"); n.className = "tour-note"; n.textContent = note; card.appendChild(n); }
+  document.body.appendChild(dim);
+  document.body.appendChild(card);
+}
+
+/* 終わるとき: 作った列を消すか残すかを尋ねる。列を作る前にやめたら尋ねない */
+function columnTourEnd(c) {
+  const made = tourCreatedColumns(c);
+  if (made.length === 0) return;
+  const names = made.map((x) => "「" + x + "」").join("");
+  tourCard("練習で作った" + names + "を消しますか？",
+    "消すと、付与した値もなくなり、色分けも元に戻ります。",
+    [["消して終わる", () => removeTourColumns(c, made), true], ["残して終わる", null, false]],
+    "残した列は、次にサンプルを開いたときにも出ます。");
+}
+
+function removeTourColumns(c, made) {
+  // 練習で囲んだ選択も外す(選択モードのままだと、石が減光されたまま残る)
+  if (selectMode) setSelectMode(false);
+  clearTimeout(saveNotesTimer);
+  const gone = new Set(made);
+  for (const r of csvRows) for (const col of made) delete r[col];
+  for (let i = csvColumns.length - 1; i >= 0; i--) if (gone.has(csvColumns[i])) csvColumns.splice(i, 1);
+  for (const col of made) { staticCols.delete(col); surveyCols.delete(col); classRecentValues.delete(col); }
+  rebuildInputDerived();
+  refreshColumnChoices();
+  // 消した列で塗っていたら、案内を始める前の色分けに戻す
+  if (colorColumn && !csvColumns.includes(colorColumn)) {
+    if (c.beforeColor && csvColumns.includes(c.beforeColor)) applyColorize(c.beforeColor);
+    else clearColorize();
+  }
+  // ブラウザの控えも、案内を始める前に戻す(戻さないと、次にサンプルを開いたときに出てくる)
+  try {
+    if (c.slot) {
+      const store = readNoteStore();
+      if (c.slot.json) store.slots[c.slot.key] = JSON.parse(c.slot.json);
+      else delete store.slots[c.slot.key];
+      if (Object.keys(store.slots).length) localStorage.setItem(NOTES_KEY, JSON.stringify(store));
+      else localStorage.removeItem(NOTES_KEY);
+    }
+  } catch (e) { /* 控えに触れなくても、画面からは消えている */ }
+  setUnsavedNotes(c.beforeUnsaved);
+  if (noteTargetRow) renderInspectorTable(noteTargetRow);
+  if (showLabelsCheckbox.checked) rebuildLabels();
+  renderClassColumnManager();
+  renderClassifyUI();
+  updateStepSummaries();
+  setStatus("練習で作った" + made.map((x) => "「" + x + "」").join("") + "を消しました。");
+}
+
+function sampleShown() {
+  return document.getElementById("sample-badge").classList.contains("active");
+}
+/* 自分のデータを開いているときは、そのデータに練習の列が混ざらないよう、新しいタブで始める */
+function offerTourInNewTab(name) {
+  tourCard("サンプルで案内します",
+    "この案内では、練習用の列を作って値を書き込みます。いま開いているデータに混ざらないよう、新しいタブでサンプルを開いて案内します。",
+    [["やめる", null, false],
+     ["新しいタブで始める", () => window.open(location.pathname + "?tour=" + name, "_blank"), true]]);
+}
 
 let tour = null;   // { i, entered, done }
 
@@ -10829,10 +11020,11 @@ function offerTour() {
   document.getElementById("tour-later").addEventListener("click", close);
 }
 
-function startTour() {
-  if (tour || meshes.length === 0) return;
-  // 色分けしていなければ、いまの属性で塗っておく(凡例を見せる手があるため)
-  if (!colorColumn && csvRows.length) applyColorize(document.getElementById("attribute").value);
+function startTour(name) {
+  if (tour || meshes.length === 0 || document.getElementById("tour-card")) return;
+  const def = TOURS[tourByName(name)];
+  if (def.sampleOnly && !sampleShown()) { offerTourInNewTab(tourByName(name)); return; }
+  const ctx = def.begin ? def.begin() : {};
   const hole = document.createElement("div");
   hole.id = "tour-hole";
   const bub = document.createElement("div");
@@ -10841,18 +11033,39 @@ function startTour() {
   bub.setAttribute("aria-live", "polite");
   document.body.appendChild(hole);
   document.body.appendChild(bub);
-  tour = { i: 0, entered: -1, done: null };
-  tourMarkSeen();
+  tour = { def, steps: def.steps, ctx, i: 0, entered: -1, done: null };
   requestAnimationFrame(tourFrame);
 }
 
 function endTour() {
   if (!tour) return;
+  const t = tour;
   tour = null;
   for (const id of ["tour-hole", "tour-bubble"]) {
     const el = document.getElementById(id);
     if (el) el.remove();
   }
+  if (t.def.end) t.def.end(t.ctx);   // 2本目: 作った列を消すか尋ねる
+}
+
+/* 文面・補足は、作った列の名前を入れるために関数で書くことがある */
+function tourText(v) { return typeof v === "function" ? v(tour.ctx) : (v || ""); }
+
+/* 指す部品。find があればそれを、all なら当てはまる部品すべてを囲む */
+function tourTargets(step) {
+  if (step.find) { const el = step.find(tour.ctx); if (el) return [el]; }
+  if (step.all) return [...document.querySelectorAll(step.target)];
+  const el = document.querySelector(step.target);
+  return el ? [el] : [];
+}
+function tourTargetRect(step) {
+  let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+  for (const el of tourTargets(step)) {
+    const q = el.getBoundingClientRect();
+    if (q.width <= 0 || q.height <= 0) continue;
+    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+  }
+  return l === Infinity ? null : { left: l, top: t, right: r, bottom: b, width: r - l, height: b - t };
 }
 
 /* 手に入ったとき1回だけ: 閉じている部品を開き、見える位置まで送る */
@@ -10862,17 +11075,18 @@ function tourEnterStep(step) {
     const st = document.querySelector('[data-step="' + step.open + '"]');
     if (st) st.classList.remove("collapsed");
   }
-  const el = document.querySelector(step.target);
+  if (step.tab) setInspectorTab(step.tab);
+  const el = tourTargets(step)[0];
   if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });   // 端に寄ると、切り抜きが画面の縁で欠ける
   const bub = document.getElementById("tour-bubble");
-  const n = TOUR_STEPS.length;
+  const n = tour.steps.length;
   const last = tour.i === n - 1;
   bub.innerHTML =
     '<div class="tour-count">' + (tour.i + 1) + " / " + n + "</div>" +
     '<div class="tour-text"></div><div class="tour-hint"></div>' +
     '<div class="tour-acts"><button class="ghost" id="tour-quit">やめる</button>' +
     '<button class="action" id="tour-next">' + (last ? "終わる" : "次へ") + "</button></div>";
-  bub.querySelector(".tour-text").textContent = step.text;
+  bub.querySelector(".tour-text").textContent = tourText(step.text);
   document.getElementById("tour-quit").addEventListener("click", endTour);
   document.getElementById("tour-next").addEventListener("click", () => {
     if (!tour) return;
@@ -10887,22 +11101,22 @@ function tourEnterStep(step) {
    出入りで部品が動くため(出来事ごとに追いかけると取りこぼす) */
 function tourFrame() {
   if (!tour) return;
-  const step = TOUR_STEPS[tour.i];
+  const step = tour.steps[tour.i];
+  if (tour.def.update) tour.def.update(tour.ctx);
   if (tour.entered !== tour.i) { tour.entered = tour.i; tourEnterStep(step); }
 
-  const done = !step.ok || !!step.ok();
+  const done = !step.ok || !!step.ok(tour.ctx);
   if (done !== tour.done) {
     tour.done = done;
     const hint = document.querySelector("#tour-bubble .tour-hint");
-    hint.textContent = !done && step.hint ? step.hint : "";
+    hint.textContent = !done && step.hint ? tourText(step.hint) : "";
     hint.style.display = !done && step.hint ? "" : "none";
     document.getElementById("tour-next").disabled = !done;
   }
 
   const hole = document.getElementById("tour-hole");
   const bub = document.getElementById("tour-bubble");
-  const el = document.querySelector(step.target);
-  const r = el ? el.getBoundingClientRect() : null;
+  const r = tourTargetRect(step);
   const vw = window.innerWidth, vh = window.innerHeight;
   const visible = r && r.width > 0 && r.height > 0;
   const pad = 6;
@@ -10923,9 +11137,13 @@ function tourFrame() {
   if (!visible) {
     x = (vw - bw) / 2; y = (vh - bh) / 2;
   } else if (vw < 700) {
-    // 狭い画面では、部品の横に置く場所が無い。画面の下に固定する(部品が下にあれば上)
+    // 狭い画面では、部品の横に置く場所が無い。画面の下に固定する(部品が下にあれば上)。
+    // 下端は**見えている範囲**で測る。文字を入れる手ではキーボードが下から出て、
+    // 画面の下に固定した吹き出しが隠れるため(visualViewport はキーボードを除いた範囲)
+    const vv = window.visualViewport;
+    const top = vv ? vv.offsetTop : 0, bottom = vv ? vv.offsetTop + vv.height : vh;
     x = (vw - bw) / 2;
-    y = r.top + r.height / 2 > vh / 2 ? m : vh - bh - m;
+    y = r.top + r.height / 2 > (top + bottom) / 2 ? top + m : bottom - bh - m;
   } else {
     x = r.right + gap; y = r.top;
     if (x + bw > vw - m) x = r.left - bw - gap;
@@ -10942,9 +11160,9 @@ function tourFrame() {
 }
 
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && tour) endTour(); });
-/* 操作ガイドの「操作の案内を始める」から。アプリの窓に合図が届く */
+/* 操作ガイドの「操作の案内を始める」から。アプリの窓に合図が届く(tour は案内の名前) */
 window.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "gac-start-tour") startTour();
+  if (e.data && e.data.type === "gac-start-tour") startTour(tourByName(e.data.tour));
 });
 
 restoreSettings();
@@ -10952,14 +11170,19 @@ applyShareLabels();
 animate();
 loadSampleData();
 
-/* 操作の案内。URLに ?tour=1 があれば始める(操作ガイドから開いたとき)。
+/* 操作の案内。URLに ?tour=1(1本目) か ?tour=columns(属性を付ける) があれば始める
+   (操作ガイドから開いたとき)。
    初めて開いた人には、案内するかを尋ねる。サンプルを表示しているときだけ
    (自分のデータで作業している人を止めない)。起動の知らせが落ち着いてから出す */
 setTimeout(() => {
-  let want = false, seen = false;
-  try { want = new URLSearchParams(location.search).get("tour") === "1"; } catch (e) { /* 無視 */ }
+  let want = null, seen = false;
+  try {
+    const q = new URLSearchParams(location.search).get("tour");
+    if (q === "1") want = "basic";
+    else if (q && Object.prototype.hasOwnProperty.call(TOURS, q)) want = q;
+  } catch (e) { /* 無視 */ }
   try { seen = localStorage.getItem(TOUR_KEY) === "seen"; } catch (e) { seen = true; }
-  if (want) { startTour(); return; }
+  if (want) { startTour(want); return; }
   const sample = document.getElementById("sample-badge").classList.contains("active");
   if (!seen && sample && !hasUnsavedNotes) offerTour();
 }, 1500);

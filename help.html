@@ -768,6 +768,13 @@
     <!-- ============ 分類を付ける ============ -->
     <h2 id="classify">属性と点検項目を付ける</h2>
     <p>
+      <a class="back-to-app" href="index.html?tour=columns" data-start-tour="columns">▶ アプリの画面で属性の付け方を案内する（3〜4分）</a>
+    </p>
+    <p>
+      サンプルの石垣で、属性の列を作り、石に値を付与して、その値で色分けするところまでを案内します。
+      練習で作った列は、最後に消せます。
+    </p>
+    <p>
       石種やエリアのように<strong>計算では出せない値</strong>を、手で付けるための機能です。
       ブラシで選んで、値をタップするだけで付きます。
     </p>
@@ -1278,18 +1285,20 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
 
   // 「操作を案内する」: このガイドをアプリから開いていれば、アプリの窓に合図を送って
   // 案内を始め、このタブを閉じる(アプリの窓に戻ると案内が出ている)。
-  // 閉じられないときは、このタブでアプリを開いて案内を始める(?tour=1)
+  // 閉じられないときは、このタブでアプリを開いて案内を始める(?tour=1 / ?tour=columns)。
+  // data-start-tour の値が案内の名前(空なら1本目)
   document.querySelectorAll("[data-start-tour]").forEach((a) => {
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      try { if (window.opener) window.opener.postMessage({ type: "gac-start-tour" }, "*"); } catch (err) { /* 送れなければ下で開く */ }
+      const tour = a.getAttribute("data-start-tour") || "basic";
+      try { if (window.opener) window.opener.postMessage({ type: "gac-start-tour", tour }, "*"); } catch (err) { /* 送れなければ下で開く */ }
       if (window.opener) window.close();
       setTimeout(() => { window.location.href = a.getAttribute("href"); }, 120);
     });
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.45.1";
+  const HELP_VERSION = "1.46.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
