@@ -197,6 +197,36 @@ ok(html.includes('"の情報を削除しますか？"') &&
    html.includes('"残した情報は、次にサンプルを開いたときにも読み込まれます。"'),
    "終わるときの確認は作者の文面のまま");
 
+/* ---------- 呼び方(v1.50.0、作者の判断) ---------- */
+ok(!/点検データ/.test(html), "**「点検データ」と呼ばない**(属性も入るので「作業データ」)");
+ok(html.includes('exportFileName("作業データ.zip")'), "保存するZIPの名前も「作業データ」");
+ok(html.includes('<div class="step-label">2. 属性を追加する(任意)</div>'), "**手順2は「属性を追加する」**(属性の列を作る場所でもある)");
+ok(!/該当した石に印を付ける/.test(html), "点検項目の説明は「あり」で言う(「該当」でなく)");
+
+/* ---------- 点検の記録から作る値は「点検」タブに(v1.50.0) ---------- */
+/* 「属性」タブの一覧に、該当項目・履歴:記録の状況・前回:はらみ出しが混ざっていた。
+   属性と点検を分けた方針(§10.9)に合わせて、点検タブの「記録の集計」に出す */
+{
+  const at = (id) => body.indexOf('id="' + id + '"');
+  ok(at("insp-survey-view") > at("insp-pane-survey") && at("insp-survey-view") < at("insp-sel") && at("insp-survey-view") > at("insp-note-box"),
+     "**記録の集計は「点検」タブの中(メモ欄の下)**");
+  ok(/const surveySide = new Set\(surveyVisualColumns\(Object\.keys\(row\), surveyCols\)\);/.test(html) &&
+     /if \(surveySide\.has\(k\)\) \{[\s\S]*?addRow\(k, v, sTable\)/.test(html),
+     "**点検側の列は、属性の一覧ではなく記録の集計に入れる**");
+  ok(/if \(surveyCols\.has\(k\) \|\| k === NOTE_FLAG_COL\) continue;/.test(html),
+     "点検項目とメモの有無は、入力欄・メモ欄に出ているので集計に重ねない");
+  ok(html.includes("if (k === REF_PREFIX + NOTE_COL) continue;"), "前回のメモは、メモ欄の上に出ているので表に重ねない");
+}
+
+/* ---------- 狭い画面での重なり(v1.50.0、375px幅で実測) ---------- */
+ok(/@media \(max-width: 700px\) \{[\s\S]*?#viewport-wrap \{ --tb-top: 32px; \}/.test(html) &&
+   html.includes("top: var(--tb-top, 16px);"),
+   "**縦積みの画面では、ツールバーをつまみの下から始める**(つまみがツールバーに重なっていた)");
+ok(/#viewport-wrap\.tb-wrapped #inspector \{\s*top: max\([^;]*var\(--badges-bottom, 0px\)/.test(html),
+   "**バッジがツールバーの下に回る幅では、右上のパネルをバッジの下から始める**(石の番号が隠れていた)");
+ok(/new MutationObserver\(layoutOverlays\)\.observe\(document\.getElementById\("viewport-badges"\)/.test(html),
+   "バッジの増減のたびに、パネルの位置を取り直す");
+
 /* ---------- インスペクタの最初の表示 ---------- */
 /* 5手目は右上の属性表示を初めての人に見せる。設定の控えが無いときはタブを切り替える
    処理が呼ばれないので、本体に書いた最初の表示がそのまま出る。選ばれたタブと

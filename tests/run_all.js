@@ -44,7 +44,7 @@ const TESTS = [
   ["test_aspect.js", "アスペクト比"],
   ["test_zip.js", "ZIP書き出し"],
   ["test_unzip.js", "ZIP読み込み(往復)"],
-  ["test_bundlecsv.js", "点検データのCSV"],
+  ["test_bundlecsv.js", "作業データのCSV"],
   ["test_thickline.js", "選択の輪郭線(太線)"],
   ["test_selection.js", "ブラシ選択の当たり判定"],
   ["test_lasso.js", "投げ縄で選ぶ"],

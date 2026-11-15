@@ -152,6 +152,19 @@ ok(isReservedColumn(" " + SURVEYOR_COL + " ", ""), "前後に空白があって�
 ok(!isReservedColumn("確認者", ""), "似た意味の別名は使える");
 ok(!isReservedColumn("点検者メモ", ""), "鍵の名前を含むだけの列は使える");
 
+/* ---------- 未保存のときに促す保存先(v1.50.0) ---------- */
+/* 基本の保存はZIP。CSVには点検日・点検者が付かず、点検の記録として積み上がらない。
+   v1.49.0 までは画面だけがCSVへ促していて、操作ガイドの説明と食い違っていた */
+{
+  const html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  ok(!html.includes("CSVで保存しないと残りません"), "**「CSVで保存しないと残りません」と促さない**");
+  ok(html.includes("const btn = document.getElementById(\"export-bundle-btn\");") && !html.includes("document.getElementById(\"download-csv-btn\");\n  btn.classList"),
+     "**未保存のとき目立たせるのは「作業データをZIPで保存」**");
+  const bundleAt = html.indexOf('id="export-bundle-btn"'), csvAt = html.indexOf('id="download-csv-btn"'), hintAt = html.indexOf('id="note-unsaved"');
+  ok(bundleAt < hintAt && hintAt < csvAt, "未保存の注意は、ZIPのボタンの下に出す");
+  ok(html.includes('title="作業データをZIPで保存すると、この表示は消えます"'), "未保存バッジの説明もZIPを指す");
+}
+
 console.log("");
 console.log("===== " + pass + "成功 / " + fail + "失敗 =====");
 process.exit(fail ? 1 : 0);
