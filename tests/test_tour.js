@@ -11,7 +11,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { TOUR_STEPS, COLUMN_TOUR_STEPS } = require("./extracted.js");
+const { TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n, extra) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n + (extra ? "  " + extra : "")); };
@@ -126,6 +126,46 @@ ok([3, 4, 6, 8].every((i) => COLUMN_TOUR_STEPS[i].tab === "attr" && COLUMN_TOUR_
 }
 ok(html.includes("if (step.unfold) setInspFold(step.unfold, false);"), "案内は、畳まれた段を開いてから指す");
 
+/* ===== 3本目: 点検の記録(v1.49.0) ===== */
+console.log("--- 3本目(点検の記録) ---");
+ok(Array.isArray(SURVEY_TOUR_STEPS) && SURVEY_TOUR_STEPS.length === 11, "案内は11手",
+   String(SURVEY_TOUR_STEPS && SURVEY_TOUR_STEPS.length));
+checkTargets("3本目 ", SURVEY_TOUR_STEPS);
+checkTexts("3本目 ", SURVEY_TOUR_STEPS);
+{
+  /* 項目を作る・石を選ぶ・点検者を入れる・印を付ける・ブラシでなぞる・まとめて印を付ける・
+     記録の状況で色分けする。7手目(メモ)は作者の文面が紹介なので、読んで進む */
+  const acts = SURVEY_TOUR_STEPS.map((s, i) => (s.ok ? i + 1 : null)).filter(Boolean);
+  ok(JSON.stringify(acts) === "[2,3,4,5,8,9,10]", "**やると進む手は 2・3・4・5・8・9・10 手目**", JSON.stringify(acts));
+}
+/* 作者の文面(2026-11-15)。例は「ひび割れ・剥離」、印の値は「あり」 */
+ok(asText(SURVEY_TOUR_STEPS[0].text) === "点検結果を、点検日・点検者名とともに記録として残せます。（ひび割れ・剥離など）", "1手目は作者の文面のまま");
+ok(asText(SURVEY_TOUR_STEPS[3].hint) === "点検日は今日の日付が入っています。名前は次に開いたときにも同じ名前が入ります。", "4手目の補足は作者の文面のまま");
+ok(SURVEY_TOUR_STEPS[4].text({ col: "はらみ出し", value: "あり" }) === "「はらみ出し」の行ができました。「＋」を押し、「あり」と入れて「追加」を押してください。", "5手目は作者の文面のまま");
+ok(asText(SURVEY_TOUR_STEPS[6].text) === "メモ欄に自由記述することができます（例: 目地が開いている）", "7手目は作者の文面のまま");
+ok(!SURVEY_TOUR_STEPS.some((s) => /該当/.test(asText(s.text) + (s.hint ? asText(s.hint) : ""))), "**文面に「該当」を使わない**(印の値は「あり」)");
+{
+  const other = { col: "ひび割れ", value: "大" };
+  ok(SURVEY_TOUR_STEPS[4].text(other).includes("「ひび割れ」") && SURVEY_TOUR_STEPS[5].text(other).includes("「大」"),
+     "5・6手目の文面は、作った項目と付けた値の名前を使う");
+}
+ok(SURVEY_TOUR_STEPS[2].place === "view", "3手目(石をタップ)の吹き出しはビューの左上");
+ok([3, 4, 5, 6, 8].every((i) => SURVEY_TOUR_STEPS[i].tab === "survey"), "**4〜7・9手目は「点検」タブを開く**(初めては「属性」タブが開くため)");
+/* まとめて印を付ける手(作者の指定でブラシ)。ブラシは今の選択に足すので、入るときに外す */
+ok(SURVEY_TOUR_STEPS[7].target === "#select-pick" && asText(SURVEY_TOUR_STEPS[7].text).includes("「ブラシ」") &&
+   SURVEY_TOUR_STEPS[7].enter, "**8手目はブラシでなぞる**(入るときに選んだ1つを外す)");
+ok(asText(SURVEY_TOUR_STEPS[8].text).includes("まとめて印が付きます"), "9手目は、なぞった石にまとめて印を付ける");
+ok(SURVEY_TOUR_STEPS[9].enter && /colorColumn === COMBO_COL/.test(String(SURVEY_TOUR_STEPS[9].ok)),
+   "10手目は選択を外してから、記録の状況で色分けすると進む");
+ok(/function tourClearForColor\(\) \{[\s\S]*?if \(highlightObj\) \{[\s\S]*?setHighlight\(null\);/.test(html),
+   "色分けの前に、通常のタップで選んだ1つの強調表示も外す");
+ok(/survey: \{ steps: SURVEY_TOUR_STEPS, sampleOnly: true,/.test(html), "**3本目もサンプルのときだけ進める**");
+/* 削除するときは、書いたメモも案内を始める前に戻す(メモ列が無かったなら列ごと) */
+ok(html.includes("c.notes = new Map(csvRows.map((r) => [r, r[NOTE_COL]]));") && /if \(c\.notes\) \{[\s\S]*?if \(!c\.hadNoteCol\)/.test(html),
+   "**削除すると、書いたメモも戻す**");
+ok(html.includes('c.endBody = "削除すると、付けた印と書いたメモもなくなり、色分けも元に戻ります。";'),
+   "3本目の確認は、印とメモが消えることを言う");
+
 /* ---------- 右上の入力欄の置き場所(§10.9.1) ---------- */
 /* 属性(石種)は「属性」タブ、点検項目は「点検」タブ、選択の操作はタブの外 */
 {
@@ -180,6 +220,7 @@ ok(html.includes('e.data.type === "gac-start-tour"') && html.includes("startTour
   const help = fs.readFileSync(path.join(__dirname, "..", "help.html"), "utf8");
   ok(help.includes('href="index.html?tour=1" data-start-tour>'), "操作ガイドに1本目の入り口がある");
   ok(help.includes('href="index.html?tour=columns" data-start-tour="columns"'), "操作ガイドの「属性と点検項目を付ける」に2本目の入り口がある");
+  ok(help.includes('href="index.html?tour=survey" data-start-tour="survey"'), "操作ガイドに3本目(点検の記録)の入り口がある");
   ok(help.includes("gac-start-tour") && help.includes('getAttribute("data-start-tour")'), "操作ガイドは案内の名前を合図に載せる");
 }
 

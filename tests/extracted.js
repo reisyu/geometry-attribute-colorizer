@@ -186,6 +186,50 @@ const COLUMN_TOUR_STEPS = [
     text: "値を付与したら、ここでZIPに保存してください。次は、そのZIPをアプリに読み込むだけで、追加した列も値も復元されます。" },
 ];
 
+const SURVEY_TOUR_STEPS = [
+  { target: "#survey-col-head, #new-survey-col, #add-survey-col", all: true, panel: true, open: "survey",
+    text: "点検結果を、点検日・点検者名とともに記録として残せます。（ひび割れ・剥離など）" },
+  { target: "#new-survey-col, #add-survey-col", all: true, panel: true, open: "survey",
+    text: "点検項目の名前に「はらみ出し」と入れて、「項目を作る」を押してください。",
+    hint: "名前は何でもかまいません。",
+    ok: (c) => !!c.col },
+  { target: "#viewport-wrap canvas", place: "view",
+    text: "石を1つタップしてください。",
+    hint: "どの石でもかまいません。",
+    ok: () => classifyTargets().rows.length > 0 },
+  // 点検日・点検者は「点検」タブの先頭にある(§10.9)。初めては「属性」タブが開くので、案内の側で開く
+  { target: "#survey-head", tab: "survey",
+    text: "記録には、ここの点検日と点検者が付きます。点検者に名前を入れてください。",
+    hint: "点検日は今日の日付が入っています。名前は次に開いたときにも同じ名前が入ります。",
+    ok: () => document.getElementById("surveyor").value.trim() !== "" },
+  { target: "#insp-classify", tab: "survey",
+    text: (c) => "「" + (c.col || "はらみ出し") + "」の行ができました。「＋」を押し、「あり」と入れて「追加」を押してください。",
+    hint: "値は何でもかまいません。",
+    ok: (c) => !!c.value },
+  { target: "#insp-classify", tab: "survey", find: (c) => tourChip(c.col, c.value),
+    text: (c) => "選んだ石に「" + (c.value || "あり") + "」の印が付きました。印は、見つかった石にだけ付けてください。間違えたときは、「空にする」を押すと取り消せます。" },
+  // 読んで進む手(作者の文面は「書いてください」ではなく、できることの紹介)
+  { target: "#insp-note-box", tab: "survey",
+    text: "メモ欄に自由記述することができます（例: 目地が開いている）" },
+  // まとめて印を付ける(作者の指定でブラシ。2本目は投げ縄)。ブラシは今の選択に足すので、
+  // 3手目で選んだ1つを外してから始める(残すと、メモを書いた石まで数に入る)
+  { target: "#select-pick", enter: () => tourClearPick(),
+    text: "「ブラシ」を選び、石をいくつかなぞってください。",
+    hint: "押すと一覧が開きます。「ブラシ(なぞって選ぶ)」を選んでから、ドラッグでなぞります。",
+    ok: () => selection.size >= 2 },
+  { target: "#insp-classify", tab: "survey", find: (c) => tourClassRow(c.col),
+    text: (c) => "「" + (c.value || "あり") + "」を押すと、なぞった石すべてにまとめて印が付きます。",
+    hint: "「上書きされます」と出ても、そのまま押してかまいません。",
+    ok: (c) => tourValueCount(c.col, c.value) >= 2 },
+  // 選んだままだと、減光と縁取りで色が見分けにくい(2本目の10手目と同じ)
+  { target: "#survey-attribute", panel: true, open: "survey", enter: () => tourClearForColor(),
+    text: "「点検結果で色分けする」で「履歴:記録の状況」を選ぶと、今回記録した石が色付きで表示されます。",
+    hint: "押すと一覧が開きます。「履歴:記録の状況」を選んでください。",
+    ok: () => colorColumn === COMBO_COL },
+  { target: "#export-bundle-btn", panel: true, open: "export",
+    text: "点検が終わったら、ここでZIPに保存してください。次の点検はこのZIPを開くだけで始められ、今回の記録は「前回」として並びます。" },
+];
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -1407,4 +1451,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

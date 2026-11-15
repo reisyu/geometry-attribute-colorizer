@@ -1410,7 +1410,7 @@
       石への入力はビュー上のパネルの「点検」タブから行います
     </div>
 
-    <div class="sub-header">点検項目</div>
+    <div class="sub-header" id="survey-col-head">点検項目</div>
     <div class="row hint">
       はらみ出し・ひび割れなど、<b>点検のたびに見て回る項目</b>です。
       該当した石に印を付けると、その日その人の記録として残ります
@@ -1670,7 +1670,7 @@
       <div id="insp-attr-empty">属性の列を作ると、選んだ石にまとめて付与できます(「2. 属性データを読み込む」の「属性の列(手入力)」)。</div>
     </div>
     <div id="insp-pane-survey" style="display:none">
-    <div class="survey-head">
+    <div class="survey-head" id="survey-head">
       <input type="date" id="survey-date" title="この日付で記録されます">
       <input type="text" id="surveyor" placeholder="点検者" title="記録はこの名前で残ります">
     </div>
@@ -2166,7 +2166,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.48.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.49.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -10967,12 +10967,74 @@ const COLUMN_TOUR_STEPS = [
     text: "値を付与したら、ここでZIPに保存してください。次は、そのZIPをアプリに読み込むだけで、追加した列も値も復元されます。" },
 ];
 
+/* 3本目「点検の記録」(§10.10.2)。点検項目を作り、石に印を付け、メモ欄を見て、
+   ブラシでまとめて印を付け、記録の状況で色分けして、ZIPで保存するところまで。1回目の点検だけを扱う
+   (内蔵サンプルには前回の記録が無い。前回と比べる流れは別の案内にする)。
+   **文面は作者が確かめたもの**(2026-11-15)。変えるときは作者に見せる。
+   - 2本目と同じく、練習の項目を作って印を付けるので、サンプルを表示しているときだけ進める
+   - 終わるとき、練習で作った項目を削除するか残すかを尋ねる。削除すると、書いたメモも戻す
+   - 点検者の名前は人に紐づく設定なので、削除しても残す */
+const SURVEY_TOUR_STEPS = [
+  { target: "#survey-col-head, #new-survey-col, #add-survey-col", all: true, panel: true, open: "survey",
+    text: "点検結果を、点検日・点検者名とともに記録として残せます。（ひび割れ・剥離など）" },
+  { target: "#new-survey-col, #add-survey-col", all: true, panel: true, open: "survey",
+    text: "点検項目の名前に「はらみ出し」と入れて、「項目を作る」を押してください。",
+    hint: "名前は何でもかまいません。",
+    ok: (c) => !!c.col },
+  { target: "#viewport-wrap canvas", place: "view",
+    text: "石を1つタップしてください。",
+    hint: "どの石でもかまいません。",
+    ok: () => classifyTargets().rows.length > 0 },
+  // 点検日・点検者は「点検」タブの先頭にある(§10.9)。初めては「属性」タブが開くので、案内の側で開く
+  { target: "#survey-head", tab: "survey",
+    text: "記録には、ここの点検日と点検者が付きます。点検者に名前を入れてください。",
+    hint: "点検日は今日の日付が入っています。名前は次に開いたときにも同じ名前が入ります。",
+    ok: () => document.getElementById("surveyor").value.trim() !== "" },
+  { target: "#insp-classify", tab: "survey",
+    text: (c) => "「" + (c.col || "はらみ出し") + "」の行ができました。「＋」を押し、「あり」と入れて「追加」を押してください。",
+    hint: "値は何でもかまいません。",
+    ok: (c) => !!c.value },
+  { target: "#insp-classify", tab: "survey", find: (c) => tourChip(c.col, c.value),
+    text: (c) => "選んだ石に「" + (c.value || "あり") + "」の印が付きました。印は、見つかった石にだけ付けてください。間違えたときは、「空にする」を押すと取り消せます。" },
+  // 読んで進む手(作者の文面は「書いてください」ではなく、できることの紹介)
+  { target: "#insp-note-box", tab: "survey",
+    text: "メモ欄に自由記述することができます（例: 目地が開いている）" },
+  // まとめて印を付ける(作者の指定でブラシ。2本目は投げ縄)。ブラシは今の選択に足すので、
+  // 3手目で選んだ1つを外してから始める(残すと、メモを書いた石まで数に入る)
+  { target: "#select-pick", enter: () => tourClearPick(),
+    text: "「ブラシ」を選び、石をいくつかなぞってください。",
+    hint: "押すと一覧が開きます。「ブラシ(なぞって選ぶ)」を選んでから、ドラッグでなぞります。",
+    ok: () => selection.size >= 2 },
+  { target: "#insp-classify", tab: "survey", find: (c) => tourClassRow(c.col),
+    text: (c) => "「" + (c.value || "あり") + "」を押すと、なぞった石すべてにまとめて印が付きます。",
+    hint: "「上書きされます」と出ても、そのまま押してかまいません。",
+    ok: (c) => tourValueCount(c.col, c.value) >= 2 },
+  // 選んだままだと、減光と縁取りで色が見分けにくい(2本目の10手目と同じ)
+  { target: "#survey-attribute", panel: true, open: "survey", enter: () => tourClearForColor(),
+    text: "「点検結果で色分けする」で「履歴:記録の状況」を選ぶと、今回記録した石が色付きで表示されます。",
+    hint: "押すと一覧が開きます。「履歴:記録の状況」を選んでください。",
+    ok: () => colorColumn === COMBO_COL },
+  { target: "#export-bundle-btn", panel: true, open: "export",
+    text: "点検が終わったら、ここでZIPに保存してください。次の点検はこのZIPを開くだけで始められ、今回の記録は「前回」として並びます。" },
+];
+
+/* 3本目の始まり。2本目の控えに加えて、メモを写しておく(削除するとき戻すため) */
+function surveyTourBegin() {
+  const c = columnTourBegin();
+  c.notes = new Map(csvRows.map((r) => [r, r[NOTE_COL]]));
+  c.hadNoteCol = csvColumns.includes(NOTE_COL);
+  c.endBody = "削除すると、付けた印と書いたメモもなくなり、色分けも元に戻ります。";
+  return c;
+}
+
 /* 案内の一覧。URLの ?tour= と、操作ガイドからの合図はこの名前で指す
    (?tour=1 は1本目。操作ガイドの古いリンクのため残す) */
 const TOURS = {
   basic: { steps: TOUR_STEPS, begin: basicTourBegin },
   columns: { steps: COLUMN_TOUR_STEPS, sampleOnly: true,
              begin: columnTourBegin, update: columnTourUpdate, end: columnTourEnd },
+  survey: { steps: SURVEY_TOUR_STEPS, sampleOnly: true,
+            begin: surveyTourBegin, update: columnTourUpdate, end: columnTourEnd },
 };
 function tourByName(name) {
   return Object.prototype.hasOwnProperty.call(TOURS, name) ? name : "basic";
@@ -11025,7 +11087,18 @@ function tourClearForSecond() {
 /* 10手目に入るとき: 選択を外し、選択モードも抜ける。色分けの色をそのまま見せるため */
 function tourClearForColor() {
   if (selectMode) setSelectMode(false);   // 抜けると選択も外れる
-  else clearSelection();
+  tourClearPick();
+}
+/* 選んでいるものを外す(選択モードはそのまま)。通常のタップで1つ選んでいる(強調表示)ときも
+   外す。空きをタップしたときと同じ後始末 */
+function tourClearPick() {
+  clearSelection();
+  if (highlightObj) {
+    document.getElementById("inspector").style.display = "none";
+    bindNoteEditor(null);
+    setHighlight(null);
+    renderClassifyUI();
+  }
 }
 function tourValueCount(col, value) {
   if (!col || !value) return 0;
@@ -11079,7 +11152,7 @@ function columnTourEnd(c) {
   if (made.length === 0) return;
   const names = made.map((x) => "「" + x + "」").join("");
   tourCard("練習で作った" + names + "の情報を削除しますか？",
-    "削除すると、付与した値もなくなり、色分けも元に戻ります。",
+    c.endBody || "削除すると、付与した値もなくなり、色分けも元に戻ります。",
     [["削除して終了する", () => removeTourColumns(c, made), true], ["残して終了する", null, false]],
     "残した情報は、次にサンプルを開いたときにも読み込まれます。");
 }
@@ -11092,10 +11165,24 @@ function removeTourColumns(c, made) {
   for (const r of csvRows) for (const col of made) delete r[col];
   for (let i = csvColumns.length - 1; i >= 0; i--) if (gone.has(csvColumns[i])) csvColumns.splice(i, 1);
   for (const col of made) { staticCols.delete(col); surveyCols.delete(col); classRecentValues.delete(col); }
+  // 点検の案内で書いたメモも、案内を始める前に戻す(メモ列が無かったなら列ごと消す)
+  if (c.notes) {
+    for (const r of csvRows) {
+      if (!c.notes.has(r)) continue;
+      const v = c.notes.get(r);
+      if (v === undefined) delete r[NOTE_COL]; else r[NOTE_COL] = v;
+    }
+    if (!c.hadNoteCol) {
+      for (const r of csvRows) delete r[NOTE_COL];
+      const i = csvColumns.indexOf(NOTE_COL);
+      if (i >= 0) csvColumns.splice(i, 1);
+    }
+  }
   rebuildInputDerived();
   refreshColumnChoices();
-  // 消した列で塗っていたら、案内を始める前の色分けに戻す
-  if (colorColumn && !csvColumns.includes(colorColumn)) {
+  // 消した列で塗っていたら、案内を始める前の色分けに戻す。点検の案内は記録の状況(履歴の列)で
+  // 塗るので、列が残っていても戻す(練習の記録が消えて、全部「記録なし」の図になるため)
+  if (colorColumn && (!csvColumns.includes(colorColumn) || (c.notes && colorColumn !== c.beforeColor))) {
     if (c.beforeColor && csvColumns.includes(c.beforeColor)) applyColorize(c.beforeColor);
     else clearColorize();
   }

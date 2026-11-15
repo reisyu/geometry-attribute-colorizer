@@ -279,6 +279,12 @@
         サンプルの石垣で進めます（自分のデータを開いているときは、新しいタブでサンプルを開きます）。
         練習で作った列は、最後に削除できます。</p>
       <p><a class="back-to-app" href="index.html?tour=columns" data-start-tour="columns">▶ 属性の付け方を案内する</a></p>
+      <p style="margin-top:18px"><span class="step-num">3</span><strong>点検の記録</strong>（11手・4〜5分）
+        <span class="pill dev">開発中</span></p>
+      <p>点検項目（はらみ出しなど）を作り、石に印を付け、メモ欄を見て、ブラシで選んだ石にまとめて印を付け、
+        記録の状況で色分けし、ZIPに保存するまでを案内します。1回目の点検の記録の付け方です。
+        サンプルの石垣で進めます。練習で作った点検項目は、最後に削除できます。</p>
+      <p><a class="back-to-app" href="index.html?tour=survey" data-start-tour="survey">▶ 点検の記録を案内する</a></p>
     </div>
 
     <!-- ============ はじめに ============ -->
@@ -816,6 +822,9 @@
 
     <!-- ============ 点検の記録 ============ -->
     <h2 id="note">点検の記録を付ける <span class="pill dev">開発中</span></h2>
+    <p>
+      <a class="back-to-app" href="index.html?tour=survey" data-start-tour="survey">▶ アプリの画面で点検の記録の付け方を案内する（4〜5分）</a>
+    </p>
     <div class="note">
       <strong>この節と「前回の記録を見ながら書く」は、まだ開発中の機能です。</strong>
       2026年10月に城郭石垣の管理を担当されている方へ現地で試用していただき、
@@ -1370,7 +1379,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.48.0";
+  const HELP_VERSION = "1.49.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 
