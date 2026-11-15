@@ -29,6 +29,7 @@
 | `tools/build_offline.js` | オフライン配布用の単一HTMLを作る（ライブラリを埋め込む） |
 | `extract_for_tests.js` | index.html から実関数を抽出して tests/extracted.js を作る |
 | `quickstart.html` | 配布・印刷用の1枚手順書（A4縦。dist にも入る） |
+| `test-request.html` | 開発版の試験のお願い(前回の試験からの変更点と、試してほしいこと)。試験を頼むたびに書き直す。配布版には入れない |
 | `add-columns.html` | 石ごとの項目（属性・点検項目）を追加する手引き（A4縦2ページ・印刷用。画面写真を埋め込み。dist にも入る） |
 | `build_offline.bat` | 上記をダブルクリックで実行する入口（Windows用。ASCIIのみで書くこと） |
 | `assets/hero-elevation.svg` | READMEの見出し画像。アプリ自身のSVG出力を使う |

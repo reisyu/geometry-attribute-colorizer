@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geometry Attribute Colorizer — 開発版の試験のお願い</title>
+<style>
+  /* 開発版を試していただく方へのお願い。試験を頼むたびに書き直す(前回の試験からの差分)。
+     体裁は quickstart.html・add-columns.html に揃える。配布版(dist)には入れない */
+  :root {
+    --ink: #1a1c1f;
+    --dim: #5b6169;
+    --line: #c9ced5;
+    --accent: #2f6f62;
+    --accent-bg: #eaf3f0;
+    --warn: #8a5410;
+    --warn-bg: #fbf1e3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    max-width: 210mm;
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: var(--ink);
+    background: #fff;
+  }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 5px; margin-bottom: 10px; }
+  h1 { font-size: 15pt; margin: 0 0 2px; }
+  .sub { font-size: 9pt; color: var(--dim); }
+  h2 {
+    font-size: 11pt; margin: 14px 0 6px; color: var(--accent);
+    border-bottom: 1px solid var(--line); padding-bottom: 2px;
+  }
+  h3 { font-size: 10.5pt; margin: 0 0 2px; }
+  p { margin: 0 0 6px; }
+  ul, ol { margin: 2px 0 6px; padding-left: 1.4em; }
+  li { margin-bottom: 2px; }
+  .ui {
+    display: inline-block; padding: 0 5px; border: 1px solid #b6d3cb;
+    border-radius: 3px; background: var(--accent-bg); color: #22544a;
+    font-size: 9.5pt; white-space: nowrap;
+  }
+  .ver, .url { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; }
+  .url { overflow-wrap: anywhere; }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 6px 0; }
+  th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #f4f6f8; font-weight: 600; width: 22%; }
+  .caution {
+    margin: 10px 0; border-left: 3px solid var(--warn); background: var(--warn-bg);
+    padding: 8px 12px; font-size: 9.5pt;
+  }
+  .caution strong { color: var(--warn); }
+  .box { border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; margin-bottom: 7px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .look { color: var(--dim); font-size: 9.5pt; }
+  .pill {
+    display: inline-block; font-size: 8.5pt; padding: 0 6px; border-radius: 3px; margin-left: 4px;
+    background: var(--accent-bg); color: #22544a; vertical-align: 1px;
+  }
+  .pill.dev { background: var(--warn-bg); color: var(--warn); }
+  ol.tests { padding-left: 0; list-style: none; counter-reset: t; }
+  ol.tests > li { counter-increment: t; display: grid; grid-template-columns: 22px 1fr; gap: 0 8px; }
+  ol.tests > li::before {
+    content: counter(t); width: 18px; height: 18px; border-radius: 50%; margin-top: 3px;
+    background: var(--accent); color: #fff; font-size: 9pt; display: grid; place-items: center;
+  }
+  footer {
+    margin-top: 12px; font-size: 8.5pt; color: var(--dim);
+    border-top: 1px solid var(--line); padding-top: 5px;
+  }
+  @media print {
+    body { padding: 10mm 12mm; }
+    @page { size: A4 portrait; margin: 0; }
+    h2 { break-after: avoid; }
+    .box, table, .caution { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>開発版の試験のお願い</h1>
+  <div class="sub">2026年11月15日 ・ 開発版 <span class="ver">v1.50.1</span></div>
+</header>
+
+<p>前回（11月10日 14:31 の開発版、<span class="ver">v1.40.1</span>）で試していただいてから、
+画面の組み立てと操作の案内を中心に手を入れました。変わったところと、試していただきたいことをまとめます。</p>
+
+<table>
+  <tr><th>開発版</th><td><span class="url">https://reisyu.github.io/geometry-attribute-colorizer/</span></td></tr>
+  <tr><th>安定版</th><td><span class="url">https://nabunken-info.github.io/geometry-attribute-colorizer/</span>（今回の変更は入っていません）</td></tr>
+  <tr><th>前回との差</th><td><span class="ver">v1.40.2</span> 〜 <span class="ver">v1.50.1</span></td></tr>
+</table>
+
+<div class="caution">
+  <strong>開発版です。</strong>現場での記録には安定版をお使いください。開発版で試すときは、
+  書き出した作業データ（ZIP）や記録のCSVを別に保存しておいてください。点検まわりの画面とZIPの中身は、今後も変わります。
+</div>
+
+<h2>主に変わったところ</h2>
+
+<div class="box">
+  <h3>アプリの画面で操作を案内する<span class="pill">新規</span></h3>
+  <p>画面の上に吹き出しが出て、押す場所を順に案内します。<span class="ui">? 操作ガイド</span>の先頭から始められます。</p>
+  <ul>
+    <li>基本の操作（9手・2〜3分）</li>
+    <li>属性の付け方（11手・4〜5分）：石種の列を作り、砂岩と花崗岩を付与して色分けし、ZIPに保存するまで</li>
+    <li>点検の記録（11手・4〜5分）<span class="pill dev">開発中</span>：点検項目を作り、「あり」の印を付け、ブラシでまとめて付け、記録の状況で色分けするまで</li>
+  </ul>
+  <p class="look">2本目と3本目はサンプルの石垣で進み、最後に練習で作った列を削除するか残すかを選べます。</p>
+</div>
+
+<div class="box">
+  <h3>右上のパネルを「属性」と「点検」に分け直した</h3>
+  <ul>
+    <li><strong>属性</strong>タブ：上に「属性の一覧」、下に「属性を付与する」（石種など）。どちらも見出しを押すと畳め、畳んだ状態は次も残ります</li>
+    <li><strong>点検</strong>タブ：点検日・点検者、点検項目、メモ、「記録の集計」（該当項目・記録の状況など）</li>
+    <li>初めて開いたときは「属性」タブが開きます。以後は最後に開いていたほうが開きます</li>
+    <li>「直前を取り消す」「選択を解除」はタブの外に出しました。見出しは「ID 63」のように出ます</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h3>値の付け方を変えた</h3>
+  <ul>
+    <li>新しい値は、その行の<span class="ui">＋</span>を押すと行の中に入力欄が開きます。Enterか「追加」で付きます</li>
+    <li>点灯している値をもう一度押しても外れません。外すときは<span class="ui">空にする</span>を押します（点検項目も同じ）</li>
+    <li>点検項目の印は「あり」で付ける説明にそろえました。手順2の名前は「2. 属性を追加する」になりました</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h3>保存は「作業データをZIPで保存」が基本</h3>
+  <ul>
+    <li>これまでの「点検データ」を「作業データ」と呼ぶようにしました。モデル・属性（付与した値も）・点検の記録が1つのZIPに入り、次はそれを開くだけで続きから始められます</li>
+    <li>未保存のあいだは、このZIPのボタンが目立つ色になります（これまでは「属性をCSVで保存」でした）</li>
+    <li>前回までに保存した「〜_点検データ.zip」も、そのまま開けます</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h3>まとめて選ぶ・見え方・図</h3>
+  <ul>
+    <li>ビュー右上の<span class="ui">選択</span>ボタンから「ブラシ」（なぞる）と「投げ縄」（囲む）を選べます。投げ縄は新しく足しました</li>
+    <li>「パース・平行投影・正面・上面」を1つのボタンにまとめ、ツールバーのいくつかを絵にしました（iPad縦でも1段に収まります）</li>
+    <li>背景モデル（写真付きのOBJ）を重ねているときは、書き出すSVGにも背景として入ります</li>
+    <li>凡例の件数は、図に出ている石（フィルタで除外していない石）だけを数えます</li>
+  </ul>
+</div>
+
+<h2>直した主な不具合</h2>
+<ul>
+  <li>点検項目に印だけ付けた石が、「記録の状況」で「記録なし」になっていた</li>
+  <li>「属性をCSVで保存」したファイルを前回の記録として重ねると、全部の石が「前回のみ」（赤）になっていた</li>
+  <li>ブラウザの控えから復元すると、点検項目が属性の列に変わっていた</li>
+  <li>「点検者」という名前の点検項目を作れてしまい、記録の点検者名が上書きされていた</li>
+  <li>属性と点検結果の色分けを行き来すると、表示している属性と実際の色が食い違うことがあった（6件）</li>
+  <li>初めて開いたとき、石を選ぶと右上に「属性」と「点検」の両方が出ていた</li>
+  <li>スマホなど幅の狭い画面で、右上のパネルの上端が左上の表示に隠れていた</li>
+</ul>
+
+<h2>試していただきたいこと</h2>
+<ol class="tests">
+  <li><div class="box">
+    <h3>3本の案内を最後まで通す</h3>
+    <p><span class="ui">? 操作ガイド</span>の先頭「画面で操作を案内する」から始めてください。</p>
+    <p class="look">見てほしいところ：吹き出しの文と画面が合っているか。iPadで文字を入れる手（列や項目の名前、点検者、値の追加）で、吹き出しがキーボードに隠れないか。</p>
+  </div></li>
+  <li><div class="box">
+    <h3>属性を付けて、見る</h3>
+    <p>石種などの列を作り、石を選んで「属性」タブの「属性を付与する」から値を付けてください。「属性の一覧」を畳んでから再読み込みもしてください。</p>
+    <p class="look">見てほしいところ：付けた値が「属性の一覧」に出るか。「空にする」で外れるか。畳んだ状態が残るか。</p>
+  </div></li>
+  <li><div class="box">
+    <h3>点検の記録を付ける<span class="pill dev">開発中</span></h3>
+    <p>点検項目を作り、「あり」の印とメモを付け、ブラシや投げ縄でまとめて印を付けてください。そのあと「点検結果で色分けする」で「履歴:記録の状況」を選んでください。</p>
+    <p class="look">見てほしいところ：今回記録した石が色付きになるか。「点検」タブの「記録の集計」の内容。</p>
+  </div></li>
+  <li><div class="box">
+    <h3>作業データ（ZIP）で保存して、開き直す</h3>
+    <p>保存したZIPを開き直してください。前回の開発版で保存したZIPがあれば、それも開いてください。</p>
+    <p class="look">見てほしいところ：作った列・付けた値・記録が戻るか。日付を変えて開いたとき、前の回が「前回」として出るか。</p>
+  </div></li>
+  <li><div class="box">
+    <h3>現場で使う端末で操作する</h3>
+    <p>iPadやスマホで、石を選ぶ・まとめて選ぶ・見え方を切り替える、を一通り試してください。</p>
+    <p class="look">見てほしいところ：右上のパネルが、ほかの表示に隠れたり重なったりしないか。押しにくいボタンがないか。</p>
+  </div></li>
+</ol>
+
+<h2>気づいた点の伝え方</h2>
+<ul>
+  <li>何をしたら何が起きたか（できれば画面写真も）</li>
+  <li>使った端末とブラウザ（例：iPad 第9世代・Safari）</li>
+  <li>分かりにくかった言葉や、迷った場所。不具合でなくても助かります</li>
+</ul>
+
+<footer>
+  Geometry Attribute Colorizer　—　読み込んだデータはすべて手元のブラウザ内だけで処理され、外部に送信されません。
+</footer>
+
+</body>
+</html>
