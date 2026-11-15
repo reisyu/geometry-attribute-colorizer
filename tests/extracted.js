@@ -109,8 +109,10 @@ const LEGEND_HIST_BINS = 24;
 const NOTE_YES = "あり", NOTE_NO = "なし";
 
 const TOUR_STEPS = [
+  // スマホでは左のパネルではなく全画面のメニューなので、言い方だけ変える(textPhone。作者が承認、2026-11-16)
   { target: "#sidebar", panel: true,
-    text: "左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。" },
+    text: "左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。",
+    textPhone: "メニューに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。" },
   { target: "#attribute", panel: true, open: "color",
     text: "色分けする属性を「Area(面積)」に変えてみてください。",
     hint: "押すと一覧が開きます。「Area(面積)」を選んでください。",

@@ -63,6 +63,13 @@ checkTargets("1本目 ", TOUR_STEPS);
 // 2手目は、Area の無いデータで読むだけの手になるため ok を持つが、補足の検査は名指しで行う
 checkTexts("1本目 ", TOUR_STEPS.map((s, i) => (i === 1 ? { ...s, ok: undefined } : s)));
 ok(TOUR_STEPS[1].hint && TOUR_STEPS[1].hint.includes("Area"), "2手目の補足は、選ぶ項目を名指しする");
+/* スマホでは左のパネルが全画面のメニューになった(v1.54.0)。1手目だけ、スマホ用の言い方を持つ(作者が承認) */
+ok(TOUR_STEPS[0].text === "左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。" &&
+   TOUR_STEPS[0].textPhone === "メニューに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。",
+   "**1手目は、スマホのときだけ「メニューに…」と言う**(パソコン・iPadは「左のパネルに…」のまま)");
+ok(html.includes("tourText(step.textPhone && isNarrowScreen() ? step.textPhone : step.text)"), "スマホ用の文面は、スマホの幅のときだけ出す");
+ok([...TOUR_STEPS, ...COLUMN_TOUR_STEPS, ...SURVEY_TOUR_STEPS].filter((s) => s.textPhone).length === 1,
+   "スマホ用の文面を持つのは、1本目の1手目だけ(増やすときは作者に見せる)");
 /* 5手目は「選んだ石の属性が、ここに出ます」。「点検」タブを開いていた人や一覧を畳んでいた人には、
    開かないと属性の一覧が見えず、文面と画面が食い違う(作者の確認で見つかった) */
 ok(TOUR_STEPS[4].tab === "attr" && TOUR_STEPS[4].unfold === "list", "**5手目は「属性」タブと属性の一覧を開く**");
