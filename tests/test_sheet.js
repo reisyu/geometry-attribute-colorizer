@@ -10,7 +10,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { sheetTap, sheetStep, sheetSummary, sheetRevealShift, SHEET_STATES, NOTE_COL } = require("./extracted.js");
+const { sheetTap, sheetStep, sheetSummary, sheetRevealShift, pivotedTarget, SHEET_STATES, NOTE_COL } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n, extra) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n + (extra ? "  " + extra : "")); };
@@ -73,6 +73,33 @@ ok(html.includes("revealSelectedAboveSheet();   // スマホ: シートに隠れ
    html.includes("revealSelectedAboveSheet();   // 高さを上げて石が隠れたら、見える所までずらす"),
    "石を選んだときと、シートの高さを変えたときにずらす");
 ok(html.includes("if (still || document.hidden) { move(total); return; }"), "動きを減らす設定の端末では、間をかけずに動かす");
+/* 0.22秒では速すぎて、どちらへ動いたかを目で追えなかった(作者の確認、v1.53.2) */
+ok(html.includes("const REVEAL_MS = 600;") && html.includes("const e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);"),
+   "**石垣は0.6秒かけて、ゆっくり始めてゆっくり止める**");
+ok(html.includes("cancelAnimationFrame(revealAnim);   // 石垣を自動でずらしている途中なら止める(指の操作を優先する)"),
+   "ずらしている途中で画面に触れたら止める");
+
+/* ---------- 回転中心は、見えている範囲の中心(v1.53.2) ---------- */
+/* シートが出ている間、画面の中央(シートの陰)を中心に回すと、見えている石垣が振り回される
+   (作者の指摘)。注視点は必ず画面の中央に映るので、中心を差し替えると画面が跳ぶ。
+   注視点は動かさず、回すたびに回転中心のまわりに注視点も同じだけ回す */
+{
+  const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+  const s = Math.SQRT1_2, I = [0, 0, 0, 1], Z90 = [0, 0, s, s], X90 = [s, 0, 0, s];
+  ok(near(pivotedTarget([2, 0, 0], [1, 0, 0], I, Z90), [1, 1, 0]), "**Z軸まわりに90度: 回転中心(1,0,0)のまわりに注視点(2,0,0)が(1,1,0)へ回る**");
+  ok(near(pivotedTarget([1, 0, 2], [1, 0, 0], I, X90), [1, -2, 0]), "X軸まわりに90度でも同じ決まりで回る");
+  ok(near(pivotedTarget([2, 3, 4], [2, 3, 4], I, Z90), [2, 3, 4]), "**回転中心が注視点そのものなら動かない**(今までの回り方と同じ)");
+  ok(near(pivotedTarget([2, 0, 0], [1, 0, 0], Z90, Z90), [2, 0, 0]), "向きが変わらなければ動かない");
+  // 向きの変化ぶんだけを使う(元の向きに依らない): Z90 → Z180 も、I → Z90 と同じ90度
+  ok(near(pivotedTarget([2, 0, 0], [1, 0, 0], Z90, [0, 0, 1, 0]), [1, 1, 0]), "回る量は、向きの変化ぶんで決まる");
+  // 回転中心からの距離は変わらない
+  const t = pivotedTarget([3, 1, -2], [1, 0, 0], I, [0.1826, 0.3651, 0.5477, 0.7303]);
+  ok(Math.abs(Math.hypot(t[0] - 1, t[1], t[2]) - Math.hypot(2, 1, 2)) < 1e-3, "回転中心からの距離は変わらない");
+}
+ok(html.includes("if (ndc) rotatePivot = pickPivotPoint(ndc);") && html.includes("else { rotatePivot = null; retargetPivot(); }"),
+   "**シートが出ている間は見えている範囲の中心で、出ていなければ今までどおり画面の中央で回す**");
+ok(html.includes("if (!isNarrowScreen()) return null;") && html.includes("if (!(wr.height > 0) || bottom - top < 40) return null;"),
+   "パソコン・iPadと、見える範囲がほとんど無いとき(シートが「高」)は、今までどおり");
 
 /* ---------- 部品 ---------- */
 {

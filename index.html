@@ -2085,9 +2085,65 @@ function retargetPivot(screenPos) {
   orbit.update();
 }
 
+/* スマホでシートが出ている間は、石垣の見えている範囲は画面の上半分だけになる。
+   画面の中央(シートの陰)を回転中心にすると、見えている石垣が大きく振り回されて
+   操作しにくい(作者の指摘、v1.53.2)。**見えている範囲の中心**にある面の点を中心に回す。
+
+   注視点(orbit.target)は必ず画面の中央に映るので、回転中心をそこへ差し替えると
+   画面が跳ぶ。注視点は動かさず、回すたびに「回転中心のまわりに注視点も回す」ことで、
+   画面を跳ばさずに中心だけを変える(pivotedTarget) */
+let rotatePivot = null;   // 回転中心(THREE.Vector3)。null なら注視点のまわりに回す
+
+/* 回転中心を pivot にしたときの新しい注視点。純関数。
+   視点の向きが qOld から qNew に変わるとき、注視点も pivot のまわりに同じだけ回す。
+   点は [x, y, z]、向きは [x, y, z, w](四元数) */
+function pivotedTarget(target, pivot, qOld, qNew) {
+  const mul = (a, b) => [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+  const conj = (q) => [-q[0], -q[1], -q[2], q[3]];
+  const dq = mul(qNew, conj(qOld));                     // 向きの変化ぶん
+  const v = [target[0] - pivot[0], target[1] - pivot[1], target[2] - pivot[2], 0];
+  const r = mul(mul(dq, v), conj(dq));                  // v を dq で回す
+  return [pivot[0] + r[0], pivot[1] + r[1], pivot[2] + r[2]];
+}
+
+/* いま見えている範囲(ツールバーの下〜シートの上端)の中心。シートが出ていなければ null */
+function visibleCenterNDC() {
+  if (!isNarrowScreen()) return null;
+  const insp = document.getElementById("inspector");
+  if (insp.style.display !== "block") return null;
+  const wr = wrap.getBoundingClientRect();
+  const top = document.getElementById("view-toolbar").getBoundingClientRect().bottom - wr.top;
+  const bottom = insp.getBoundingClientRect().top - wr.top;
+  if (!(wr.height > 0) || bottom - top < 40) return null;   // 見える範囲がほとんど無い(シートが「高」)
+  return new THREE.Vector2(0, 1 - (top + bottom) / wr.height);
+}
+
+/* 画面のその位置の先にある面の点。面が無ければ、注視点と同じ奥行きの点 */
+function pickPivotPoint(ndc) {
+  const targets = [];
+  if (modelRoot) targets.push(modelRoot);
+  if (backgroundRoot && backgroundRoot.visible) targets.push(backgroundRoot);
+  _pivotRay.setFromCamera(ndc, camera);
+  for (const h of _pivotRay.intersectObjects(targets, true)) {
+    if (h.object.visible) return h.point.clone();
+  }
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const depth = Math.max(orbit.target.clone().sub(camera.position).dot(dir), modelSize * 0.05);
+  const along = Math.max(_pivotRay.ray.direction.dot(dir), 1e-6);
+  const fromOrigin = depth - _pivotRay.ray.origin.clone().sub(camera.position).dot(dir);
+  return _pivotRay.ray.origin.clone().addScaledVector(_pivotRay.ray.direction, fromOrigin / along);
+}
+
 canvas.addEventListener("pointerdown", (e) => {
   // 中ボタン(1)ドラッグでブラウザ標準のオートスクロールが発動するのを抑止する
   if (e.button === 1) e.preventDefault();
+  cancelAnimationFrame(revealAnim);   // 石垣を自動でずらしている途中なら止める(指の操作を優先する)
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (activePointers.size === 2) {
     // 2本指: ピンチズーム + パンの開始
@@ -2111,7 +2167,12 @@ canvas.addEventListener("pointerdown", (e) => {
     } else {
       // 右ボタン(2)・中ボタン(1)・Shift+左 は平行移動、それ以外(左)は回転
       dragMode = (e.button === 1 || e.button === 2 || e.shiftKey) ? "pan" : "rotate";
-      if (dragMode === "rotate") retargetPivot();  // 回転開始時に中心を補正
+      if (dragMode === "rotate") {
+        // 回転開始時に中心を決める。シートが出ている間は、見えている範囲の中心で回す
+        const ndc = visibleCenterNDC();
+        if (ndc) rotatePivot = pickPivotPoint(ndc);
+        else { rotatePivot = null; retargetPivot(); }
+      }
     }
     lastX = e.clientX; lastY = e.clientY;
   }
@@ -2156,8 +2217,14 @@ canvas.addEventListener("pointermove", (e) => {
   lastX = e.clientX; lastY = e.clientY;
   if (dragMode === "rotate") {
     viewDirectionChanged();
+    const qOld = camera.quaternion.toArray();
     orbit.spherical.theta -= dx * 0.006;
     orbit.spherical.phi = Math.min(Math.PI - 0.05, Math.max(0.05, orbit.spherical.phi - dy * 0.006));
+    if (rotatePivot) {
+      orbit.update();   // 新しい向きを得てから、注視点を回転中心のまわりに回す
+      orbit.target.fromArray(pivotedTarget(orbit.target.toArray(), rotatePivot.toArray(),
+                                           qOld, camera.quaternion.toArray()));
+    }
   } else {
     const panScale = currentPanScale();
     const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
@@ -2351,7 +2418,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.53.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.53.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -6404,9 +6471,10 @@ function meshScreenSpanY(mesh) {
   return { top, bottom, depth: c.sub(camera.position).dot(dir) };
 }
 
-/* 石垣を画面の上へ px だけずらす(視点を平行移動する)。少しの間をかけて動かす。
+/* 石垣を画面の上へ px だけずらす(視点を平行移動する)。間をかけて動かす。
    一度に跳ぶと、どちらへどれだけ動いたかが分からない */
 let revealAnim = 0;
+const REVEAL_MS = 600;
 function panViewUp(px, depth) {
   const h = wrap.clientHeight;
   if (!h || !px) return;
@@ -6420,11 +6488,13 @@ function panViewUp(px, depth) {
   cancelAnimationFrame(revealAnim);
   const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (still || document.hidden) { move(total); return; }
-  const t0 = performance.now(), dur = 220;
+  /* 0.6秒かけて、ゆっくり始めてゆっくり止める。0.22秒では速すぎて、
+     どちらへ動いたかを目で追えなかった(作者の確認、v1.53.2) */
+  const t0 = performance.now(), dur = REVEAL_MS;
   let done = 0;
   const tick = (t) => {
-    const k = Math.min(1, (t - t0) / dur);
-    const e = 1 - (1 - k) * (1 - k);      // 終わりでゆるめる
+    const k = Math.min(1, Math.max(0, (t - t0) / dur));
+    const e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);   // ゆっくり始めて、ゆっくり止める
     move(total * e - done);
     done = total * e;
     if (k < 1) revealAnim = requestAnimationFrame(tick);
