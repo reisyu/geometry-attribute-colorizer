@@ -287,7 +287,14 @@
 
     <!-- ============ クイックスタート ============ -->
     <h2 id="quickstart">クイックスタート</h2>
-    <p>まず何ができるか触ってみたい場合の最短手順です。所要2〜3分。</p>
+    <p>
+      <a class="back-to-app" href="index.html?tour=1" data-start-tour>▶ アプリの画面で操作を案内する（2〜3分）</a>
+    </p>
+    <p>
+      アプリの画面の上に吹き出しが出て、押す場所を順に案内します（9手）。
+      読んで進む手と、実際に操作すると進む手があります。途中でやめても、ここからいつでも始め直せます。
+    </p>
+    <p>文章で読みたい場合は、下の最短手順を見てください。所要2〜3分。</p>
     <div class="card">
       <p><span class="step-num">1</span><strong>サンプルを表示する</strong></p>
       <p>アプリを開くと、内蔵のサンプル石垣が自動で表示されます（何も読み込まなくてOK）。
@@ -1269,8 +1276,20 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
     });
   });
 
+  // 「操作を案内する」: このガイドをアプリから開いていれば、アプリの窓に合図を送って
+  // 案内を始め、このタブを閉じる(アプリの窓に戻ると案内が出ている)。
+  // 閉じられないときは、このタブでアプリを開いて案内を始める(?tour=1)
+  document.querySelectorAll("[data-start-tour]").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      try { if (window.opener) window.opener.postMessage({ type: "gac-start-tour" }, "*"); } catch (err) { /* 送れなければ下で開く */ }
+      if (window.opener) window.close();
+      setTimeout(() => { window.location.href = a.getAttribute("href"); }, 120);
+    });
+  });
+
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.44.0";
+  const HELP_VERSION = "1.45.0";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

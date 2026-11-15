@@ -691,6 +691,46 @@
 
   /* 範囲が成立しないときの確認ダイアログ。利用者の設定を黙って変えないため、
      どうするかを選ばせる */
+  /* ---------- 操作の案内(§10.10) ----------
+     説明する部品だけを明るく切り抜き、そばに吹き出しを出す。
+     幕は見た目だけで、押す操作は素通しにする(案内の最中も画面を回したり、
+     言われた操作を実際にしたりできるように) */
+  #tour-hole {
+    position: fixed;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(8, 9, 11, 0.62);
+    pointer-events: none;
+    z-index: 30;
+    transition: left .3s ease, top .3s ease, width .3s ease, height .3s ease;
+  }
+  #tour-hole.none { width: 0; height: 0; border: none; }
+  /* 吹き出し。**灰色の文字は使わない**(見本で、白地に灰色の文字が読みにくいと指摘された) */
+  #tour-bubble, #tour-card {
+    position: fixed;
+    z-index: 31;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: calc(13px * var(--ui-scale));
+    line-height: 1.7;
+  }
+  #tour-bubble { width: min(calc(270px * var(--ui-scale)), calc(100vw - 24px)); transition: left .3s ease, top .3s ease; }
+  #tour-bubble .tour-count { color: var(--accent); font-weight: 700; font-size: calc(11px * var(--ui-scale)); margin-bottom: 2px; }
+  #tour-bubble .tour-hint { color: var(--accent); margin-top: 6px; font-size: calc(12px * var(--ui-scale)); }
+  #tour-bubble .tour-hint::before { content: "▶ "; }
+  #tour-bubble .tour-acts, #tour-card .tour-acts { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
+  #tour-bubble button, #tour-card button { margin-top: 0; width: auto; padding: 5px 14px; }
+  #tour-bubble button:disabled { opacity: 1; background: transparent; color: var(--ink); border: 1px dashed var(--ink-dim); cursor: default; }
+  #tour-card {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(calc(320px * var(--ui-scale)), calc(100vw - 24px));
+  }
+  #tour-card h3 { color: var(--accent); font-size: calc(15px * var(--ui-scale)); margin: 0 0 6px; }
+  #tour-card .tour-note { margin-top: 10px; font-size: calc(12px * var(--ui-scale)); }
+  #tour-dim { position: fixed; inset: 0; background: rgba(8, 9, 11, 0.62); z-index: 30; }
   #range-dialog, #bg-dialog {
     position: absolute;
     inset: 0;
@@ -2087,7 +2127,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.44.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.45.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -10713,10 +10753,213 @@ function applyShareLabels() {
 /* ============================================================
    起動: 全ての宣言が終わったここでレンダリングループを開始する
 ============================================================ */
+/* ============================================================
+   操作の案内(§10.10)
+
+   起動時のサンプルで、基本の操作を9手で案内する。説明する部品を切り抜いて
+   吹き出しを出す。読んで「次へ」の手と、**実際にやると「次へ」が押せるようになる手**
+   (属性を変える・石をタップする・見え方を正面にする)がある。
+
+   - 初めて開いたときだけ、案内するかを尋ねる(勝手に始めない。現場で開いた人の
+     作業を止めないため)。答えたら次からは尋ねない
+   - 操作ガイドから、いつでも始め直せる(?tour=1、または操作ガイドからの合図)
+   - 案内がデータを読み込み直すことはしない。いま開いているデータのまま進める
+   - 吹き出しの文面は作者が確かめたもの(2026-11-15)。変えるときは作者に見せる
+   - **指す部品の名前は tests/test_tour.js が本体に実在するかを確かめる。**
+     画面を組み直して部品が消えたら、テストが失敗する
+============================================================ */
+const TOUR_KEY = "gac.tour.v1";
+const TOUR_STEPS = [
+  { target: "#sidebar", panel: true,
+    text: "左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。" },
+  { target: "#attribute", panel: true, open: "color",
+    text: "色分けする属性を「Area(面積)」に変えてみてください。",
+    hint: "押すと一覧が開きます。「Area(面積)」を選んでください。",
+    // Area の無いデータ(自動計算の無いGLBなど)では、やりようが無いので読むだけの手にする
+    ok: () => colorColumn === "Area" ||
+      ![...document.getElementById("attribute").options].some((o) => o.value === "Area") },
+  { target: "#legend",
+    text: "図の色と、左下の凡例が変わりました。凡例には、値ごとの石の数(分布)も出ます。" },
+  { target: "#viewport-wrap canvas",
+    text: "石を1つタップしてください。",
+    hint: "どの石でもかまいません。",
+    ok: () => !!highlightObj || selection.size > 0 },
+  { target: "#inspector",
+    text: "選んだ石の属性が、ここに出ます。点検の記録も、ここから書き込みます。" },
+  { target: "#view-mode",
+    text: "見え方を「正面」にすると、立面図と同じ向きで見られます。",
+    hint: "押すと一覧が開きます。「正面」を選んでください。",
+    ok: () => viewMode === "front" },
+  { target: "#select-pick",
+    text: "ここから「ブラシ」か「投げ縄」を選ぶと、なぞったり囲んだりして、石をまとめて選べます。" },
+  { target: '[data-step="export"] .step-label', panel: true,
+    text: "できた図や記録は、「7. 書き出す」から保存します。" },
+  { target: "#help-link", panel: true,
+    text: "くわしい説明は、いつでもここから開けます。この案内も、操作ガイドから始め直せます。" },
+];
+
+let tour = null;   // { i, entered, done }
+
+function tourMarkSeen() {
+  try { localStorage.setItem(TOUR_KEY, "seen"); } catch (e) { /* 保存できなくても続ける */ }
+}
+
+/* 初めて開いたときに、案内するかを尋ねる */
+function offerTour() {
+  if (tour || document.getElementById("tour-card")) return;
+  const dim = document.createElement("div");
+  dim.id = "tour-dim";
+  const card = document.createElement("div");
+  card.id = "tour-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "操作の案内");
+  card.innerHTML =
+    "<h3>はじめて利用する方へ</h3>" +
+    "<div>石垣のサンプルデータを使って、基本操作を2〜3分で案内します。</div>" +
+    '<div class="tour-acts"><button class="action" id="tour-go">案内を始める</button>' +
+    '<button class="ghost" id="tour-later">あとで</button></div>' +
+    '<div class="tour-note">案内は、操作ガイドからいつでも始められます。</div>';
+  document.body.appendChild(dim);
+  document.body.appendChild(card);
+  const close = () => { dim.remove(); card.remove(); tourMarkSeen(); };
+  document.getElementById("tour-go").addEventListener("click", () => { close(); startTour(); });
+  document.getElementById("tour-later").addEventListener("click", close);
+}
+
+function startTour() {
+  if (tour || meshes.length === 0) return;
+  // 色分けしていなければ、いまの属性で塗っておく(凡例を見せる手があるため)
+  if (!colorColumn && csvRows.length) applyColorize(document.getElementById("attribute").value);
+  const hole = document.createElement("div");
+  hole.id = "tour-hole";
+  const bub = document.createElement("div");
+  bub.id = "tour-bubble";
+  bub.setAttribute("role", "dialog");
+  bub.setAttribute("aria-live", "polite");
+  document.body.appendChild(hole);
+  document.body.appendChild(bub);
+  tour = { i: 0, entered: -1, done: null };
+  tourMarkSeen();
+  requestAnimationFrame(tourFrame);
+}
+
+function endTour() {
+  if (!tour) return;
+  tour = null;
+  for (const id of ["tour-hole", "tour-bubble"]) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+}
+
+/* 手に入ったとき1回だけ: 閉じている部品を開き、見える位置まで送る */
+function tourEnterStep(step) {
+  if (step.panel && document.body.classList.contains("panel-collapsed")) setPanelCollapsed(false);
+  if (step.open) {
+    const st = document.querySelector('[data-step="' + step.open + '"]');
+    if (st) st.classList.remove("collapsed");
+  }
+  const el = document.querySelector(step.target);
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });   // 端に寄ると、切り抜きが画面の縁で欠ける
+  const bub = document.getElementById("tour-bubble");
+  const n = TOUR_STEPS.length;
+  const last = tour.i === n - 1;
+  bub.innerHTML =
+    '<div class="tour-count">' + (tour.i + 1) + " / " + n + "</div>" +
+    '<div class="tour-text"></div><div class="tour-hint"></div>' +
+    '<div class="tour-acts"><button class="ghost" id="tour-quit">やめる</button>' +
+    '<button class="action" id="tour-next">' + (last ? "終わる" : "次へ") + "</button></div>";
+  bub.querySelector(".tour-text").textContent = step.text;
+  document.getElementById("tour-quit").addEventListener("click", endTour);
+  document.getElementById("tour-next").addEventListener("click", () => {
+    if (!tour) return;
+    if (tour.i >= n - 1) { endTour(); return; }
+    tour.i++;
+  });
+  tour.done = null;   // 次のフレームで表示を合わせる
+}
+
+/* 毎フレーム: 切り抜きと吹き出しの位置を合わせ、「やると進む」手の条件を確かめる。
+   位置を毎回取り直すのは、パネルのスクロール・ツールバーの折り返し・インスペクタの
+   出入りで部品が動くため(出来事ごとに追いかけると取りこぼす) */
+function tourFrame() {
+  if (!tour) return;
+  const step = TOUR_STEPS[tour.i];
+  if (tour.entered !== tour.i) { tour.entered = tour.i; tourEnterStep(step); }
+
+  const done = !step.ok || !!step.ok();
+  if (done !== tour.done) {
+    tour.done = done;
+    const hint = document.querySelector("#tour-bubble .tour-hint");
+    hint.textContent = !done && step.hint ? step.hint : "";
+    hint.style.display = !done && step.hint ? "" : "none";
+    document.getElementById("tour-next").disabled = !done;
+  }
+
+  const hole = document.getElementById("tour-hole");
+  const bub = document.getElementById("tour-bubble");
+  const el = document.querySelector(step.target);
+  const r = el ? el.getBoundingClientRect() : null;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const visible = r && r.width > 0 && r.height > 0;
+  const pad = 6;
+  if (visible) {
+    hole.classList.remove("none");
+    hole.style.left = (r.left - pad) + "px";
+    hole.style.top = (r.top - pad) + "px";
+    hole.style.width = (r.width + pad * 2) + "px";
+    hole.style.height = (r.height + pad * 2) + "px";
+  } else {
+    // 指す部品が見えていない(色分けできなかった等)。吹き出しだけを中央に出す
+    hole.classList.add("none");
+    hole.style.left = (vw / 2) + "px"; hole.style.top = (vh / 2) + "px";
+  }
+
+  const bw = bub.offsetWidth, bh = bub.offsetHeight, gap = 14, m = 8;
+  let x, y;
+  if (!visible) {
+    x = (vw - bw) / 2; y = (vh - bh) / 2;
+  } else if (vw < 700) {
+    // 狭い画面では、部品の横に置く場所が無い。画面の下に固定する(部品が下にあれば上)
+    x = (vw - bw) / 2;
+    y = r.top + r.height / 2 > vh / 2 ? m : vh - bh - m;
+  } else {
+    x = r.right + gap; y = r.top;
+    if (x + bw > vw - m) x = r.left - bw - gap;
+    if (x < m) {
+      x = Math.min(Math.max(m, r.left), vw - bw - m);
+      y = r.bottom + gap;
+      if (y + bh > vh - m) y = r.top - bh - gap;
+    }
+    y = Math.max(m, Math.min(y, vh - bh - m));
+  }
+  bub.style.left = Math.round(x) + "px";
+  bub.style.top = Math.round(y) + "px";
+  requestAnimationFrame(tourFrame);
+}
+
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && tour) endTour(); });
+/* 操作ガイドの「操作の案内を始める」から。アプリの窓に合図が届く */
+window.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "gac-start-tour") startTour();
+});
+
 restoreSettings();
 applyShareLabels();
 animate();
 loadSampleData();
+
+/* 操作の案内。URLに ?tour=1 があれば始める(操作ガイドから開いたとき)。
+   初めて開いた人には、案内するかを尋ねる。サンプルを表示しているときだけ
+   (自分のデータで作業している人を止めない)。起動の知らせが落ち着いてから出す */
+setTimeout(() => {
+  let want = false, seen = false;
+  try { want = new URLSearchParams(location.search).get("tour") === "1"; } catch (e) { /* 無視 */ }
+  try { seen = localStorage.getItem(TOUR_KEY) === "seen"; } catch (e) { seen = true; }
+  if (want) { startTour(); return; }
+  const sample = document.getElementById("sample-badge").classList.contains("active");
+  if (!seen && sample && !hasUnsavedNotes) offerTour();
+}, 1500);
 
 </script>
 </body>

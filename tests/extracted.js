@@ -104,6 +104,35 @@ const LEGEND_HIST_BINS = 24;
 
 const NOTE_YES = "あり", NOTE_NO = "なし";
 
+const TOUR_STEPS = [
+  { target: "#sidebar", panel: true,
+    text: "左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。" },
+  { target: "#attribute", panel: true, open: "color",
+    text: "色分けする属性を「Area(面積)」に変えてみてください。",
+    hint: "押すと一覧が開きます。「Area(面積)」を選んでください。",
+    // Area の無いデータ(自動計算の無いGLBなど)では、やりようが無いので読むだけの手にする
+    ok: () => colorColumn === "Area" ||
+      ![...document.getElementById("attribute").options].some((o) => o.value === "Area") },
+  { target: "#legend",
+    text: "図の色と、左下の凡例が変わりました。凡例には、値ごとの石の数(分布)も出ます。" },
+  { target: "#viewport-wrap canvas",
+    text: "石を1つタップしてください。",
+    hint: "どの石でもかまいません。",
+    ok: () => !!highlightObj || selection.size > 0 },
+  { target: "#inspector",
+    text: "選んだ石の属性が、ここに出ます。点検の記録も、ここから書き込みます。" },
+  { target: "#view-mode",
+    text: "見え方を「正面」にすると、立面図と同じ向きで見られます。",
+    hint: "押すと一覧が開きます。「正面」を選んでください。",
+    ok: () => viewMode === "front" },
+  { target: "#select-pick",
+    text: "ここから「ブラシ」か「投げ縄」を選ぶと、なぞったり囲んだりして、石をまとめて選べます。" },
+  { target: '[data-step="export"] .step-label', panel: true,
+    text: "できた図や記録は、「7. 書き出す」から保存します。" },
+  { target: "#help-link", panel: true,
+    text: "くわしい説明は、いつでもここから開けます。この案内も、操作ガイドから始め直せます。" },
+];
+
 function normalizeId(raw) {
   const s = String(raw ?? "").trim();
   const n = Number(s);
@@ -1327,4 +1356,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipNextValue, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
