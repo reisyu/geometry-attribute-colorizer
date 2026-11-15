@@ -18,6 +18,8 @@ const CRC32_TABLE = (() => {
   return t;
 })();
 
+const SHEET_STATES = ["low", "mid", "high"];
+
 const PALETTE = [
   [0.90, 0.20, 0.20], [0.20, 0.55, 0.90], [0.25, 0.75, 0.35], [0.95, 0.65, 0.15],
   [0.60, 0.30, 0.80], [0.20, 0.80, 0.80], [0.85, 0.75, 0.15], [0.90, 0.45, 0.65],
@@ -764,6 +766,32 @@ function classChipWrite(currentValues, tapped) {
   return t;
 }
 
+function sheetTap(state) {
+  return state === "low" ? "mid" : state === "mid" ? "high" : "mid";
+}
+
+function sheetStep(state, dir) {
+  const i = SHEET_STATES.indexOf(state);
+  if (i < 0) return "mid";
+  return SHEET_STATES[Math.max(0, Math.min(SHEET_STATES.length - 1, i + (dir > 0 ? 1 : -1)))];
+}
+
+function sheetSummary(row, itemCols, hist) {
+  if (!row) return { marks: "", prev: "" };
+  const parts = [];
+  for (const c of itemCols || []) {
+    const v = String(row[c] ?? "").trim();
+    if (v) parts.push(c + ": " + v);
+  }
+  if (String(row[NOTE_COL] ?? "").trim() !== "") parts.push("メモあり");
+  const past = (hist || []).filter((h) => !h.same)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return {
+    marks: parts.join(" / "),
+    prev: past ? "前回 " + past.date + (past.who ? " " + past.who : "") + ": " + past.text : "",
+  };
+}
+
 function classChoices(counted, recent) {
   const out = Array.from(counted || []).map((e) => [e[0], e[1]]);
   const seen = new Set(out.map((e) => e[0]));
@@ -1454,4 +1482,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, OLD_HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { SHEET_STATES, PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, HIT_COL, OLD_HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, sheetTap, sheetStep, sheetSummary, classChoices, recordHeaderColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

@@ -49,6 +49,7 @@ const TESTS = [
   ["test_selection.js", "ブラシ選択の当たり判定"],
   ["test_lasso.js", "投げ縄で選ぶ"],
   ["test_tour.js", "操作の案内"],
+  ["test_sheet.js", "スマホのシートと凡例の札"],
   ["test_classify.js", "分類の列(手入力)"],
   ["test_colkind.js", "属性と点検項目の分離"],
   ["test_derived.js", "今回の入力から作る列"],

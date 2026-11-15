@@ -33,7 +33,7 @@ const FUNCS = [
   "legendRowLabels",
   "backgroundImageSize",
   "approxMB",
-  "classChipWrite",
+  "classChipWrite", "sheetTap", "sheetStep", "sheetSummary",
   "classChoices",
   "recordHeaderColumns",
   "ledgerColumns",
@@ -93,7 +93,7 @@ const FUNCS = [
 ];
 
 // 抽出対象の定数
-const CONSTS = ["PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN", "REF_PREFIX", "HIST_PREFIX", "NOTE_FLAG_COL", "COMBO_COL", "COMBO_PREV", "COMBO_BOTH", "COMBO_NOW", "COMBO_NONE", "SURVEYOR_NONE",
+const CONSTS = ["SHEET_STATES", "PALETTE", "NOTE_COL", "NOTE_LABEL_MAX", "ATTR_INFO", "JP_ZONES", "GEO_ACCEPT_M", "GEO_MARGIN", "REF_PREFIX", "HIST_PREFIX", "NOTE_FLAG_COL", "COMBO_COL", "COMBO_PREV", "COMBO_BOTH", "COMBO_NOW", "COMBO_NONE", "SURVEYOR_NONE",
   "FILENAME_NG", "FILENAME_TRIM", "RECTLINE_HIST_BINS",
   "SURVEY_DATE_COL", "SURVEYOR_COL",
   "HIT_COL", "OLD_HIT_COL", "HIT_MULTI", "HIT_NONE", "OTHER_COLOR", "LEGEND_HIST_BINS", "NOTE_YES", "TOUR_STEPS", "COLUMN_TOUR_STEPS", "SURVEY_TOUR_STEPS"];

@@ -961,6 +961,9 @@
   }
   .obj-label .lkey { color: var(--ink-dim); }
 
+  /* スマホ用の部品(§10.11)。幅700px未満のときだけ出す */
+  #insp-sheet-handle, #insp-sheet-sum, #insp-sheet-close, #legend-toggle { display: none; }
+
   /* ---------- 属性インスペクタ ---------- */
   #inspector {
     position: absolute;
@@ -1175,6 +1178,58 @@
     #minimap { left: 16px; right: auto; bottom: 16px; }
     #viewport-wrap.mm-open #legend-stack { bottom: 296px; }
     #viewport-wrap.mm-open #inspector { max-height: calc(100% - 70px); }
+
+    /* ---- スマホ: 右上のパネルを、下から出るシートにする(§10.11、v1.52.0) ----
+       入力を親指の届く画面の下に集める。高さは3段階(data-sheet = low / mid / high) */
+    #viewport-wrap #inspector,
+    #viewport-wrap.tb-wrapped #inspector,
+    #viewport-wrap.mm-open #inspector {
+      left: 0; right: 0; top: auto; bottom: 0;
+      width: auto; min-width: 0; max-width: none; max-height: none;
+      border-radius: 14px 14px 0 0;
+      border-left: 0; border-right: 0; border-bottom: 0;
+      padding: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
+      z-index: 7;
+      /* 透かさない。シートは画面の半分を覆うので、後ろの石垣が透けると文字が読みにくい */
+      background: rgb(33, 36, 42);
+    }
+    body.light #viewport-wrap #inspector { background: rgb(255, 255, 255); }
+    #inspector[data-sheet="mid"] { height: 46%; }
+    #inspector[data-sheet="high"] { height: calc(100% - var(--tb-top, 16px) - var(--tb-h, 28px) - 14px); }
+    /* 低: 番号と要約だけ。面は JS が style.display を直に書くので !important で畳む */
+    #inspector[data-sheet="low"] > :not(#insp-sheet-handle):not(#insp-sheet-top):not(#insp-sheet-sum) { display: none !important; }
+    #insp-sheet-handle {
+      display: flex; justify-content: center; align-items: center;
+      height: 26px; margin: 0 -14px; cursor: grab; touch-action: none;
+      position: sticky; top: 0; z-index: 1; background: inherit;
+    }
+    #insp-sheet-handle span { width: 40px; height: 4px; border-radius: 2px; background: var(--ink-dim); opacity: .7; }
+    #insp-sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    #inspector .insp-name { margin-bottom: 0; font-size: calc(14px * var(--ui-scale)); }
+    #insp-sheet-close {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; margin: -4px -8px -4px 0;
+      background: none; border: 0; color: var(--ink-dim); font-size: calc(20px * var(--ui-scale)); cursor: pointer;
+    }
+    #insp-sheet-sum { display: block; margin: 2px 0 8px; font-family: var(--sans, inherit); line-height: 1.5; }
+    #insp-sheet-sum .ss-marks { color: var(--ink); }
+    #insp-sheet-sum .ss-none { color: var(--ink-dim); }
+    #insp-sheet-sum .ss-prev { color: var(--warn); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #insp-sheet-sum:empty { display: none; }
+
+    /* ---- スマホ: 凡例は札に畳む。シートが出ている間は隠す(低のときはシートの上に出す) ---- */
+    #legend-toggle {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(33,36,42,.92); color: var(--ink);
+      border: 1px solid var(--panel-edge); border-radius: 999px;
+      padding: 7px 12px; font-size: calc(12px * var(--ui-scale)); cursor: pointer;
+    }
+    body.light #legend-toggle { background: rgba(255, 255, 255, 0.92); }
+    #legend-toggle::after { content: "▾"; }
+    #legend-stack.legend-folded #legend-toggle::after { content: "▸"; }
+    #legend-stack.legend-folded > :not(#legend-toggle) { display: none !important; }
+    #viewport-wrap.sheet-open #legend-stack { display: none; }
+    #viewport-wrap.sheet-open.sheet-low #legend-stack { display: flex; bottom: calc(var(--sheet-h, 0px) + 8px); }
   }
 </style>
 </head>
@@ -1642,7 +1697,9 @@
   </div>
 
   <!-- 凡例類。傾きの分布は色分けの凡例と別のことを言うので、箱を分けて縦に積む -->
-  <div id="legend-stack">
+  <div id="legend-stack" class="legend-folded">
+    <!-- スマホでは凡例を札に畳む(§10.11)。押すと開く。パソコン・iPadでは出さない -->
+    <button id="legend-toggle" type="button" aria-expanded="false">凡例</button>
     <div id="rectline-legend">
       <div class="legend-title">傾き <span id="rectline-hist-n"></span></div>
       <div id="rectline-hist"></div>
@@ -1659,8 +1716,14 @@
     </div>
   </div>
 
-  <div id="inspector">
-    <div class="insp-name" id="insp-name"></div>
+  <div id="inspector" data-sheet="mid">
+    <!-- スマホでは下から出るシートになる(§10.11)。つまみ・閉じる・要約はスマホでだけ出す -->
+    <div id="insp-sheet-handle" role="button" tabindex="0" aria-label="パネルの高さを変える"><span></span></div>
+    <div id="insp-sheet-top">
+      <div class="insp-name" id="insp-name"></div>
+      <button id="insp-sheet-close" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div id="insp-sheet-sum"></div>
     <!-- 現場では属性表をほとんど見ず、デスクでは逆になる。役割で分けて、
          最後に開いていたほうを次も開く(§10.9)。初めては「属性」 -->
     <div class="insp-tabs" role="tablist">
@@ -2193,7 +2256,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.51.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.52.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -6165,6 +6228,141 @@ document.getElementById("ref-input").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 document.getElementById("ref-clear").addEventListener("click", clearReference);
+/* ============================================================
+   スマホ: 下から出るシートと、凡例の札(§10.11、v1.52.0)
+
+   幅700px未満では、右上のパネル(インスペクタ)を画面の下から出るシートにする。
+   点検は「石を見る → 選ぶ → 印とメモを付ける」の繰り返しで、片手の親指だけで
+   済ませたい。右上のパネルは親指から遠く、石垣も隠していた。
+
+   高さは3段階。低 = 番号と要約だけ(次々に選ぶとき)、中 = 点検項目とメモ(選んだ直後)、
+   高 = 属性の一覧と記録の集計まで。見た目はCSSの @media の中だけにあり、
+   パソコン・iPadの画面は変わらない(ここの状態は持つが、何も起こさない)
+============================================================ */
+const SHEET_STATES = ["low", "mid", "high"];
+/* 1つ選んでいるときと、まとめて選んでいるときで別々に覚える。まとめて選ぶ間は
+   石垣をなぞり続けるので「低」から始める(中だと下半分が隠れて、なぞれない) */
+const sheetState = { single: "mid", multi: "low" };
+let sheetWasOpen = false;
+
+/* つまみを押したときの次の高さ。低→中、中→高、高→中。純関数 */
+function sheetTap(state) {
+  return state === "low" ? "mid" : state === "mid" ? "high" : "mid";
+}
+/* つまみを上下に払ったときの次の高さ。dir は上が +1、下が -1。端では動かない。純関数 */
+function sheetStep(state, dir) {
+  const i = SHEET_STATES.indexOf(state);
+  if (i < 0) return "mid";
+  return SHEET_STATES[Math.max(0, Math.min(SHEET_STATES.length - 1, i + (dir > 0 ? 1 : -1)))];
+}
+/* シートの要約。今回の印(項目: 値)とメモの有無、前回の記述の先頭。純関数。
+   「低」でも、何が付いているかと前回の指摘が読めるようにする */
+function sheetSummary(row, itemCols, hist) {
+  if (!row) return { marks: "", prev: "" };
+  const parts = [];
+  for (const c of itemCols || []) {
+    const v = String(row[c] ?? "").trim();
+    if (v) parts.push(c + ": " + v);
+  }
+  if (String(row[NOTE_COL] ?? "").trim() !== "") parts.push("メモあり");
+  const past = (hist || []).filter((h) => !h.same)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return {
+    marks: parts.join(" / "),
+    prev: past ? "前回 " + past.date + (past.who ? " " + past.who : "") + ": " + past.text : "",
+  };
+}
+
+function isNarrowScreen() {
+  return !!window.matchMedia && window.matchMedia("(max-width: 700px)").matches;
+}
+function sheetMode() { return selection.size >= 2 ? "multi" : "single"; }
+
+/* いまの状態を画面に映す。パネルを出したり隠したりした後に呼ぶ */
+function applySheet() {
+  const insp = document.getElementById("inspector");
+  const open = insp.style.display === "block";
+  const st = sheetState[sheetMode()];
+  insp.dataset.sheet = st;
+  const narrow = isNarrowScreen();
+  wrap.classList.toggle("sheet-open", open);
+  wrap.classList.toggle("sheet-low", open && st === "low");
+  /* シートが出たら左のパネルを畳む。開いたままだと、パネル(上45%)とシートに挟まれて
+     石垣がほとんど見えない。畳んだ状態は上端のつまみで戻せる */
+  if (narrow && open && !sheetWasOpen && !document.body.classList.contains("panel-collapsed")) {
+    setPanelCollapsed(true);
+  }
+  sheetWasOpen = open;
+  wrap.style.setProperty("--sheet-h",
+    (narrow && open ? Math.round(insp.getBoundingClientRect().height) : 0) + "px");
+}
+function setSheetState(s) {
+  if (!SHEET_STATES.includes(s)) return;
+  sheetState[sheetMode()] = s;
+  applySheet();
+}
+
+/* シートの要約を書く(1つ選んでいるとき)。まとめて選んでいるときは空にする */
+function renderSheetSummary(row) {
+  const box = document.getElementById("insp-sheet-sum");
+  if (!box) return;
+  box.textContent = "";
+  if (!row) return;
+  const s = sheetSummary(row, surveyItemColumns(), recordHistoryFor(row));
+  const m = document.createElement("div");
+  m.className = s.marks ? "ss-marks" : "ss-none";
+  m.textContent = s.marks || "今回の記録はまだありません";
+  box.appendChild(m);
+  if (s.prev) {
+    const p = document.createElement("div");
+    p.className = "ss-prev";
+    p.textContent = s.prev;
+    p.title = s.prev;
+    box.appendChild(p);
+  }
+}
+
+/* シートを閉じる。空きをタップしたときと同じ後始末(選択も外す) */
+function closeInspectorSheet() {
+  if (selection.size > 0) clearSelection();
+  document.getElementById("inspector").style.display = "none";
+  bindNoteEditor(null);
+  setHighlight(null);
+  renderClassifyUI();
+  applySheet();
+}
+
+{
+  const handle = document.getElementById("insp-sheet-handle");
+  let startY = null;
+  handle.addEventListener("pointerdown", (e) => { startY = e.clientY; handle.setPointerCapture(e.pointerId); });
+  handle.addEventListener("pointerup", (e) => {
+    if (startY === null) return;
+    const dy = e.clientY - startY;
+    startY = null;
+    const cur = sheetState[sheetMode()];
+    // 少ししか動いていなければ「押した」、動いていれば払った向きへ1段
+    setSheetState(Math.abs(dy) < 10 ? sheetTap(cur) : sheetStep(cur, dy < 0 ? 1 : -1));
+  });
+  handle.addEventListener("pointercancel", () => { startY = null; });
+  handle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSheetState(sheetTap(sheetState[sheetMode()])); }
+  });
+  document.getElementById("insp-sheet-close").addEventListener("click", closeInspectorSheet);
+  /* パネルは何か所もから style.display で出し入れされる。そのたびにシートの状態を映す */
+  new MutationObserver(applySheet).observe(document.getElementById("inspector"),
+    { attributes: true, attributeFilter: ["style"] });
+  window.addEventListener("resize", applySheet);
+
+  /* 凡例の札。畳んだ状態から始める(スマホでは石垣を広く見せる)。パソコンでは札が出ないので効かない */
+  const stack = document.getElementById("legend-stack");
+  const toggle = document.getElementById("legend-toggle");
+  toggle.addEventListener("click", () => {
+    const folded = stack.classList.toggle("legend-folded");
+    toggle.setAttribute("aria-expanded", folded ? "false" : "true");
+  });
+}
+
 /* インスペクタのタブ。現場では属性表をほとんど見ず、デスクでは逆になるので、
    **最後に開いていたほうを覚える**。覚えたものが無い(初めて開いた)ときは「属性」。
    初めての人は、まず石の属性を見る(作者の指摘で v1.47.0 から。それまでは「点検」) */
@@ -8276,6 +8474,8 @@ function updateSelectionPanels() {
 
   document.getElementById("inspector").style.display = "block";
   document.getElementById("insp-name").textContent = n + "個を選択中";
+  renderSheetSummary(null);   // 要約は1つ選んだとき用
+  applySheet();
   table.style.display = "none";
   surveyView.style.display = "none";
   single.style.display = "none";
@@ -8424,6 +8624,7 @@ function showInspectorFor(mesh) {
   bindNoteEditor(row);
   document.getElementById("inspector").style.display = "block";
   renderClassifyUI();
+  applySheet();
 }
 
 /* ============================================================
@@ -8477,6 +8678,7 @@ function renderInspectorTable(row) {
     addRow(k, v);
   }
   document.getElementById("insp-survey-view").dataset.empty = nSurvey ? "" : "1";
+  renderSheetSummary(row);    // スマホのシートの要約(印・メモの有無・前回の記述)
   // 手で付与する属性は、まだ付与していない石でも行を出す(一覧は属性をすべて見せる場所。§10.9.1)
   for (const k of staticClassColumns()) if (!(k in row)) addRow(k, "");
 }
@@ -10866,6 +11068,11 @@ function restoreSettings() {
     setSelectTool(data.selectTool === "lasso" ? "lasso" : "brush");
     applyUIScale(typeof data.uiScale === "number" ? data.uiScale : 0);
   }
+  /* スマホで、覚えたタブが無いとき(初めて開いた)は「点検」を開く(§10.11)。
+     スマホは現場の点検に使うので、シートを開いてすぐ印とメモを付けられるようにする */
+  if (isNarrowScreen() && !(data && (data.inspectorTab === "attr" || data.inspectorTab === "survey"))) {
+    setInspectorTab("survey");
+  }
 
   // 「塗りつぶしなし」と凡例は両立しない。保存された値を尊重しつつ、
   // 成立しない組み合わせだけ正す(no-fillのchangeを発火させると、
@@ -11375,7 +11582,11 @@ function tourEnterStep(step) {
     const st = document.querySelector('[data-step="' + step.open + '"]');
     if (st) st.classList.remove("collapsed");
   }
-  if (step.tab) setInspectorTab(step.tab);
+  if (step.tab) {
+    setInspectorTab(step.tab);
+    // スマホのシートが「低」だと、指す先(入力欄)が畳まれている。「中」に上げる
+    if (sheetState[sheetMode()] === "low") setSheetState("mid");
+  }
   if (step.unfold) setInspFold(step.unfold, false);   // 畳まれていると指す先が見えない
   if (step.enter) step.enter(tour.ctx);                // その手を始める前の下ごしらえ
   const el = tourTargets(step)[0];
