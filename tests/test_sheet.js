@@ -10,7 +10,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { sheetTap, sheetStep, sheetSummary, SHEET_STATES, NOTE_COL } = require("./extracted.js");
+const { sheetTap, sheetStep, sheetSummary, sheetRevealShift, SHEET_STATES, NOTE_COL } = require("./extracted.js");
 
 let pass = 0, fail = 0;
 const ok = (c, n, extra) => { c ? pass++ : fail++; console.log("  " + (c ? "OK" : "NG!!") + ": " + n + (extra ? "  " + extra : "")); };
@@ -55,6 +55,24 @@ eq(sheetStep("???", 1), "mid", "知らない状態は中に戻す");
   eq(sheetSummary({}, [], [{ date: "2026-11-15", who: "鈴木", text: "今日", same: true }]).prev, "", "今日の記述しか無ければ前回は出さない");
   eq(sheetSummary({}, [], null).prev, "", "履歴が null でも落ちない");
 }
+
+/* ---------- 選んだ石がシートに隠れたら、見える所までずらす(v1.53.1) ---------- */
+/* ビューの下のほうの石を選ぶと、出てきたシートがその石を隠し、正しい石を選べたか
+   分からなかった(作者の指摘)。見える範囲 = ツールバーの下(80)〜シートの上端(380) の例 */
+eq(sheetRevealShift(120, 170, 80, 380), 0, "**隠れていなければ動かさない**(選ぶたびに石垣が動くと位置を見失う)");
+eq(sheetRevealShift(300, 364, 80, 380), 0, "下端が余白(16px)の上にあれば動かさない");
+eq(sheetRevealShift(580, 640, 80, 380), 276, "**シートの陰の石は、下端がシートの上(余白16px)に出るぶんだけ上へ**");
+eq(sheetRevealShift(340, 400, 80, 380), 36, "半分隠れた石も、下端が出るぶんだけ");
+eq(sheetRevealShift(100, 600, 80, 380), 120, "見える範囲に入りきらない石は、範囲の中央に合わせる");
+eq(sheetRevealShift(580, 640, 80, 100), 0, "**見える範囲がほとんど無い(シートが「高」)ときは動かさない**");
+eq(sheetRevealShift(580, 640, 80, 380, 0), 260, "余白は指定できる");
+eq(sheetRevealShift(NaN, 640, 80, 380), 0, "数でない値が来ても動かさない(視点が壊れない)");
+ok(html.includes("if (!isNarrowScreen() || !highlightObj || selection.size >= 2) return;"),
+   "スマホで、1つ選んでいるときだけ動かす(パソコン・iPadの視点は動かさない)");
+ok(html.includes("revealSelectedAboveSheet();   // スマホ: シートに隠れた石を、見える所までずらす") &&
+   html.includes("revealSelectedAboveSheet();   // 高さを上げて石が隠れたら、見える所までずらす"),
+   "石を選んだときと、シートの高さを変えたときにずらす");
+ok(html.includes("if (still || document.hidden) { move(total); return; }"), "動きを減らす設定の端末では、間をかけずに動かす");
 
 /* ---------- 部品 ---------- */
 {

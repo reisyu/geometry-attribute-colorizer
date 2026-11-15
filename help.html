@@ -372,6 +372,7 @@
           <li>高 — 属性の一覧と記録の集計まで</li>
         </ul>
       </li>
+      <li>選んだ石がパネルの陰になるときは、<strong>石が見える位置まで石垣が自動で上にずれます</strong>。</li>
       <li>右上の<strong>「×」</strong>でパネルを閉じます（選択も外れます）。</li>
       <li>パネルが出ると、<strong>上のパネル（手順の一覧）は自動で畳まれます</strong>。上の帯の「≡」で戻せます。</li>
       <li>まとめて選ぶ間は、石垣をなぞれるよう「低」から始まります。印を付けるときに、つまみを押して開いてください。</li>
@@ -1412,7 +1413,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.53.0";
+  const HELP_VERSION = "1.53.1";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

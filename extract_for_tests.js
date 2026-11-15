@@ -33,7 +33,7 @@ const FUNCS = [
   "legendRowLabels",
   "backgroundImageSize",
   "approxMB",
-  "classChipWrite", "sheetTap", "sheetStep", "sheetSummary",
+  "classChipWrite", "sheetTap", "sheetStep", "sheetSummary", "sheetRevealShift",
   "classChoices",
   "recordHeaderColumns",
   "ledgerColumns",

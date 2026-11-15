@@ -2351,7 +2351,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.53.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.53.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -6368,6 +6368,83 @@ function sheetSummary(row, itemCols, hist) {
   };
 }
 
+/* 選んだ石がシートの陰にあるとき、石垣を上へずらす量(px)。0 なら動かさない。純関数。
+   top・bottom = 石の上下、visTop・visBottom = 見えている範囲(ツールバーの下〜シートの上端)。
+   ビューの下のほうの石を選ぶと、出てきたシートがその石を隠し、正しい石を選べたか
+   分からなかった(作者の指摘、v1.53.1)。
+   - 隠れていなければ動かさない(選ぶたびに石垣が動くと、位置を見失う)
+   - 隠れていれば、石の下端がシートの上に出るぶんだけ動かす(動かす量は最小に)
+   - 石が見える範囲に入りきらないときは、範囲の中央に合わせる
+   - 見える範囲がほとんど無い(シートが「高」)ときは動かさない */
+function sheetRevealShift(top, bottom, visTop, visBottom, margin) {
+  const m = margin == null ? 16 : margin;
+  if (![top, bottom, visTop, visBottom].every(Number.isFinite)) return 0;
+  const avail = visBottom - visTop - 2 * m;
+  if (avail <= 0) return 0;
+  if (bottom <= visBottom - m) return 0;
+  if (bottom - top >= avail) return (top + bottom) / 2 - (visTop + visBottom) / 2;
+  return bottom - (visBottom - m);
+}
+
+/* 石の画面上の上下(px。ビューの上端から)と、視線方向の奥行き */
+function meshScreenSpanY(mesh) {
+  const g = mesh.geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const b = g.boundingBox, h = wrap.clientHeight;
+  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  let top = Infinity, bottom = -Infinity;
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+    v.set(x, y, z).applyMatrix4(mesh.matrixWorld).project(camera);
+    const py = (1 - v.y) / 2 * h;
+    top = Math.min(top, py); bottom = Math.max(bottom, py);
+  }
+  b.getCenter(c).applyMatrix4(mesh.matrixWorld);
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  return { top, bottom, depth: c.sub(camera.position).dot(dir) };
+}
+
+/* 石垣を画面の上へ px だけずらす(視点を平行移動する)。少しの間をかけて動かす。
+   一度に跳ぶと、どちらへどれだけ動いたかが分からない */
+let revealAnim = 0;
+function panViewUp(px, depth) {
+  const h = wrap.clientHeight;
+  if (!h || !px) return;
+  // その奥行きでの、1pxあたりの長さ
+  const perPx = camera === orthoCamera
+    ? (2 * orthoHalfHeight / camera.zoom) / h
+    : (2 * Math.max(depth, 1e-6) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / h;
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+  const total = -px * perPx;        // 石垣を上へ = 視点は下へ
+  const move = (d) => { orbit.target.addScaledVector(up, d); orbit.update(); };
+  cancelAnimationFrame(revealAnim);
+  const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still || document.hidden) { move(total); return; }
+  const t0 = performance.now(), dur = 220;
+  let done = 0;
+  const tick = (t) => {
+    const k = Math.min(1, (t - t0) / dur);
+    const e = 1 - (1 - k) * (1 - k);      // 終わりでゆるめる
+    move(total * e - done);
+    done = total * e;
+    if (k < 1) revealAnim = requestAnimationFrame(tick);
+  };
+  revealAnim = requestAnimationFrame(tick);
+}
+
+/* スマホ: 選んだ石がシートに隠れていたら、見える所まで石垣をずらす */
+function revealSelectedAboveSheet() {
+  if (!isNarrowScreen() || !highlightObj || selection.size >= 2) return;
+  const insp = document.getElementById("inspector");
+  if (insp.style.display !== "block") return;
+  const wr = wrap.getBoundingClientRect();
+  const tb = document.getElementById("view-toolbar").getBoundingClientRect();
+  const span = meshScreenSpanY(highlightObj);
+  const shift = sheetRevealShift(span.top, span.bottom,
+    tb.bottom - wr.top, insp.getBoundingClientRect().top - wr.top);
+  if (shift > 0.5) panViewUp(shift, span.depth);
+}
+
 function isNarrowScreen() {
   return !!window.matchMedia && window.matchMedia("(max-width: 700px)").matches;
 }
@@ -6395,6 +6472,7 @@ function setSheetState(s) {
   if (!SHEET_STATES.includes(s)) return;
   sheetState[sheetMode()] = s;
   applySheet();
+  revealSelectedAboveSheet();   // 高さを上げて石が隠れたら、見える所までずらす
 }
 
 /* シートの要約を書く(1つ選んでいるとき)。まとめて選んでいるときは空にする */
@@ -8795,6 +8873,7 @@ function showInspectorFor(mesh) {
   document.getElementById("inspector").style.display = "block";
   renderClassifyUI();
   applySheet();
+  revealSelectedAboveSheet();   // スマホ: シートに隠れた石を、見える所までずらす
 }
 
 /* ============================================================
