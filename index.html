@@ -990,6 +990,8 @@
     margin-bottom: 6px;
     white-space: nowrap;
   }
+  /* 見出しの「ID」。数字だけだと何の番号か分からなかった(v1.50.0) */
+  #inspector .insp-name .insp-id { color: var(--ink-dim); font-weight: 400; margin-right: 6px; }
   #inspector table { border-collapse: collapse; width: 100%; }
   /* 値も属性名も折り返さない。極端に長いテキスト値だけ末尾を省略する */
   #inspector td { padding: 1px 0; vertical-align: top; white-space: nowrap; }
@@ -2190,7 +2192,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.50.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.50.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -8397,7 +8399,14 @@ canvas.addEventListener("pointerup", (e) => {
 function showInspectorFor(mesh) {
   setHighlight(mesh);  // 選択した石を3D上で強調表示
   const entry = meshes.find((m) => m.mesh === mesh);
-  document.getElementById("insp-name").textContent = entry ? entry.matchName : mesh.name;
+  {
+    // 「ID 63」のように出す。数字だけだと何の番号か分からなかった
+    const head = document.getElementById("insp-name");
+    head.textContent = "";
+    const lab = document.createElement("span");
+    lab.className = "insp-id"; lab.textContent = "ID";
+    head.append(lab, entry ? entry.matchName : mesh.name);
+  }
   const row = attributesByMesh.get(mesh.uuid);
   renderInspectorTable(row);
   bindNoteEditor(row);
