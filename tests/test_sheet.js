@@ -79,7 +79,7 @@ eq(sheetStep("???", 1), "mid", "知らない状態は中に戻す");
   ok(/#inspector\[data-sheet="low"\] > :not\(#insp-sheet-handle\):not\(#insp-sheet-top\):not\(#insp-sheet-sum\) \{ display: none !important; \}/.test(inside),
      "低は、つまみ・番号・要約だけを出す");
   ok(/#viewport-wrap\.sheet-open #legend-stack \{ display: none; \}/.test(inside) &&
-     /#viewport-wrap\.sheet-open\.sheet-low #legend-stack \{ display: flex; bottom: calc\(var\(--sheet-h, 0px\) \+ 8px\); \}/.test(inside),
+     /#viewport-wrap\.sheet-open\.sheet-low #legend-stack \{ display: flex; bottom: calc\(/.test(inside),
      "**シートが出ている間は凡例を隠す。低のときはシートの上に出す**(重ならない)");
   ok(/env\(safe-area-inset-bottom/.test(inside), "シートの下端は、端末の下の余白を空ける");
 }
@@ -94,6 +94,58 @@ ok(html.includes('if (sheetState[sheetMode()] === "low") setSheetState("mid");')
 ok(/if \(isNarrowScreen\(\) && !\(data && \(data\.inspectorTab === "attr" \|\| data\.inspectorTab === "survey"\)\)\) \{\s*setInspectorTab\("survey"\);/.test(html),
    "**スマホで初めて開いたときは「点検」タブ**(パソコンは「属性」のまま)");
 ok(html.includes("renderSheetSummary(row);") && html.includes("renderSheetSummary(null);"), "要約は、石を選んだときと値を書いたときに書き直す");
+
+/* ========== 段階2: 上の帯と下のバー(§10.11.2、v1.53.0) ========== */
+{
+  const at = (id) => body.indexOf('id="' + id + '"');
+  const mediaAt = css.lastIndexOf("@media (max-width: 700px)");
+  const outside = css.slice(0, mediaAt), inside = css.slice(mediaAt);
+
+  /* 下のバーは 選択・色分け・現在地・保存 の4つ(作者が承認した並び) */
+  ok(at("pb-select") < at("pb-color") && at("pb-color") < at("pb-geo") && at("pb-geo") < at("pb-save") && at("phone-bar") < at("pb-select"),
+     "**下のバーは 選択・色分け・現在地・保存 の順**");
+  ok(at("phone-menu") > at("phone-top") && at("phone-unsaved") > at("phone-menu") && at("phone-unsaved") < at("phone-bar"),
+     "上の帯に、左のパネルの開け閉めと未保存の件数がある");
+
+  /* パソコン・iPadには出さない */
+  ok(/#phone-top, #phone-bar \{ display: none; \}/.test(outside), "**上の帯と下のバーは、ふだんは出さない**");
+  ok(!/--bar-h/.test(outside) && !/--band-h/.test(outside), "帯とバーの高さの決まりが @media の外に無い");
+  ok(/#panel-toggle \{ display: none; \}/.test(inside) && /#note-badge \{ display: none !important; \}/.test(inside) && /#tb-tools \{ display: none; \}/.test(inside),
+     "スマホでは、つまみ・左上の未保存バッジ・ツールバーの現在地と選択を出さない(帯とバーが代わりをする)");
+
+  /* 同じ部品を置き場所だけ移す(写しを作らない) */
+  ok(/put\(\$\("select-pick"\), \$\("pb-select"\)/.test(html) && /put\(\$\("geo-btn"\), \$\("pb-geo"\)/.test(html) &&
+     /put\(\$\("survey-head"\), \$\("phone-top"\)/.test(html),
+     "**選択・現在地・点検日と点検者は、同じ部品をスマホのときだけ移す**(案内が指す先を2つに割らない)");
+  ok(/put\(\$\("geo-btn"\), tools, tools\.firstElementChild\);\s*put\(\$\("select-pick"\), tools, null\);\s*put\(\$\("survey-head"\), pane, pane\.firstElementChild\);/.test(html),
+     "パソコンの幅に戻ったら、元の場所と順番に戻す");
+  ok(/if \(el && parent && el\.parentElement !== parent\) parent\.insertBefore/.test(html),
+     "もう置いてあれば差し直さない(入力中の欄からカーソルが外れる)");
+  ok(body.indexOf('id="geo-btn"') > body.indexOf('id="tb-tools"') && body.indexOf('id="survey-head"') > body.indexOf('id="insp-pane-survey"'),
+     "本体に書いてある置き場所はパソコン用のまま");
+
+  /* 置き直し */
+  ok(/bottom: var\(--bar-h\);/.test(inside) && /#inspector\[data-sheet="high"\] \{ height: calc\(100% - var\(--bar-h\)/.test(inside),
+     "**シートは下のバーの上に出す**(保存を隠さない)");
+  ok(/#viewport-wrap\.sheet-open\.sheet-low #legend-stack \{ display: flex; bottom: calc\(var\(--bar-h\) \+ var\(--sheet-h, 0px\) \+ 8px\); \}/.test(inside) &&
+     /#viewport-gizmo \{ bottom: calc\(var\(--bar-h\) \+ 12px\); \}/.test(inside),
+     "凡例の札と軸の印は、バーの上に置き直す");
+  ok(/#phone-bar #select-pick select, #phone-color \{[^}]*font-size: max\(16px,/.test(inside),
+     "選択肢の文字は16px(16px未満だと、押したとき画面が拡大される)");
+
+  /* 動き */
+  ok(html.includes('document.getElementById("phone-unsaved").textContent = dirty ? "未保存 " + n : "";') &&
+     html.includes('document.getElementById("pb-save-label").textContent = dirty ? "保存 " + n : "保存";'),
+     "**未保存の件数を、上の帯と「保存」に出す**");
+  ok(/getElementById\("pb-save"\)\.addEventListener\("click", \(\) => \{\s*document\.getElementById\("export-bundle-btn"\)\.click\(\);/.test(html),
+     "「保存」は、作業データをZIPで保存する(左のパネルのボタンと同じ経路)");
+  ok(/if \(v === ""\) \{ document\.getElementById\("reset-btn"\)\.click\(\); return; \}/.test(html) &&
+     html.includes('const src = document.getElementById(v.startsWith("s:") ? "survey-attribute" : "attribute");'),
+     "「色分け」は、左のパネルの選択肢を動かす(色分けの仕組みは1つ)");
+  ok(/\[\["点検", "s:", document\.getElementById\("survey-attribute"\)\],\s*\["属性", "a:", document\.getElementById\("attribute"\)\]\]/.test(html),
+     "「色分け」の一覧は、点検側を先に並べる");
+  ok(html.includes('pc.addEventListener("pointerdown", syncPhoneColor);'), "一覧は開く直前に作り直す");
+}
 
 console.log("");
 console.log("===== " + pass + "成功 / " + fail + "失敗 =====");

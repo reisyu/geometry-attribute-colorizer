@@ -234,9 +234,11 @@ ok(!/該当した石に印を付ける/.test(html), "点検項目の説明は「
 }
 
 /* ---------- 狭い画面での重なり(v1.50.0、375px幅で実測) ---------- */
-ok(/@media \(max-width: 700px\) \{[\s\S]*?#viewport-wrap \{ --tb-top: 32px; \}/.test(html) &&
-   html.includes("top: var(--tb-top, 16px);"),
-   "**縦積みの画面では、ツールバーをつまみの下から始める**(つまみがツールバーに重なっていた)");
+/* v1.50.0 では、上端のつまみの下からツールバーを始めた(つまみがツールバーに重なっていた)。
+   v1.53.0 で、スマホではつまみを出さず、上の帯の「≡」が代わりをする。ツールバーは帯の下から始める */
+ok(html.includes("--tb-top: calc(var(--band-h) + 8px);") && html.includes("top: var(--tb-top, 16px);") &&
+   html.includes("#panel-toggle { display: none; }"),
+   "**スマホでは、ツールバーを上の帯の下から始める**(つまみは出さず、帯の「≡」が代わりをする)");
 ok(/#viewport-wrap\.tb-wrapped #inspector \{\s*top: max\([^;]*var\(--badges-bottom, 0px\)/.test(html),
    "**バッジがツールバーの下に回る幅では、右上のパネルをバッジの下から始める**(石の番号が隠れていた)");
 ok(/new MutationObserver\(layoutOverlays\)\.observe\(document\.getElementById\("viewport-badges"\)/.test(html),
