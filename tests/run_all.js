@@ -57,6 +57,7 @@ const TESTS = [
   ["test_minimap.js", "俯瞰ミニマップ"],
   ["test_uiscale.js", "文字の大きさ"],
   ["test_devhost.js", "開発版の印"],
+  ["test_i18n.js", "表示の言語(English)"],
   ["integration_test.js", "実データ統合"],
 ];
 

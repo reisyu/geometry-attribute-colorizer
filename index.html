@@ -88,6 +88,12 @@
     white-space: nowrap;
   }
   #help-link:hover { background: var(--accent-dim); color: var(--ink); }
+  #lang-switch {
+    display: inline-block; width: auto; margin: 0 0 8px 6px; padding: 4px 10px;
+    background: transparent; border: 1px solid var(--ink-dim); border-radius: 4px;
+    color: var(--ink-dim); font-family: var(--sans); font-size: calc(12px * var(--ui-scale)); cursor: pointer;
+  }
+  #lang-switch:hover { color: var(--ink); }
   #sidebar .subtitle {
     font-size: calc(11px * var(--ui-scale));
     color: var(--ink-dim);
@@ -1324,7 +1330,841 @@
     #viewport-wrap.sheet-open #legend-stack { display: none; }
     #viewport-wrap.sheet-open.sheet-low #legend-stack { display: flex; bottom: calc(var(--bar-h) + var(--sheet-h, 0px) + 8px); }
   }
+  /* CSSに書いた文言は対応表が届かないので、ここで英語にする(§10.12) */
+  html[lang="en"] #view-toolbar #view-mode { width: calc(5.8em + 36px); }   /* 「Perspective」が入る幅 */
+  html[lang="en"] #status, html[lang="en"] .filebtn { word-break: normal; overflow-wrap: anywhere; }
+  html[lang="en"] #viewport-wrap.dragover::after { content: "Drop here to load"; }
+  html[lang="en"] #insp-note-prev .nl-same .nl-head::after { content: " (this time)"; }
 </style>
+<script id="i18n">
+"use strict";
+const I18N_EN = `
+よくある原因|Common causes
+対処|What to do
+再読み込み|Reload
+ネットワークの制限で|The network may block
+がブロックされている(社内・校内ネットワークで起きやすい)|(common on office and school networks)
+ネットワーク管理者に|Ask your network administrator to allow
+の許可を依頼する|
+このアプリの動作に必要な {} を取得できなかったため、開始できません。|The app cannot start because it could not get $1.
+{} と {}|$1 and $2
+必要な外部ライブラリを読み込めませんでした: {=}|Could not load required libraries: $1
+Width(幅)|Width
+Height(高さ)|Height
+Area(面積)|Area
+FillRate(矩形充填率)|FillRate (fill ratio)
+Aspect(アスペクト比)|Aspect (width/height)
+Tilt(傾斜角)|Tilt
+RectAngle(矩形回転角)|RectAngle (rectangle angle)
+Flatness(平面性)|Flatness
+SelfIntersect(自己交差)|SelfIntersect (self-intersection)
+X(重心X)|X (centroid)
+Y(重心Y)|Y (centroid)
+Z(重心Z)|Z (centroid)
+SrcID(元ID)|SrcID (original ID)
+Course(段)|Course
+Dataset(データ名)|Dataset
+前回:{}|Previous: $1
+履歴:{}|History: $1
+履歴:記録の状況|History: Record status
+履歴:記録回数|History: Times recorded
+履歴:最終記録日|History: Last recorded
+履歴:点検者|History: Inspectors
+メモの有無|Has note
+フォトグラメトリモデル(背景)を重ねる|Overlay a photogrammetry model (background)
+GLBの読み込みに失敗しました: {}|Could not load the GLB: $1
+DXFの読み込みに失敗しました: {}|Could not load the DXF: $1
+OBJの読み込みに失敗しました: {}|Could not load the OBJ: $1
+CSVの読み込みに失敗しました: {}|Could not load the CSV: $1
+前回の記録の読み込みに失敗しました: {}|Could not load the previous records: $1
+作業データの書き出しに失敗しました: {}|Could not export the project data: $1
+まとめ書き出しに失敗しました: {}|Could not export the set: $1
+ZIPを開けませんでした: {}|Could not open the ZIP: $1
+対応していないファイル形式です: {=}|Unsupported file type: $1
+(.zip / .glb / .gltf / .dxf を選択してください)|(choose a .zip, .glb, .gltf or .dxf file)
+(.csv を選択してください)|(choose a .csv file)
+前回の記録はCSVで選んでください: {=}|Choose a CSV file for previous records: $1
+(自動計算) {=}|(calculated) $1
+傾き  n={#}|Angle  n=$1
+{=} を送りました。|Sent $1.
+ZIPの中身が壊れています: {=}|The ZIP content is damaged: $1
+ZIPの中身が切れています: {=}|The ZIP content is cut off: $1
+対応していない圧縮方法です({=}): {=}|Unsupported compression method ($1): $2
+背景モデルを画像として入れました(約 {#} MB)。|Background embedded as an image (about $1 MB).
+背景モデルを入れる設定になっています。まとめて書き出すと、{#} 枚の図それぞれに同じ画像が入ります。|The background is set to be included. The same image will be embedded in each of the $1 {1|drawing|drawings}.
+ZIPはおよそ {#} MB 大きくなります(1枚あたり約 {#} MB)。|The ZIP will be about $1 MB larger (about $2 MB per drawing).
+見つからないテクスチャ: {=}|Textures not found: $1
+前回の記録を重ねました: {=} / {#} 個に重なりました。|Previous records overlaid: $1 / matched $2 {2|object|objects}.
+{=} / {#} 個に重なりました。|$1 / matched $2 {2|object|objects}.
+台紙 + 台帳({#}行) + 記録({#}行)。|Base model + register ($1 {1|row|rows}) + records ($2 {2|row|rows}).
+今回の記録: {#} 個|Recorded this time: $1 {1|stone|stones}
+作業データを開きました: {#} オブジェクト|Project data opened: $1 {1|object|objects}
+記録 {#} 行 / {#} ファイル|Records: $1 {1|row|rows} / $2 {2|file|files}
+台帳が {#} 個ありました。「{=}」を使います(石種などの属性は、このファイルのものだけが入ります)。|Found $1 registers. Using "$2" (attributes such as stone type come from this file only).
+前回({=})の記録 {#} 件を参考に重ねました。|Overlaid $2 {2|record|records} from last time ($1) for reference.
+今回({=})のあなたの記録 {#} 件を戻しました。|Restored $2 of your records from this time ($1).
+色分けを「記録の状況」にしました。記録を書いた石から色が変わります(いま {#} 個)。|Now coloring by "Record status". Stones change color as you record them ($1 so far).
+色分けを「記録の状況」にしました。記録を書いた石から色が変わります(今回の記録はまだありません)。|Now coloring by "Record status". Stones change color as you record them (none yet this time).
+傾きラインの情報が入っていない台紙だったので、輪郭から計算し直しました({#} 個)。|The base model had no angle lines, so they were recalculated from the outlines ($1).
+※ 同じ石・同じ日・同じ人の行が {#} 件食い違っていました(先に読んだほうを使っています)。|* $1 {1|row|rows} conflicted for the same stone, date and person (the first one read is used).
+{=} の記録を重ねています|Overlaying records of $1
+{=} の記録を重ねています / 重なった数: {#} / {#}|Overlaying records of $1 / matched: $2 / $3
+前回 {=}: {=}|Previous $1: $2
+色分けしていた「{}」が無くなったため、色分けを解除しました。|"$1" is gone, so coloring was cleared.
+「{}」には色分けに使える数値がありません。|"$1" has no numbers that can be used for coloring.
+完了: {#} 個に反映 (対象属性: {}, {})|Done: colored $1 {1|object|objects} (attribute: $2, $3)
+未マッチ: {#} 個 (例: {=})|No match: $1 (e.g. $2)
+範囲指定の{}は数値として読めないため無視しました|Ignored because it is not a number: $1
+最小値「{=}」|minimum "$1"
+最大値「{=}」|maximum "$1"
+色を元に戻しました。フィルタは有効なままです。|Colors reset. The filter is still on.
+{=}° 〜 {=}°: {#}個|$1° to $2°: $3
+※ CSVのIDと現在の採番がずれています({#} 個)。元ID(SrcID)で照合しました。|* CSV IDs differ from the current numbering ($1). Matched by original ID (SrcID).
+おすすめ設定を適用しました: {}|Recommended settings applied: $1
+{} {=}〜上限なし|$1 $2 or more
+{} 下限なし〜{=}|$1 up to $2
+{} {=}〜{=}|$1 $2 to $3
+このデータに無い属性は飛ばしました: {=}|Skipped attributes not in this data: $1
+未入力 ({#})|Blank ($1)
+その他 {#}種 ({#})|Other: $1 {1|kind|kinds} ($2)
+選択中: {}|Selecting: $1
+選択を1つ前に戻しました({#}個)|Went back one selection step ($1 selected)
+選択モードを終了し、{#}個の選択を解除しました。|Left selection mode and cleared $1 selected {1|stone|stones}.
+{#}個を選択中|$1 selected
+選択モード ● {#}個|Selection mode ● $1
+選択モード ● 囲んで選ぶ|Selection mode ● draw around
+選択モード ● なぞって選ぶ|Selection mode ● paint
+{#}個には既にメモがあります(書くと上書きされます)|$1 already {1|has a note|have notes} (will be overwritten)
+{#}個は属性データと結び付いていないため書けません|$1 cannot be written (not linked to attribute data)
+{#}個は属性データと結び付いていないため書けませんでした。|$1 could not be written (not linked to attribute data).
+{#}個にメモを書きました。|Note written to $1 {1|stone|stones}.
+作業データをZIPで保存しないと残りません。|Save the project data as ZIP to keep it.
+いちばん近い候補(第{#}系)でも、現在地はデータの中心から約{=}離れています。|Even with the closest candidate (zone $1), you are about $2 from the center of the data.
+第{#}系と第{#}系のどちらとも取れる位置で、絞り込めません。|The position fits both zone $1 and zone $2, so it cannot be narrowed down.
+現在地を表示しました(第{#}系と判定)。|Showing your location (identified as zone $1).
+測位の誤差は約{#}m。データ中心からの距離は約{=}。|Positioning error is about $1 m. About $2 from the center of the data.
+図の外(約{=})|off the map (about $1)
+誤差 約{#}m|error about $1 m
+第{#}系|zone $1
+現在地に最も近いオブジェクト(約{#}m)を、正面から見ています。|Facing the object nearest to you (about $1 m away).
+実際の現在地とは誤差 約{#}m 程度のずれがある可能性があります。|Your actual position may differ by about $1 m.
+{#}個に値あり(上書きされます)|$1 already set (will be overwritten)
+{=}の新しい値|New value for $1
+{#}個を空にしました。|Cleared $1 {1|stone|stones}.
+{#}個を「{=}」にしました。|Set $1 {1|stone|stones} to "$2".
+列の名前が長すぎます({#}文字まで)。|The column name is too long (up to $1 characters).
+「{=}」という列はすでにあります。|A column named "$1" already exists.
+「{=}」は記録の鍵(誰がいつ書いたか)に使う列名なので使えません。|"$1" is reserved for record keys (who wrote it and when).
+「{=}」は自動計算・仕組み用の列名なので使えません。|"$1" is reserved for calculated and system columns.
+点検項目「{=}」を作りました。|Created inspection item "$1".
+属性の列「{=}」を作りました。|Created attribute column "$1".
+{=} — {#}種 / 入力済み {#}個 (未入力 {#}個)|$1 — $2 {2|kind|kinds} / filled $3 (blank $4)
+「{=}」を点検項目に変えました。|"$1" is now an inspection item.
+「{=}」を属性の列に変えました。|"$1" is now an attribute column.
+{#}個|$1
+「{=}」を空にしました({#}個)。|Cleared "$1" ($2).
+「{=}」を「{=}」に統合しました({#}個)。|Merged "$1" into "$2" ($3).
+「{=}」を「{=}」に変えました({#}個)。|Changed "$1" to "$2" ($3).
+メモ{#}件が未保存です。作業データをZIPで保存しないと残りません|$1 {1|note is|notes are} unsaved. Save the project data as ZIP to keep {1|it|them}
+手入力{#}件が未保存です。作業データをZIPで保存しないと残りません|$1 manual {1|entry is|entries are} unsaved. Save the project data as ZIP to keep {1|it|them}
+● メモ{#}件 未保存|● $1 unsaved {1|note|notes}
+● 手入力{#}件 未保存|● $1 unsaved {1|entry|entries}
+メモ{#}件 未保存|$1 unsaved {1|note|notes}
+手入力{#}件 未保存|$1 unsaved {1|entry|entries}
+未保存 {#}|Unsaved $1
+保存 {#}|Save $1
+ブラウザの保管領域がいっぱいのため、古いメモの控えを {#} 件消しました: {}|Browser storage was full, so $1 old note {1|backup was|backups were} deleted: $2
+{} ({=})|$1 ($2)
+{} {#}件|$1: $2
+内容: {}|Content: $1
+保存日時: {=}|Saved: $1
+前回の入力を {#} 件復元しました({})。|Restored $1 {1|entry|entries} from last time ($2).
+{#} 件は対応するオブジェクトが見つかりませんでした|No matching object was found for $1
+(元ID: {=} ほか)。|(original IDs: $1 and others).
+(元ID: {=})。|(original IDs: $1).
+CSVで保存するまでファイルには残りません。|They are not in a file until you save a CSV.
+{#} 単位|$1 units
+{} の指定範囲は {=} 〜 {=} で、最小値が最大値を上回っています。このまま色分けすると、すべてのオブジェクトが同じ色になります。|The range set for $1 is $2 to $3, with the minimum above the maximum. Coloring with it would give every object the same color.
+データの実際の値: {=} 〜 {=}／「データに合わせる」を選ぶと、入力欄をこの値に書き換えます。|Actual values: $1 to $2. "Fit to data" replaces the inputs with these values.
+文字の大きさ: {}(押すと切り替わります)|Text size: $1 (press to change)
+文字の大きさ: {}|Text size: $1
+文字の大きさを「{}」にしました。|Text size set to "$1".
+もう一度押すと次に切り替わります。|Press again for the next size.
+画面が約{#}倍に拡大されています。|The page is zoomed to about $1x.
+文字を大きくするだけなら、右上の「文字」で切り替えられます。|To enlarge only the text, use "Text size" at the upper right.
+画面の拡大は2本指で縮めると戻ります(アプリからは戻せません)。|Pinch with two fingers to undo page zoom (the app cannot undo it).
+現場では安定版をお使いください: {=}|In the field, please use the stable version: $1
+{}のオンオフ|$1 on/off
+サンプル {#}個|Sample: $1
+{#}行|$1 {1|row|rows}
+属性{#}列|$1 attribute {1|column|columns}
+除外 {#}個|$1 excluded
+{#}項目|$1 {1|item|items}
+この端末が共有シートに渡せるのは {} です。受け取れるかは送り先のアプリ次第で、メールはどれも添付できますが、Teamsは CSV しか受け取りません(実測)。送った後、相手側に付いているか確かめてください。|This device can share: $1. Receiving depends on the other app. Email accepts every format, but Teams accepted only CSV in our tests. After sending, check that the file arrived.
+この端末が共有シートに渡せるのは {} です({=} は渡せないため保存になります)。受け取れるかは送り先のアプリ次第で、メールはどれも添付できますが、Teamsは CSV しか受け取りません(実測)。送った後、相手側に付いているか確かめてください。|This device can share: $1 ($2 will be saved instead). Receiving depends on the other app. Email accepts every format, but Teams accepted only CSV in our tests. After sending, check that the file arrived.
+練習で作った{=}の情報を削除しますか？|Delete what you created for practice ($1)?
+練習で作った{=}の情報を削除しました。|Deleted what was created for practice ($1).
+「{=}」の行ができました。「＋」を押し、「砂岩」と入れて「追加」を押してください。|A row for "$1" was created. Select "+", type "Sandstone" and select "Add".
+選んだ石に「{=}」が付与されました。数字は、この値が付与された石の数です。間違えたときは、「空にする」を押すと付与が取り消されます。|"$1" was assigned to the selected stone. The number shows how many stones have this value. If you make a mistake, select "Clear" to remove it.
+「{=}」を押すと、複数の石にまとめて情報が付与されます。|Select "$1" to assign it to all the selected stones at once.
+「{=}」を付けていない石を囲んでください。|Draw around stones that do not have "$1".
+色分けする属性を「{=}」に変えると、{=}と{=}が別の色で表示されます。付与していない石は灰色です。|Change "Attribute to color by" to "$1" to show $2 and $3 in different colors. Stones without a value are gray.
+押すと一覧が開きます。「{=}」を選んでください。|Open the list and choose "$1".
+「{=}」の行ができました。「＋」を押し、「あり」と入れて「追加」を押してください。|A row for "$1" was created. Select "+", type "Yes" and select "Add".
+選んだ石に「{=}」の印が付きました。印は、見つかった石にだけ付けてください。間違えたときは、「空にする」を押すと取り消せます。|The selected stone is marked "$1". Mark only the stones where you found it. If you make a mistake, select "Clear" to undo.
+「{=}」を押すと、なぞった石すべてにまとめて印が付きます。|Select "$1" to mark all the painted stones at once.
+はじめて利用する方へ|New to this app?
+石垣のサンプルデータを使って、基本操作を2〜3分で案内します。|Take a 2–3 minute tour of the basics, using sample data of a stone wall.
+案内を始める|Start the tour
+あとで|Later
+案内は、操作ガイドからいつでも始められます。|You can start the tour at any time from the user guide.
+やめる|Cancel
+{}  n={#}|$1  n=$2
+{}:|$1:
+{}: {=}|$1: $2
+Geometry Attribute Colorizer — 3Dジオメトリの属性色分けビューアー|Geometry Attribute Colorizer — attribute color viewer for 3D geometry
+メニュー|Menu
+3Dジオメトリの属性計算・色分けビューアー|Calculate and color 3D geometry attributes
+開発版|Dev version
+? 操作ガイド|? User guide (Japanese)
+モデル(GLB / DXF)を読み込んで開始してください。|Load a model (GLB / DXF) to start.
+1. モデルを読み込む|1. Load a model
+メインモデル|Main model
+クリックして .zip / .glb / .dxf を選択|Click to choose a .zip / .glb / .dxf file
+(ビューポートへのドロップも可)|(or drop it on the view)
+DXF(閉じた3Dポリライン)は、幅・高さ・面積・矩形充填率・傾斜角・矩形回転角を自動計算します|For DXF (closed 3D polylines), width, height, area, fill ratio, tilt and rectangle angle are calculated automatically
+データ名|Dataset name
+書き出すCSVのDataset列に入ります|Written to the Dataset column of exported CSV files
+背景モデル(任意)|Background model (optional)
+フォトグラメトリモデルを重ねる|Overlay a photogrammetry model
+(.obj / .mtl / テクスチャ画像をまとめて選択)|(select the .obj, .mtl and texture images together)
+またはフォルダごと選択|Or choose a folder
+(OBJ/MTL/テクスチャを自動収集)|(OBJ, MTL and textures are found automatically)
+背景モデルの不透明度|Background model opacity
+輪郭モデルの不透明度|Outline model opacity
+背景モデルを重ねている間は、輪郭モデルを常に手前に描きます。色を薄くするほど下の写真が見えます|While a background model is shown, the outline model is always drawn in front. Lower its opacity to see more of the photos below
+背景モデルを表示|Show background model
+背景モデルを削除|Remove background model
+2. 属性を追加する(任意)|2. Add attributes (optional)
+DXFを読み込んだ場合は自動計算されるため、CSVの読み込みは不要です|No CSV is needed for DXF files, as their attributes are calculated automatically
+クリックして .csv を選択|Click to choose a .csv file
+ID列名|ID column
+(CSVを読み込んでください)|(Load a CSV first)
+オブジェクト名の接頭辞(あれば)|Object name prefix (if any)
+IDを振り直す(立面図の左下から)|Renumber IDs (from lower left of elevation)
+属性の列(手入力)|Attribute columns (manual entry)
+石種・エリアなど、|Columns you fill in by hand for
+石そのものの性質|properties of the stone itself
+を手で付けるための列です。 1石に1つで、点検日や点検者には紐づきません。 列を作ったら石を選び、右上の「属性」タブの「属性を付与する」から値を付与します|, such as stone type or zone. Each stone has one value, independent of inspection date and inspector. After creating a column, select stones and set values under "Assign attributes" in the "Attributes" tab at the upper right
+列を作る|Create column
+3. 色分けする|3. Color by attribute
+色分けする属性|Attribute to color by
+(属性データを読み込んでください)|(Load attribute data first)
+配色|Colors
+配色パターン|Color scheme
+赤 → 青|Red → Blue
+赤 → 緑|Red → Green
+黄 → 青|Yellow → Blue
+グレースケール|Grayscale
+カスタム|Custom
+グラデーションを反転|Reverse gradient
+最小値|Minimum
+中間|Middle
+最大値|Maximum
+中間色を使う|Use middle color
+詳細設定(範囲の固定・カテゴリ数の調整)|Details (fixed range, number of categories)
+色分けの範囲は既定で固定しています。誰が開いても同じ配色になるため、 書き出した図を並べて比べられます。データに合わせたい場合はチェックを外してください|The color range is fixed by default, so everyone sees the same colors and exported drawings can be compared. Uncheck this to fit the range to your data
+範囲を手動で指定|Set range manually
+現在の最小・最大を取得|Use current min and max
+テキスト属性は上位7カテゴリのみ色分け(残りは「その他」)|Color only the top 7 categories of text attributes (others become "Other")
+色分けを実行|Apply colors
+色をリセット|Reset colors
+4. 傾きラインを描画する(任意)|4. Draw angle lines (optional)
+各オブジェクトの外接矩形の水平軸に沿った中心線を、矩形回転角に応じた色で描画します。線が水平に揃っていれば整った積み方、乱れていればランダムな積み方だと読み取れます|Draws the horizontal center line of each object's bounding rectangle, colored by rectangle angle. Level lines indicate regular coursing. Scattered lines indicate random stacking
+傾きラインを表示|Show angle lines
+線の色|Line colors
+0°(水平)|0° (level)
+線の太さ|Line width
+5. フィルタで絞り込む(任意)|5. Filter (optional)
+フィルタを有効にする|Enable filter
+残す範囲(この範囲から外れたオブジェクトを除外)|Range to keep (objects outside it are excluded)
+＋ 条件を追加|+ Add condition
+おすすめ設定を適用|Apply recommended settings
+小さすぎる破片・極端に細長い形・水平に近い面・輪郭が壊れたものを除きます|Removes tiny fragments, very elongated shapes, near-horizontal faces and broken outlines
+除外したオブジェクトの表示|Display of excluded objects
+半透明で表示|Semi-transparent
+完全に非表示|Hidden
+6. ラベルを表示する(任意)|6. Show labels (optional)
+オブジェクトの位置に属性を表示|Show attributes at each object
+表示する内容(複数選択可)|Label content (multiple allowed)
+ID(オブジェクト名)|ID (object name)
+文字サイズ|Text size
+遠いラベルを自動的に隠す|Hide distant labels automatically
+表示距離|Display distance
+点検記録(開発中)|Inspection records (in development)
+点検のたびに書き足していく記録です。|Records that grow with each inspection. They are kept
+点検日・点検者ごと|by inspection date and inspector
+に残り、 石そのものの性質(石種など)とは別に保存されます。 石への入力はビュー上のパネルの「点検」タブから行います|, separately from properties of the stone itself (such as stone type). Enter them in the "Inspection" tab of the panel on the view
+点検項目|Inspection items
+ひび割れ・剥離など、|Things you
+点検のたびに見て回る項目|check at every inspection
+です。 見つかった石に「あり」などの印を付けると、その日その人の記録として残ります|, such as cracks or spalling. Mark the stones where you find them (for example "Yes"). Each mark is kept as that person's record for that day
+項目を作る|Create item
+点検結果で色分けする|Color by inspection results
+点検項目と履歴での色分けはここから選びます。 「3. 色分けする」には石そのものの属性だけが並びます|Choose inspection items and history here. "3. Color by attribute" lists only properties of the stone itself
+(選択してください)|(Select)
+前回の記録をCSVから読む|Load previous records from CSV
+前回の作業データ(ZIP)を開けば、前回の記録は自動で重なります。 ZIPが無く、記録のCSVだけを受け取ったときに使います。「前回:」の付いた列が増えます|Opening the previous project data (ZIP) overlays its records automatically. Use this only if you received a records CSV without a ZIP. Columns starting with "Previous:" are added
+クリックして前回の .csv を選択|Click to choose the previous .csv file
+読み込んだ内容は編集できません。書き出すCSVにも入りません(今回の記録だけを残すため)|Loaded records cannot be edited and are not exported (so that only the current records are saved)
+参考を外す|Remove reference
+7. 書き出す|7. Export
+作業データ|Project data
+作業データをZIPで保存|Save project data as ZIP
+手入力が未保存です。作業データをZIPで保存しないと残りません|Manual entries are unsaved. Save the project data as ZIP to keep them
+モデル・属性(付与した値も)・点検の記録を1つのZIPにまとめます。|Packs the model, attributes (including assigned values) and inspection records into one ZIP.
+次はこのZIPを開くだけ|Next time, just open this ZIP
+で、続きから始められます| to continue.
+データ|Data
+属性をCSVで保存|Save attributes as CSV
+3Dモデル|3D model
+ID付きGLBで保存|Save GLB with IDs
+オブジェクト名(ID)を保持したまま書き出されます。Blender等で再利用できます|Object names (IDs) are kept, so the file can be reused in Blender and other tools
+SVG(ベクター図)|SVG (vector drawings)
+立面図をSVGで保存|Save elevation as SVG
+モデルの正面から見た平行投影です。実寸のスケールバーを入れられます|A parallel projection from the front of the model. Can include a true-scale scale bar
+現在のビューをSVGで保存|Save current view as SVG
+画面に見えている通りに書き出します(見え方がパースならパースあり、平行投影・正面・上面ならパースなし)。スケールバーは非対応です|Exports what is on screen (with perspective in Perspective view, without it in Parallel, Front and Top). Scale bars are not supported
+まとめてZIPで保存|Save a set as ZIP
+属性ごとの立面図を一度に書き出し、ZIP1つにまとめます。向きと縮尺が揃うので並べて見比べられます|Exports an elevation for each attribute at once into one ZIP. Orientation and scale match, so they can be compared side by side
+まとめ書き出しの対象(属性の選択)|Attributes to include in the set
+傾きラインの線画(色分けなし)も含める|Also include angle line drawing (no fill colors)
+色・線の太さ・含める要素は、下の「SVGの詳細設定」に従います|Colors, line widths and elements follow "SVG details" below
+SVGの詳細設定(含める要素・線の太さ)|SVG details (elements, line width)
+凡例(ヒストグラム付き)|Legend (with histogram)
+スケールバー(立面図のみ)|Scale bar (elevation only)
+ラベル(内容はステップ6の選択に従う)|Labels (content follows step 6)
+傾きラインと傾きの分布(色・太さはステップ4の設定に従う)|Angle lines and distribution (style follows step 4)
+塗りつぶしなし(輪郭線のみの線画にする)|No fill (outlines only)
+背景モデル(重ねて表示しているとき。画像として埋め込む)|Background model (if shown; embedded as an image)
+背景モデルを入れると、石の塗りと背景の濃さは画面の「不透明度」の設定どおりになります。 図1枚が数MB大きくなります|When the background is included, stone fill and background follow the opacity settings on screen. Each drawing becomes a few MB larger
+オブジェクトの輪郭線の太さ(mm実寸。0で輪郭線なし)|Outline width (true-scale mm, 0 for none)
+ファイルをここにドロップ(GLB / DXF / OBJ / CSV)|Drop files here (GLB / DXF / OBJ / CSV)
+パース|Perspective
+平行投影|Parallel
+正面|Front
+上面|Top
+選択|Select
+色分け|Color
+現在地|Location
+保存|Save
+● メモ未保存|● Unsaved notes
+選択モード|Selection mode
+サンプルデータを表示中|Showing sample data
+現在地(目安)|Location (approximate)
+近くの区画を見る|View nearby area
+指定した範囲では色分けできません|Cannot color with this range
+データに合わせる|Fit to data
+指定のままにする|Keep this range
+背景モデルを全部の図に入れますか|Include the background in every drawing?
+背景を入れて書き出す|Export with background
+背景なしで書き出す|Export without background
+処理中...|Working...
+凡例|Legend
+傾き|Angle
+属性|Attributes
+点検|Inspection
+属性の一覧|All attributes
+属性を付与する|Assign attributes
+属性の列を作ると、選んだ石にまとめて付与できます(「2. 属性を追加する」の「属性の列(手入力)」)。|Create an attribute column to assign values to selected stones at once (see "Attribute columns (manual entry)" in "2. Add attributes").
+選択したすべてに書くメモ|Note for all selected
+まとめて書く|Write to all
+メモ|Note
+記録の集計|Record summary
+直前を取り消す|Undo last
+選択を解除|Clear selection
+メニューを閉じる|Close menu
+安定版ではありません|This is not the stable version
+例: 本丸東面_2026点検|e.g. Honmaru east wall 2026
+例: Cell_|e.g. Cell_
+例: 石種|e.g. Stone type
+(空欄で自動)|(auto if blank)
+例: はらみ出し|e.g. Bulging
+見え方|View
+見え方。パース(遠近感あり)・平行投影(遠近感なし)・正面(立面図と同じ見え方)・上面(真上から)|View: Perspective, Parallel (no perspective), Front (same as elevation), Top (from directly above)
+全体: モデル全体が収まるようにズームする|Fit: zoom to show the whole model
+全体|Fit
+背景色を切り替える|Switch background color
+文字の大きさを切り替える|Change text size
+文字の大きさ|Text size
+現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)|Location: turns positioning on or off. Shows and follows your position on the overview map (online only; not accurate enough to identify a stone)
+選択: ブラシ(なぞる)か投げ縄(囲む)で、複数の石を選ぶ(Escで解除)|Select: choose several stones with the brush or lasso (Esc to cancel)
+左のパネルを開く/閉じる|Open or close the left panel
+作業データをZIPで保存すると、この表示は消えます|This disappears after you save the project data as ZIP
+閉じる|Close
+パネルの高さを変える|Change panel height
+この日付で記録されます|Records are saved under this date
+点検者|Inspector
+記録はこの名前で残ります|Records are saved under this name
+例: この区画は孕み出しあり|e.g. Bulging in this area
+点検の所見などを記入|Enter inspection findings
+Three.js(3D表示)|Three.js (3D display)
+PapaParse(CSVの読み込み)|PapaParse (CSV reading)
+外部ライブラリを読み込めませんでした|Could not load external libraries
+インターネットに接続できていない|No internet connection
+通信が不安定で読み込みが途中で止まった|An unstable connection interrupted loading
+接続を確かめてページを再読み込みする|Check the connection and reload the page
+別のネットワーク(スマートフォンのテザリングなど)で開く|Use another network (for example phone tethering)
+3D表示(WebGL)を利用できません|3D display (WebGL) is not available
+このアプリは3D表示にWebGLを使います。お使いの環境で利用できないため、開始できません。|This app uses WebGL for 3D display. It is not available in your environment, so the app cannot start.
+ブラウザのハードウェアアクセラレーションが無効になっている|Hardware acceleration is turned off in the browser
+リモートデスクトップや仮想環境でGPUを使えない|The GPU is unavailable in a remote desktop or virtual environment
+ブラウザや端末が古い、またはグラフィックドライバの問題|An old browser or device, or a graphics driver problem
+ブラウザの設定で「ハードウェアアクセラレーションが使用可能な場合は使用する」を有効にして、ブラウザを再起動する|Turn on "Use hardware acceleration when available" in the browser settings and restart the browser
+別のブラウザ(Chrome / Edge / Firefox の最新版)で開く|Try another browser (latest Chrome, Edge or Firefox)
+別の端末で開く|Try another device
+別のファイルを読み込み中です。完了までお待ちください。|Another file is loading. Please wait until it finishes.
+保存していないメモがあります。|You have unsaved notes.
+読み込むと失われます。続けますか？|They will be lost if you load a file. Continue?
+最小外接矩形の2辺のうち、水平に近い方の辺の長さ|The bounding rectangle's side that is closer to horizontal
+最小外接矩形の2辺のうち、鉛直に近い方の辺の長さ|The bounding rectangle's side that is closer to vertical
+フィット平面に投影した輪郭の面積|Area of the outline projected onto its fitted plane
+輪郭の面積 ÷ 外接矩形の面積(1に近いほど矩形に近い形)|Outline area ÷ bounding rectangle area (closer to 1 means more rectangular)
+幅 ÷ 高さ。1より大きいほど横長、1より小さいほど縦長。1に近いほど正方形に近い|Width ÷ height. Above 1 is wide, below 1 is tall, near 1 is close to square
+面の法線と鉛直(+Z)のなす角。0°=水平な面、90°=垂直な面|Angle between the face normal and vertical (+Z). 0° = horizontal face, 90° = vertical face
+外接矩形の水平辺が面内の水平基準から回転している角度。反時計回り(右上がり)がプラス|Rotation of the bounding rectangle's horizontal side within the face. Counterclockwise (rising to the right) is positive
+フィット平面からの最大ズレ距離。大きいほど平面近似の信頼性が低い|Largest distance from the fitted plane. Larger values make the plane approximation less reliable
+点検時の所見などを自由に書き留める欄。属性インスペクタで編集し、CSVに書き出される|Free text for inspection findings. Edit it in the attribute panel. It is exported to CSV
+メモが書かれていれば「あり」、空なら「なし」。メモ本文から自動で作られる列で、色分け・立面図で記入済みの箇所を見るために使う|"Yes" if a note is written, "None" if empty. Created automatically from the notes, to show where notes exist when coloring or drawing elevations
+輪郭の自己交差の大きさ(0〜0.5)。0は交差なし。交差で分かれる小さい側のループが全体に占める面積比で、Areaはこの値の2倍だけ小さく出る|Degree of outline self-intersection (0 to 0.5). 0 means none. It is the smaller loop's share of the total area. Area is reported smaller by twice this value
+輪郭の重心のX座標(原点シフト前の元の座標値)|X coordinate of the outline centroid (original coordinates, before the origin shift)
+輪郭の重心のY座標(原点シフト前の元の座標値)|Y coordinate of the outline centroid (original coordinates, before the origin shift)
+輪郭の重心のZ座標=標高(原点シフト前の元の座標値)|Z coordinate (elevation) of the outline centroid (original coordinates, before the origin shift)
+読み込み時のID(DXFのレイヤー名由来)。自動採番で振り直される前の値|ID at load time (from the DXF layer name), before automatic renumbering
+立面図で下から数えた段(コース)番号。ID自動採番時の段判定に基づく|Course number counted from the bottom of the elevation, based on automatic ID numbering
+書き出し時に付与されるデータセット識別名。複数データの横断分析での由来識別に使う|Dataset name added on export. Identifies the source when analyzing several datasets together
+ファイルが空か、GLBとしては短すぎます|The file is empty or too short to be GLB
+GLB形式ではありません(マジックナンバー不一致)|Not a GLB file (wrong magic number)
+glTFバージョン{}は未対応です(2のみ対応)|glTF version $1 is not supported (only version 2)
+JSONチャンクが見つかりません|JSON chunk not found
+ファイルの読み取りに失敗しました。|Could not read the file.
+BINチャンクが見つかりません(外部バッファ参照の.gltfは未対応です。.glb形式で書き出してください)|BIN chunk not found (.gltf with external buffers is not supported; export as .glb)
+GLBを読み込みました: {} メッシュ|GLB loaded: $1 {1|mesh|meshes}
+傾きラインの情報が入っていなかったので、輪郭から計算し直しました({} 個)。|Angle lines were missing, so they were recalculated from the outlines ($1).
+対応していないファイル形式です: {}|Unsupported file type: $1
+DXFを解析中...|Reading DXF...
+DXFを解析中... {}%|Reading DXF... $1%
+DXFから輪郭になるポリラインが見つかりませんでした。|No polylines that form outlines were found in the DXF.
+対応形式: LWPOLYLINE / POLYLINE(頂点3個以上)。|Supported: LWPOLYLINE / POLYLINE (3 or more vertices).
+線分(LINE)・スプライン(SPLINE)・円弧のみのファイルは読み込めません。|Files with only LINE, SPLINE or arcs cannot be loaded.
+CADでポリラインに変換してから書き出してください。|Convert them to polylines in CAD and export again.
+属性を計算中... {} / {}|Calculating attributes... $1 / $2
+✓ DXFから自動計算した属性を使用中(CSVの読み込みは不要です)|✓ Using attributes calculated from the DXF (no CSV needed)
+DXFを読み込みました: {} オブジェクト|DXF loaded: $1 {1|object|objects}
+幾何属性(幅・高さ・面積など)を自動計算しました。|Geometric attributes (width, height, area and others) were calculated.
+IDは立面図の左下から自動採番済み(元IDはSrcID属性)。|IDs were numbered from the lower left of the elevation (original IDs are in SrcID).
+原点シフト量: ({}, {}, {})|Origin shift: ($1, $2, $3)
+計算できなかったオブジェクト: {} 個|Objects that could not be calculated: $1
+円弧(バルジ){} 箇所は直線として読み込みました|$1 {1|arc (bulge) was|arcs (bulges) were} read as straight {1|line|lines}
+閉じていないポリライン {} 本は対象外にしました|$1 open {1|polyline was|polylines were} ignored
+閉じフラグの無いポリライン {} 本を輪郭として扱いました|$1 {1|polyline without a closed flag was|polylines without closed flags were} treated as {1|an outline|outlines}
+属性をCSVで書き出しました: {} 行|Attributes exported as CSV: $1 {1|row|rows}
+ID付きGLBを書き出しました: {} オブジェクト|GLB with IDs exported: $1 {1|object|objects}
+送信をやめました。もう一度押すとやり直せます。|Sending was canceled. Press again to retry.
+(この形式はこの端末では送れないため、保存しました)|(This device cannot share this format, so the file was saved)
+ファイルが小さすぎます|The file is too small
+ZIPとして読めません(終端が見つかりません)|Cannot read as ZIP (end record not found)
+ZIPの目次が壊れています|The ZIP directory is damaged
+このブラウザは圧縮されたZIPを開けません。|This browser cannot open compressed ZIP files.
+フィルタで全てのオブジェクトが除外されているため、書き出せる図がありません。|The filter excludes every object, so there is nothing to export.
+条件を見直すか、フィルタを解除してください。|Change the conditions or turn off the filter.
+SVG書き出しは輪郭モデルでのみ利用できます。|SVG export is available only for outline models.
+DXF・内蔵サンプル・このアプリが書き出したGLB(作業データのZIPを含む)が対象です。|These are DXF files, the built-in sample and GLB files exported by this app (including project data ZIPs).
+※ 背景モデルを画像にできなかったため、背景なしで書き出しました。|* Exported without the background, because it could not be turned into an image.
+立面図SVGを書き出しました: {} オブジェクト|Elevation SVG exported: $1 {1|object|objects}
+(属性データを読み込むと、ここに一覧が出ます)|(A list appears here after attribute data is loaded)
+書き出すものが選ばれていません。属性にチェックを入れるか、傾きラインの線画を選んでください。|Nothing is selected for export. Check some attributes or the angle line drawing.
+書き出しをやめました。|Export canceled.
+背景モデルを画像にできなかったため、背景なしで書き出します。|The background could not be turned into an image, so it will be left out.
+まとめて書き出し中... {} ({}/{})|Exporting the set... $1 ($2/$3)
+まとめて書き出し中... 傾きラインの線画 ({}/{})|Exporting the set... angle line drawing ($1/$2)
+書き出せる図がありませんでした。|There were no drawings to export.
+属性の選択とデータの内容を確認してください。|Check the selected attributes and the data.
+{} 枚の図をZIPにまとめました ({} KB)|$1 {1|drawing|drawings} packed into a ZIP ($2 KB)
+範囲が成立しないため飛ばした属性: {}|Attributes skipped because of an invalid range: $1
+(最小値が最大値を上回っています。範囲を見直すか、チェックを外してください)|(The minimum is above the maximum. Check the range or uncheck the option)
+もう一度ボタンを押すと、メールやチャットに送れます。|Press the button again to send it by email or chat.
+まとめた図を送る ({}枚)|Send set ($1 {1|drawing|drawings})
+共有シートを開きます(メール・チャットのほか「ファイルに保存」も選べます)|Opens the share sheet (email, chat or "Save to Files")
+まとめてZIPを作る|Build set as ZIP
+{} 枚の図のZIPを保存しました|ZIP with $1 {1|drawing|drawings} saved
+現在のビューの範囲にオブジェクトがありません。カメラの向きを確認してください。|No objects are in the current view. Check the camera direction.
+現在のビューをSVGで書き出しました: {} オブジェクト|Current view exported as SVG: $1 {1|object|objects}
+先にモデルの読み込みと色分けを済ませてください。|Load a model and apply colors first.
+IDを振り直しました: {} オブジェクト({} 段、左下から順)|IDs renumbered: $1 {1|object|objects} ($2 {2|course|courses}, from lower left)
+OBJファイルが含まれていません。|No OBJ file was included.
+OBJを読み込み中...|Loading OBJ...
+OBJを解析中 (1/2)... {}%|Reading OBJ (1/2)... $1%
+頂点(v行)が見つかりません|No vertices (v lines) found
+OBJを解析中 (2/2)... {}%|Reading OBJ (2/2)... $1%
+テクスチャを読み込み中... {} / {}|Loading textures... $1 / $2
+背景モデルを読み込みました: {} 三角形, テクスチャ {} 枚(2048pxに縮小)|Background model loaded: $1 triangles, $2 {2|texture|textures} (reduced to 2048 px)
+背景モデルを削除しました。|Background model removed.
+CSVにはID列と属性列の少なくとも2列が必要です。|The CSV needs at least two columns: an ID and an attribute.
+CSVを読み込みました: {} 行 / 列: {}|CSV loaded: $1 {1|row|rows} / columns: $2
+このデータに無い属性のフィルタ条件を解除しました: {}|Removed filter conditions for attributes not in this data: $1
+外部CSVの属性を使用中|Using attributes from an external CSV
+あり|Yes
+なし|None
+記録なし|No record
+前回のみ|Previous only
+前回と今回|Previous and current
+今回のみ|Current only
+増えた列: {}|Columns added: $1
+色分けの属性やフィルタから選べます。書き出すCSVには入りません。|Use them for coloring and filtering. They are not exported to CSV.
+※ 1つも重なりませんでした。IDの付き方が違う可能性があります。|* Nothing matched. The IDs may be assigned differently.
+前回|Previous
+先にモデルを読み込んでください。|Load a model first.
+点検日を入れてください。|Enter the inspection date.
+モデルを書き出せませんでした。|Could not export the model.
+作業データをZIPにまとめました。|Project data packed into a ZIP.
+ZIPに .glb が入っていません。|The ZIP does not contain a .glb file.
+ZIPに .csv が入っていません。|The ZIP does not contain a .csv file.
+ZIPに台帳のCSVが入っていません(点検日の列が無いCSV)。|The ZIP does not contain a register CSV (one without an inspection date column).
+赤 = 前回の記録があって今回まだ書いていない石。書くと青に変わります。|Red = recorded last time, not yet this time. It turns blue when you write a record.
+前回の記録として読めませんでした(ID列と記録の列が必要です)。|This is not a previous records file (an ID column and record columns are needed).
+前回の記録を外しました。|Previous records removed.
+点検項目まとめ|Inspection summary
+該当項目|Matched item
+複数|Multiple
+(点検の記録がありません)|(No inspection records)
+メモあり|Has note
+今回の記録はまだありません|No records this time
+色分けしない|No color
+色分けを再実行|Reapply colors
+値が全て空欄か、数値として読めない可能性があります。|All values may be blank or not readable as numbers.
+別の属性を選ぶか、CSVの内容を確認してください。|Choose another attribute or check the CSV.
+数値|numeric
+テキスト|text
+フィルタは有効なままです。|The filter is still on.
+色を元に戻しました。|Colors reset.
+傾きラインを表示できるデータがありません。|There is no data for angle lines.
+DXF・内蔵サンプル・このアプリが書き出したGLB(作業データのZIPを含む)で利用できます。|They work with DXF files, the built-in sample and GLB files exported by this app (including project data ZIPs).
+最小|Min
+最大|Max
+この条件を削除|Remove this condition
+(この属性はありません)|(Attribute not available)
+DXFを作り直すとIDは振り直されます。IDで突き合わせると別のオブジェクトに付きます。|Renumbering happens whenever the DXF is rebuilt. Matching by ID would then attach values to other objects.
+除外: {} 個 / 表示: {} 個|Excluded: $1 / Shown: $2
+小さすぎる破片を除く|Remove tiny fragments
+極端に細長い形を除く|Remove very elongated shapes
+水平に近い面を除く|Remove near-horizontal faces
+輪郭が壊れたオブジェクトを除く|Remove broken outlines
+おすすめ設定に使う属性(Area / Aspect / Tilt)がこのデータにありません。|The recommended settings need Area, Aspect or Tilt, which this data does not have.
+下限なし|no minimum
+上限なし|no maximum
+(空欄)|(blank)
+{} 〜 {}: {}個|$1 to $2: $3
+囲んだ範囲に、石の中心がありませんでした。|No stone centers were inside the lasso.
+石の真ん中が入るように囲んでください。|Draw around the middle of the stones.
+ブラシ(なぞって選ぶ)|Brush (paint to select)
+投げ縄(囲んで選ぶ)|Lasso (draw around to select)
+選択を解除して終える|Clear selection and exit
+投げ縄|Lasso
+ブラシ|Brush
+囲んで選ぶ|draw around
+なぞって選ぶ|paint
+メモを書ける行がありませんでした。|No rows can take a note.
+色分けを実行し直してから、もう一度選び直してください。|Apply colors again, then reselect the stones.
+(CSV属性は未割り当て)|(No CSV attributes assigned)
+現在地から遠すぎるか、平面直角座標系ではないデータです。|You are too far away, or the data does not use a Japan Plane Rectangular Coordinate System.
+このブラウザは位置情報に対応していません。|This browser does not support location.
+位置情報は安全な接続(https)でのみ使えます。|Location works only on a secure connection (https).
+オフライン版(ファイルを直接開く形)では利用できません。|It is not available in the offline version (opened as a local file).
+このデータには実際の測量座標が入っていないため、現在地を重ねられません。|This data has no survey coordinates, so your location cannot be shown.
+平面直角座標系のDXFを読み込むと使えます。|Load a DXF in a Japan Plane Rectangular Coordinate System to use it.
+現在地を取得しています...|Getting your location...
+このデータの座標系を判定できませんでした。|The coordinate system of this data could not be identified.
+別の場所のデータを開いている場合は、その場所で試してください。|If this data is of another place, try again at that place.
+位置情報の利用が許可されませんでした。ブラウザの許可設定を確認してください。|Location permission was denied. Check the browser settings.
+現在地を取得できませんでした(電波の届かない場所では取得できないことがあります)。|Could not get your location (this can happen without a signal).
+現在地の取得に時間がかかりすぎました。屋外で、もう一度試してください。|Getting your location took too long. Try again outdoors.
+現在地を取得できませんでした。|Could not get your location.
+選んだ石にこの値を付与します|Assign this value to the selected stones
+空にする|Clear
+選んだ石から、この列の値を消します|Remove this column's value from the selected stones
+この列に新しい値を追加|Add a new value to this column
+新しい値|New value
+追加|Add
+値を入力してください。|Enter a value.
+値を書ける行がありませんでした。|No rows can take a value.
+先にモデル(またはCSV)を読み込んでください。|Load a model (or CSV) first.
+列の名前を入力してください。|Enter a column name.
+別の名前にしてください(例: 確認者)。|Choose another name (e.g. Checked by).
+この名前で作ると、DXFを読み直したときに計算値で上書きされ、手で入れた値が消えます。|Reloading a DXF would overwrite it with calculated values, and your entries would be lost.
+ビュー上でオブジェクトを選び、「点検」タブから印を付けます。|Select objects in the view and mark them in the "Inspection" tab.
+付けた内容は、その日その人の記録として残ります。|Each mark is kept as that person's record for that day.
+ビュー上でオブジェクトを選び、「属性」タブの「属性を付与する」から値を付与します。|Select objects in the view and set values under "Assign attributes" in the "Attributes" tab.
+まだ値が入っていません|No values yet
+点検項目に変える|Make inspection item
+属性の列に変える|Make attribute column
+変更|Change
+この行は現在のデータに含まれていません(色分けを実行し直してください)|This row is not in the current data (apply colors again)
+手入力|Manual entry
+このデータには元ID(SrcID)が無いため、手入力の内容をブラウザに控えられません。|This data has no original IDs (SrcID), so manual entries cannot be backed up in the browser.
+画面上の入力は残りますが、閉じると失われます。こまめに作業データをZIPで保存してください。|They stay on screen but are lost on closing. Save the project data as ZIP often.
+手入力の控えをブラウザに保存できませんでした(保管領域がいっぱいです)。|Manual entries could not be backed up in the browser (storage is full).
+画面上の入力は残っていますが、閉じると失われます。こまめに作業データをZIPで保存してください。|They stay on screen but are lost on closing. Save the project data as ZIP often.
+(データ名なし)|(no dataset name)
+控えは一時的なものです。残したい手入力は早めに作業データをZIPで保存してください。|Backups are temporary. Save entries you want to keep as a project data ZIP soon.
+前回の入力が残っています。復元しますか？|Entries from last time were found. Restore them?
+データ名: {}|Dataset: $1
+保存日時: {}|Saved: $1
+「キャンセル」を選ぶと、このまま空の状態で続けます(保存は消えません)。|"Cancel" continues without them (the backup is not deleted).
+復元できる入力がありませんでした。|There were no entries to restore.
+サンプル石垣|Sample stone wall
+サンプルデータを表示中({} オブジェクト)|Showing sample data ($1 objects)
+サンプルの自動計算属性|Calculated attributes of the sample
+✓ サンプルの自動計算属性を使用中|✓ Using calculated attributes of the sample
+サンプルデータを表示中です。|Showing sample data.
+DXF/GLBを読み込むと置き換わります。|Loading a DXF or GLB replaces it.
+背景色を切り替える(現在: ライト)|Switch background color (now light)
+背景色を切り替える(現在: ダーク)|Switch background color (now dark)
+標準|Standard
+大|Large
+特大|Extra large
+これは開発版です。試験中の変更が入っています。|This is the development version, with changes still being tested.
+属性での色分け|Coloring by attribute
+点検結果での色分け|Coloring by inspection results
+傾きライン|Angle lines
+フィルタ|Filter
+ラベル|Labels
+点検記録で色分け中|Coloring by inspection
+属性をCSVで送る|Send attributes as CSV
+ID付きGLBで送る|Send GLB with IDs
+立面図をSVGで送る|Send elevation as SVG
+現在のビューをSVGで送る|Send current view as SVG
+左のパネルに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。|The steps are listed in working order in the left panel. Select a heading to open or close it.
+メニューに、作業の順にステップが並んでいます。見出しを押すと、開いたり畳んだりできます。|The steps are listed in working order in the menu. Tap a heading to open or close it.
+色分けする属性を「Area(面積)」に変えてみてください。|Try changing "Attribute to color by" to "Area".
+押すと一覧が開きます。「Area(面積)」を選んでください。|Open the list and choose "Area".
+図の色と、左下の凡例が変わりました。凡例には、値ごとの石の数(分布)も出ます。|The colors and the legend at the lower left have changed. The legend also shows how many stones have each value (the distribution).
+石を1つタップしてください。|Click or tap one stone.
+どの石でもかまいません。|Any stone will do.
+選んだ石の属性が、ここに出ます。点検の記録も、ここから書き込みます。|The attributes of the selected stone appear here. You also enter inspection records here.
+見え方を「正面」にすると、立面図と同じ向きで見られます。|Set the view to "Front" to look from the same direction as an elevation drawing.
+押すと一覧が開きます。「正面」を選んでください。|Open the list and choose "Front".
+ここから「ブラシ」か「投げ縄」を選ぶと、なぞったり囲んだりして、石をまとめて選べます。|Choose "Brush" or "Lasso" here to select several stones by painting over or drawing around them.
+できた図や記録は、「7. 書き出す」から保存します。|Save drawings and records from "7. Export".
+くわしい説明は、いつでもここから開けます。この案内も、操作ガイドから始め直せます。|Open the detailed guide here at any time. You can also restart this tour from it. The guide is in Japanese, so use your browser's translation.
+石垣の属性は追加することができます。（石種など）|You can add your own attributes to a stone wall, such as stone type.
+列の名前に「石種」と入れて、「列を作る」を押してください。|Type "Stone type" as the column name and select "Create column".
+名前は何でもかまいません。|Any name will do.
+値は何でもかまいません。|Any value will do.
+「投げ縄」を選び、石をいくつか囲んでください。|Choose "Lasso" and draw around several stones.
+押すと一覧が開きます。「投げ縄(囲んで選ぶ)」を選んでから、ドラッグで囲みます。|Open the list, choose "Lasso (draw around to select)", then drag around the stones.
+「上書きされます」と出ても、そのまま押してかまいません。|It is fine to continue even if you see "will be overwritten".
+今度は、別のところの石を投げ縄で囲んでください。|Now use the lasso on stones in a different place.
+「＋」を押し、「花崗岩」と入れて「追加」を押してください。囲んだ石すべてに付与されます。|Select "+", type "Granite" and select "Add". It is assigned to all the stones you selected.
+値を付与したら、ここでZIPに保存してください。次は、そのZIPをアプリに読み込むだけで、追加した列も値も復元されます。|After assigning values, save them here as a ZIP. Next time, load that ZIP to restore the added columns and values.
+点検結果を、点検日・点検者名とともに記録として残せます。（ひび割れ・剥離など）|You can record inspection results, such as cracks and spalling, with the date and the inspector's name.
+点検項目の名前に「はらみ出し」と入れて、「項目を作る」を押してください。|Type "Bulging" as the item name and select "Create item".
+記録には、ここの点検日と点検者が付きます。点検者に名前を入れてください。|Records carry the inspection date and inspector shown here. Enter a name as the inspector.
+点検日は今日の日付が入っています。名前は次に開いたときにも同じ名前が入ります。|The date is set to today. The same name is filled in the next time you open the app.
+メモ欄に自由記述することができます（例: 目地が開いている）|You can write free text in the note field (e.g. Open joints).
+「ブラシ」を選び、石をいくつかなぞってください。|Choose "Brush" and paint over several stones.
+押すと一覧が開きます。「ブラシ(なぞって選ぶ)」を選んでから、ドラッグでなぞります。|Open the list, choose "Brush (paint to select)", then drag over the stones.
+「点検結果で色分けする」で「履歴:記録の状況」を選ぶと、今回記録した石が色付きで表示されます。|In "Color by inspection results", choose "History: Record status". Stones recorded this time are shown in color.
+押すと一覧が開きます。「履歴:記録の状況」を選んでください。|Open the list and choose "History: Record status".
+点検が終わったら、ここでZIPに保存してください。次の点検はこのZIPを開くだけで始められ、今回の記録は「前回」として並びます。|When you finish, save a ZIP here. Start the next inspection by opening it. These records will then appear as "Previous".
+削除すると、付けた印と書いたメモもなくなり、色分けも元に戻ります。|Deleting also removes the marks and notes you made and restores the colors.
+操作の案内|Guided tour
+削除すると、付与した値もなくなり、色分けも元に戻ります。|Deleting also removes the values you assigned and restores the colors.
+削除して終了する|Delete and finish
+残して終了する|Keep and finish
+残した情報は、次にサンプルを開いたときにも読み込まれます。|What you keep will be loaded again the next time you open the sample.
+サンプルで案内します|Continue with the sample
+この案内では、練習用の列を作って値を書き込みます。いま開いているデータに混ざらないよう、新しいタブでサンプルを開いて案内します。|This tour creates practice columns and values. To keep them out of your current data, it opens the sample in a new tab.
+新しいタブで始める|Start in a new tab
+終わる|Finish
+次へ|Next
+`;
+
+/* ============================================================
+   表示の言語(日本語 / English)(SPECIFICATION §10.12)
+
+   **訳すのは画面に出す文字だけ。** 列名・値(「あり」「記録の状況」など)・ZIPの中身・
+   ファイル名は日本語のまま持つ。言語の違う人が同じZIPを持ち寄っても、同じ列として繋がる。
+
+   本体の文言は日本語で書き、画面に出たところで下の対応表(I18N_EN)を引いて置き換える。
+   表に無い文言は日本語のまま出る(訳し忘れに気づける側に倒す)。
+   日本語で使うときは何も見張らず、何も書き換えない。
+
+   対応表は「日本語|English」の行。日本語側の {} は訳してから入れる所、{=} はそのまま
+   入れる所(利用者が付けた名前)、{#} は数。English側の $1 はその1つ目。
+   {1|stone|stones} は、$1 が 1 なら stone、それ以外は stones。
+============================================================ */
+const I18N = (() => {
+  const exact = new Map(), patterns = [];
+  const norm = (s) => s.replace(/\s+/g, " ").trim();
+  const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+  const JA = /[　-ヿ㐀-鿿＀-～]/;
+
+  for (const line of I18N_EN.split("\n")) {
+    const at = line.indexOf("|");
+    if (at < 1) continue;
+    const ja = line.slice(0, at), en = line.slice(at + 1);
+    if (!/\{[=#]?\}/.test(ja)) { exact.set(norm(ja), en); continue; }
+    const raw = [];
+    const body = ja.split(/(\{[=#]?\})/).map((p) => {
+      if (p === "{}") { raw.push(false); return "(.*?)"; }
+      if (p === "{=}") { raw.push(true); return "(.*?)"; }
+      if (p === "{#}") { raw.push(true); return "([0-9.,]+)"; }
+      return reEsc(p);
+    }).join("");
+    patterns.push({ re: new RegExp("^" + body + "$"), raw, en,
+                    weight: ja.replace(/\{[=#]?\}/g, "").length });
+  }
+  // 決まった文字の多い型から試す。短い型(「{}: {=}」など)に先に取られないように
+  patterns.sort((a, b) => b.weight - a.weight);
+
+  /* 1つの文字列を英語にする。表に無ければそのまま返す。純関数 */
+  const cache = new Map();
+  function translate(text) {
+    const s = String(text == null ? "" : text);
+    if (!JA.test(s)) return s;
+    if (cache.has(s)) return cache.get(s);
+    const out = translateNew(s);
+    if (cache.size > 5000) cache.clear();
+    cache.set(s, out);
+    return out;
+  }
+  function translateNew(s) {
+    const t = s.trim();
+    if (t !== s) return s.slice(0, s.indexOf(t)) + translate(t) + s.slice(s.indexOf(t) + t.length);
+    const key = norm(s);
+    if (exact.has(key)) return exact.get(key);
+    if (s.includes("\n")) return s.split("\n").map(translate).join("\n");
+    for (const p of patterns) {
+      const m = p.re.exec(s);
+      if (!m) continue;
+      const g = m.slice(1).map((v, i) => (p.raw[i] || v === s ? v : translate(v)));
+      const out = p.en
+        .replace(/\{(\d)\|([^|}]*)\|([^}]*)\}/g, (_, i, one, many) => (g[i - 1] === "1" ? one : many))
+        .replace(/\$(\d)/g, (_, i) => g[i - 1]);
+      // 何も訳せなかった型は、当たらなかったものとして次を試す。訳せた文では「」を引用符にする
+      if (out !== s) return out.replace(/」「/g, '", "').replace(/[「」]/g, '"');
+    }
+    // 並べて出す所(「記録の状況 / 属性2列」「はらみ出し・ひび割れ」)
+    for (const sep of [" / ", "・"]) {
+      if (!s.includes(sep)) continue;
+      const parts = s.split(sep), done = parts.map(translate);
+      if (done.some((v, i) => v !== parts[i])) return done.join(sep === "・" ? ", " : sep);
+    }
+    return s;
+  }
+
+  /* 最初に出す言語。URLの ?lang= → 前に選んだもの → ブラウザの言語。純関数 */
+  function pickLang(param, saved, browser) {
+    for (const v of [param, saved]) if (v === "ja" || v === "en") return v;
+    return !browser || /^ja\b/i.test(browser) ? "ja" : "en";
+  }
+
+  const KEY = "gac.lang.v1";
+  let lang = "ja";
+  const tr = (text) => (lang === "en" ? translate(text) : text);
+
+  /* 書き出すSVGの文字。画面と同じ言葉にする(§5.1.3 の凡例の決まり) */
+  function trSvg(svg) {
+    if (lang !== "en") return svg;
+    return svg.replace(/(<(?:text|tspan)\b[^>]*>)([^<]+)/g, (_, tag, body) => tag + translate(body));
+  }
+
+  if (typeof document === "undefined") return { tr, trSvg, translate, pickLang };   // テスト
+
+  /* 利用者が付けた名前・書いた文はそのまま出す。操作の案内がこの文字を読んで石の行を
+     探す(tourClassRow・tourChip)ので、訳すと案内も止まる */
+  const ATTRS = ["title", "placeholder", "aria-label", "label", "alt"];
+  function isUserText(node) {
+    const p = node.parentElement;
+    if (!p) return true;
+    if (/^(SCRIPT|STYLE|TEXTAREA|CODE)$/.test(p.tagName)) return true;
+    if (p.closest("[data-no-tr]")) return true;
+    return p.matches(".cls-row-name, .nl-item, .cls-chip:not(.cls-clear):not(.cls-add)");
+  }
+
+  const texts = new WeakMap(), attrs = new WeakMap();   // 書き換えた所の、元の日本語
+  function apply(node, name) {
+    let store, cur;
+    if (name) {
+      if (!node.hasAttribute(name)) return;
+      if (!attrs.has(node)) attrs.set(node, {});
+      store = attrs.get(node)[name];
+      cur = node.getAttribute(name);
+    } else {
+      if (isUserText(node)) return;
+      store = texts.get(node);
+      cur = node.nodeValue;
+    }
+    const src = store && store.out === cur ? store.src : cur;
+    const out = tr(src);
+    const next = { src, out };
+    if (name) attrs.get(node)[name] = next; else texts.set(node, next);
+    if (out === cur) return;
+    if (name) node.setAttribute(name, out); else node.nodeValue = out;
+  }
+  function applyTree(root) {
+    if (root.nodeType === 3) { apply(root); return; }
+    if (root.nodeType !== 1) return;
+    if (/^(SCRIPT|STYLE)$/.test(root.tagName)) return;
+    for (const a of ATTRS) apply(root, a);
+    for (let c = root.firstChild; c; c = c.nextSibling) applyTree(c);
+  }
+
+  const observer = new MutationObserver((list) => {
+    for (const m of list) {
+      if (m.type === "characterData") apply(m.target);
+      else if (m.type === "attributes") apply(m.target, m.attributeName);
+      else for (const n of m.addedNodes) if (n.isConnected) applyTree(n);
+    }
+  });
+
+  function setLang(next) {
+    observer.disconnect();
+    lang = next === "en" ? "en" : "ja";
+    document.documentElement.lang = lang;
+    applyTree(document.documentElement);
+    const b = document.getElementById("lang-switch");
+    if (b) b.textContent = lang === "en" ? "日本語" : "English";
+    if (lang === "en") {
+      observer.observe(document.documentElement, {
+        subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS,
+      });
+    }
+  }
+  function remember(v) {
+    try { localStorage.setItem(KEY, v); } catch (e) { /* 覚えられなくても切り替えはできる */ }
+  }
+
+  let param = null, saved = null;
+  try { param = new URLSearchParams(location.search).get("lang"); } catch (e) { /* 無視 */ }
+  try { saved = localStorage.getItem(KEY); } catch (e) { /* 無視 */ }
+  if (param === "ja" || param === "en") remember(param);   // 配ったURLで開いた人は、次もその言語
+  setLang(pickLang(param, saved, navigator.language));
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setLang(lang);
+    const b = document.getElementById("lang-switch");
+    if (b) b.addEventListener("click", () => {
+      const next = lang === "en" ? "ja" : "en";
+      remember(next);
+      setLang(next);
+    });
+  });
+
+  return { tr, trSvg, translate, pickLang };
+})();
+</script>
 </head>
 <body>
 
@@ -1333,7 +2173,7 @@
   <div id="menu-head"><span>メニュー</span><button id="menu-close" type="button" aria-label="メニューを閉じる">×</button></div>
   <h1>Geometry Attribute Colorizer</h1>
   <div class="subtitle">3Dジオメトリの属性計算・色分けビューアー <span id="app-version"></span><span id="dev-badge" title="安定版ではありません">開発版</span></div>
-  <a href="help.html" target="gac-help" id="help-link">? 操作ガイド</a>
+  <a href="help.html" target="gac-help" id="help-link">? 操作ガイド</a><button id="lang-switch" type="button" data-no-tr>English</button>
 
   <div id="status" style="margin-bottom:12px">モデル(GLB / DXF)を読み込んで開始してください。</div>
 
@@ -2441,7 +3281,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.54.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.55.0";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -2499,7 +3339,7 @@ function beginLoading() {
   // 読み込むと属性テーブルが作り直され、メモは失われる。
   // メモはDXFから再計算できない唯一のデータなので、黙って捨てない
   if (hasUnsavedNotes &&
-      !confirm("保存していないメモがあります。\n読み込むと失われます。続けますか？")) {
+      !confirm(I18N.tr("保存していないメモがあります。\n読み込むと失われます。続けますか？"))) {
     return false;
   }
   isLoading = true;
@@ -4212,7 +5052,7 @@ async function deliverBlob(blob, filename, message, onDelivered) {
 }
 
 function downloadSVG(svgText, filename, message) {
-  deliverBlob(new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }), filename, message);
+  deliverBlob(new Blob([I18N.trSvg(svgText)], { type: "image/svg+xml;charset=utf-8" }), filename, message);
 }
 
 /* ============================================================
@@ -4732,7 +5572,7 @@ async function exportBatchSVG() {
       // 列名は利用者のCSV由来なので、そのままファイル名にしない。
       // 記号だけの列名で空になることもあるため、その場合は連番で代用する
       const part = safeFileNamePart(attr) || String(i + 1);
-      if (r) entries.push({ name: stem + "_" + part + ".svg", text: r.svg });
+      if (r) entries.push({ name: stem + "_" + part + ".svg", text: I18N.trSvg(r.svg) });
     }
 
     if (withLines) {
@@ -4743,7 +5583,7 @@ async function exportBatchSVG() {
       const lineOpt = { ...baseOpt, noFill: true, incLines: true, incLegend: false, incLabels: false,
                         incBackground: withBg, bgCache };
       const r = buildElevationSVG(lineOpt);
-      if (r) entries.push({ name: stem + "_lines.svg", text: r.svg });
+      if (r) entries.push({ name: stem + "_lines.svg", text: I18N.trSvg(r.svg) });
     }
   } finally {
     batchRunning = false;
@@ -6642,7 +7482,8 @@ function syncPhoneColor() {
     g.label = label;
     for (const o of opts) {
       const n = document.createElement("option");
-      n.value = prefix + o.value; n.textContent = o.textContent;
+      // 表示の文字は写さない(英語の表示中は訳した後の文字で、日本語に戻せなくなる §10.12)
+      n.value = prefix + o.value; n.textContent = attrLabel(o.value);
       g.appendChild(n);
     }
     sel.appendChild(g);
@@ -10333,11 +11174,11 @@ function offerNoteRestore() {
   const when = new Date(saved.savedAt).toLocaleString();
   const name = saved.fp.dataset || "(データ名なし)";
   const what = Object.keys(cols).map((c) => c + " " + Object.keys(cols[c]).length + "件").join(" / ");
-  if (!confirm(
+  if (!confirm(I18N.tr(
     `前回の入力が残っています。復元しますか？\n\n` +
     `データ名: ${name}\n内容: ${what}\n保存日時: ${when}\n\n` +
     `「キャンセル」を選ぶと、このまま空の状態で続けます(保存は消えません)。`
-  )) return;
+  ))) return;
 
   // SrcIDで突き合わせる。表示上のIDは自動採番でずれるため使わない
   const bySrc = new Map();

@@ -22,6 +22,13 @@
 試験中の変更が入るため、現場では上の安定版をお使いください。
 開発版を開くと、画面に「開発版」と表示されます。</sub>
 
+## English
+
+The app and its guided tours are available in English. Select **English** in the left panel,
+or add `?lang=en` to the URL. Data files are identical in both languages, so Japanese and
+English users can share the same project ZIP. The user guide is in Japanese for now;
+please use your browser's translation.
+
 ## まず動かしてみる
 
 1. 上のリンクを開きます（大阪城石垣のサンプルが表示されます）
