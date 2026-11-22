@@ -42,7 +42,7 @@ const code = main.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
   .replace(/([;{}),\]\s])\/\/[ \t].*$/gm, "$1");
 const keys = rows.map((r) => r[0]).join("\n");
 /* 画面に出ない文言(データ・ファイル名) */
-const NOT_SHOWN = ["台帳.csv", "作業データ.zip"];
+const NOT_SHOWN = ["台帳.csv", "作業データ.zip", "調査者", "(項目)"];
 const missing = new Set();
 for (const m of code.matchAll(/"((?:\\.|[^"\\\n])*)"|'((?:\\.|[^'\\\n])*)'|`((?:\\.|[^`\\])*)`/g)) {
   const s = (m[1] || m[2] || m[3] || "").replace(/\$\{[^}]*\}/g, "\u0001").replace(/<[^>]*>/g, "\u0001");

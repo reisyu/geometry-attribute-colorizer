@@ -18,7 +18,7 @@ const { OLD_HIT_COL, ledgerColumns, surveyValueColumns, surveyVisualColumns, has
         prevEntryColumns, rowComboState, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE,
         SURVEY_DATE_COL, SURVEYOR_COL, refIsCarried, columnRole, prevBaseRole,
         isDerivedColumn, isColorizableColumn, isReservedColumn, ATTR_INFO, COMBO_COL,
-        colorSideOf,
+        colorSideOf, isRecordColumns, renameLegacyRecordColumns, LEGACY_DATE_COL, LEGACY_WHO_COL,
         NOTE_COL, NOTE_FLAG_COL, REF_PREFIX, HIST_PREFIX } = require("./extracted.js");
 
 let pass = 0, fail = 0;
@@ -363,6 +363,48 @@ ok(j(surveyVisualColumns(null, SURVEY)) === "[]", "点検側の一覧もnullで�
   const surveySide = new Set(surveyVisualColumns(all, S));
   ok(all.every((c) => (colorSideOf(c, S) === "survey") === surveySide.has(c)),
      "**点検側と判定する列は、点検側の選択肢に出る列と一致する**");
+}
+
+/* ---------- v1.39.1 以前の記録を読めること(§5.1.9、v1.55.1) ---------- */
+{
+  const J = JSON.stringify, D = SURVEY_DATE_COL, W = SURVEYOR_COL;
+  ok(LEGACY_DATE_COL === "SurveyDate", "**古い調査日の列名を覚えている**");
+  ok(LEGACY_WHO_COL === "調査者", "**古い調査者の列名を覚えている**(一括置換で壊れたことがある)");
+
+  ok(isRecordColumns(["ID", D, W]), "今の名前の記録CSVを見分ける");
+  ok(isRecordColumns(["ID", "SurveyDate", "調査者", "Note"]), "**古い名前の記録CSVも見分ける**");
+  ok(!isRecordColumns(["ID", "Width", "石種"]), "台帳は記録ではない");
+  ok(!isRecordColumns(["ID", "Width", "調査者"]), "属性「調査者」がある台帳は記録ではない");
+  ok(!isRecordColumns(["ID", "Width", "SurveyDate"]), "属性「SurveyDate」がある台帳は記録ではない");
+  ok(!isRecordColumns(null) && !isRecordColumns([]), "空・nullは記録ではない");
+
+  const old = renameLegacyRecordColumns(["ID", "SurveyDate", "調査者", "はらみ出し", "Note"],
+    [{ ID: "1", SurveyDate: "2026-10-01", "調査者": "山田", "はらみ出し": "あり", Note: "目地" }]);
+  ok(J(old.cols) === J(["ID", D, W, "はらみ出し", "Note"]), "**古い列名を今の名前に読み替える**");
+  ok(old.rows[0][D] === "2026-10-01", "日付の値が移る");
+  ok(old.rows[0][W] === "山田", "**点検者の値が移る**");
+  ok(old.rows[0]["はらみ出し"] === "あり" && old.rows[0].Note === "目地", "点検項目とメモはそのまま");
+  ok(!("調査者" in old.rows[0]) && !("SurveyDate" in old.rows[0]), "古い名前の鍵は残さない");
+  ok(J(Object.keys(old.rows[0])) === J(old.cols), "列の順を保つ(食い違いの判定に効く)");
+
+  const dateOnly = renameLegacyRecordColumns(["ID", "SurveyDate", "Note"], [{ ID: "1", SurveyDate: "2026-09-30", Note: "x" }]);
+  ok(dateOnly.rows[0][D] === "2026-09-30", "v1.27 の記録CSV(調査日だけ)も読み替える");
+
+  const cur = [{ ID: "1", [D]: "2026-11-23", [W]: "山田", "調査者": "あり" }];
+  const now = renameLegacyRecordColumns(["ID", D, W, "調査者"], cur);
+  ok(now.rows === cur && now.rows[0][W] === "山田" && now.rows[0]["調査者"] === "あり",
+     "**今の形式の点検項目「調査者」で点検者を上書きしない**");
+  const led = renameLegacyRecordColumns(["ID", "調査者"], [{ ID: "1", "調査者": "佐藤" }]);
+  ok(led.rows[0]["調査者"] === "佐藤", "日付の列が無ければ読み替えない");
+
+  const clash = renameLegacyRecordColumns(["ID", "SurveyDate", "調査者", "点検者"],
+    [{ ID: "1", SurveyDate: "2026-10-01", "調査者": "山田", "点検者": "確認済" }]);
+  ok(clash.rows[0][W] === "山田", "**古い項目「点検者」で点検者の名前を上書きしない**");
+  ok(clash.rows[0]["点検者(項目)"] === "確認済", "古い項目「点検者」の値も失わない");
+  const clash2 = renameLegacyRecordColumns(["ID", "SurveyDate", "調査者", "点検者", "点検者(項目)"],
+    [{ ID: "1", SurveyDate: "d", "調査者": "w", "点検者": "a", "点検者(項目)": "b" }]);
+  ok(clash2.rows[0]["点検者(項目)_"] === "a" && clash2.rows[0]["点検者(項目)"] === "b", "逃がした先の名前も重ならない");
+  ok(J(renameLegacyRecordColumns(null, null).cols) === "[]", "nullでも落ちない");
 }
 
 console.log("");

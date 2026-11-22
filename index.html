@@ -3281,7 +3281,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.55.0";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.55.1";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -6340,12 +6340,45 @@ let refLabel = "";       // いつの記録か(点検日 → Dataset → ファ�
    入力するものが調査日・調査者で、同じ画面の中で語が混ざっていた。
    用途は城郭石垣の定期点検なので、広い語である「調査」ではなく「点検」を採る。
 
-   **古い列名(SurveyDate / 調査者)の読み替えは用意しない。** 点検機能は
-   実務ではまだ使っていないため、守るべき既存データが無い。読めるようにする
-   仕組みを置くと、そのぶん壊れる箇所が増える(実際、一括置換で対応表の
-   中身まで書き換える事故を起こした) */
+   **書き出しは新しい名前だけ。読み込みは古い名前(SurveyDate / 調査者)も受ける**(§5.1.9)。
+   v1.39.1 以前の作業データには現地で試用したときの記録がありうる。読めないと記録 0行のまま
+   開き、保存し直した時点で失われる(v1.40.0〜v1.55.0 で実際に起きていた) */
 const SURVEY_DATE_COL = "InspectionDate";
 const SURVEYOR_COL = "点検者";
+/* v1.39.1 以前の列名。**一括置換で書き換えないこと**(今の名前を指すと読めなくなる) */
+const LEGACY_DATE_COL = "SurveyDate";
+const LEGACY_WHO_COL = "調査者";
+const LEGACY_ITEM_SUFFIX = "(項目)";
+
+/* ZIPの中のCSVが記録かどうか。純関数。
+   古いものは2つの鍵が揃うものだけ。台帳の属性名と片方が偶然同じでも記録にしない */
+function isRecordColumns(cols) {
+  const list = cols || [];
+  return list.includes(SURVEY_DATE_COL) ||
+    (list.includes(LEGACY_DATE_COL) && list.includes(LEGACY_WHO_COL));
+}
+
+/* 古い記録の列名を今の名前に読み替える。純関数。
+   今の形式には手を付けない(「調査者」という点検項目を作れるため)。古い版では「点検者」という
+   項目も作れたので、あれば別の名前に逃がす(そのままだと点検者の名前を上書きする) */
+function renameLegacyRecordColumns(cols, rows) {
+  const list = cols || [], data = rows || [];
+  if (list.includes(SURVEY_DATE_COL) || !list.includes(LEGACY_DATE_COL)) return { cols: list, rows: data };
+  const map = new Map([[LEGACY_DATE_COL, SURVEY_DATE_COL], [LEGACY_WHO_COL, SURVEYOR_COL]]);
+  if (list.includes(SURVEYOR_COL)) {
+    let name = SURVEYOR_COL + LEGACY_ITEM_SUFFIX;
+    while (list.includes(name)) name += "_";
+    map.set(SURVEYOR_COL, name);
+  }
+  return {
+    cols: list.map((c) => map.get(c) || c),
+    rows: data.map((r) => {
+      const out = {};
+      for (const k of Object.keys(r)) out[map.get(k) || k] = r[k];
+      return out;
+    }),
+  };
+}
 const ZIP_MODEL = "model.glb", ZIP_LEDGER = "台帳.csv";
 /* 記録のファイル名は recordFileName() が日と人から作る(重ならないように) */
 const HIST_PREFIX = "履歴:";   // 記録の台帳から作る集計列
@@ -6856,9 +6889,10 @@ async function loadBundle(file) {
   };
   // 記録CSVは点検日の列を持つ。台帳はそれを持たない。中身で見分ける
   const parsed = csvs.map((e) => ({ name: base(e.name), ...parse(e.bytes) }));
-  const ledgers = parsed.filter((p) => !p.cols.includes(SURVEY_DATE_COL));
+  const ledgers = parsed.filter((p) => !isRecordColumns(p.cols));
   const ledger = ledgers[0];
-  const records = parsed.filter((p) => p.cols.includes(SURVEY_DATE_COL));
+  const records = parsed.filter((p) => isRecordColumns(p.cols))
+    .map((p) => Object.assign({}, p, renameLegacyRecordColumns(p.cols, p.rows)));
   if (!ledger) { setStatus("ZIPに台帳のCSVが入っていません(点検日の列が無いCSV)。", true); return; }
 
   loadGLBBuffer(glb.bytes.slice().buffer, base(glb.name));
@@ -6964,8 +6998,8 @@ function loadReferenceCSVText(text, displayName) {
     header: true,
     skipEmptyLines: true,
     complete: (result) => {
-      const rows = result.data || [];
-      const cols = (result.meta.fields || []).filter((c) => !c.startsWith(REF_PREFIX));
+      const { rows, cols: allCols } = renameLegacyRecordColumns(result.meta.fields, result.data);
+      const cols = allCols.filter((c) => !c.startsWith(REF_PREFIX));
       if (rows.length === 0 || cols.length < 2) {
         setStatus("前回の記録として読めませんでした(ID列と記録の列が必要です)。", true);
         return;
