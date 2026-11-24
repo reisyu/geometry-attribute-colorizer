@@ -1126,7 +1126,7 @@
 
     <h3>使える条件</h3>
     <ul>
-      <li><strong>実際の測量座標が入ったDXF</strong>（平面直角座標系）を読み込んでいること。
+      <li><strong>実際の測量座標が入ったDXF</strong>（日本の平面直角座標系。第1〜19系）を読み込んでいること。
         座標系は自動で判定します</li>
       <li><strong>インターネット経由で開いていること。</strong> オフライン版（ファイルを直接開く形）では、
         ブラウザが位置情報を許可しないため使えません</li>
@@ -1425,7 +1425,7 @@ df.groupby("Dataset")["Width"].describe()   # データ別に幅を集計</code>
   });
 
   // バージョン表記を一箇所で管理（アプリのAPP_VERSIONと揃える）
-  const HELP_VERSION = "1.55.1";
+  const HELP_VERSION = "1.55.2";
   document.getElementById("ver").textContent = "v" + HELP_VERSION;
   document.getElementById("ver-foot").textContent = "v" + HELP_VERSION;
 

@@ -1697,7 +1697,8 @@ SVGの詳細設定(含める要素・線の太さ)|SVG details (elements, line w
 背景色を切り替える|Switch background color
 文字の大きさを切り替える|Change text size
 文字の大きさ|Text size
-現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)|Location: turns positioning on or off. Shows and follows your position on the overview map (online only; not accurate enough to identify a stone)
+現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・日本の平面直角座標系のデータのみ)。位置には、端末のGNSS(GPSなど)の精度による誤差があります|Location: turns positioning on or off. Shows and follows your position on the overview map (online only; Japan Plane Rectangular Coordinate System data only). The position includes error that depends on the GNSS (such as GPS) accuracy of your device.
+現在地の表示は、日本の平面直角座標系(第1〜19系)のデータにだけ対応しています。|Location works only with data in the Japan Plane Rectangular Coordinate System (zones 1–19).
 選択: ブラシ(なぞる)か投げ縄(囲む)で、複数の石を選ぶ(Escで解除)|Select: choose several stones with the brush or lasso (Esc to cancel)
 左のパネルを開く/閉じる|Open or close the left panel
 作業データをZIPで保存すると、この表示は消えます|This disappears after you save the project data as ZIP
@@ -1882,7 +1883,7 @@ DXFを作り直すとIDは振り直されます。IDで突き合わせると別�
 位置情報は安全な接続(https)でのみ使えます。|Location works only on a secure connection (https).
 オフライン版(ファイルを直接開く形)では利用できません。|It is not available in the offline version (opened as a local file).
 このデータには実際の測量座標が入っていないため、現在地を重ねられません。|This data has no survey coordinates, so your location cannot be shown.
-平面直角座標系のDXFを読み込むと使えます。|Load a DXF in a Japan Plane Rectangular Coordinate System to use it.
+日本の平面直角座標系のDXFを読み込むと使えます。|Load a DXF in the Japan Plane Rectangular Coordinate System to use it.
 現在地を取得しています...|Getting your location...
 このデータの座標系を判定できませんでした。|The coordinate system of this data could not be identified.
 別の場所のデータを開いている場合は、その場所で試してください。|If this data is of another place, try again at that place.
@@ -2563,7 +2564,7 @@ const I18N = (() => {
       <button id="text-size" class="ic" title="文字の大きさを切り替える" aria-label="文字の大きさ"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 15.5m-3.5 0a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0"/><path d="M3 19v-10.5a3.5 3.5 0 0 1 7 0v10.5"/><path d="M3 13h7"/><path d="M21 12v7"/></svg></button>
     </div>
     <div class="tb-group" id="tb-tools">
-      <button id="geo-btn" class="ic" aria-label="現在地" title="現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・石の特定には使えません)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0"/><path d="M12 2l0 2"/><path d="M12 20l0 2"/><path d="M20 12l2 0"/><path d="M2 12l2 0"/></svg></button>
+      <button id="geo-btn" class="ic" aria-label="現在地" title="現在地: 位置情報モードの入り切り。俯瞰図に現在地を出し、動くと追いかけます(オンラインのみ・日本の平面直角座標系のデータのみ)。位置には、端末のGNSS(GPSなど)の精度による誤差があります"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0"/><path d="M12 2l0 2"/><path d="M12 20l0 2"/><path d="M20 12l2 0"/><path d="M2 12l2 0"/></svg></button>
       <div class="tb-pick" id="select-pick" title="選択: ブラシ(なぞる)か投げ縄(囲む)で、複数の石を選ぶ(Escで解除)">
         <span id="select-face" aria-hidden="true"></span>
         <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6l6 -6"/></svg>
@@ -3281,7 +3282,7 @@ let meshes = [];                 // {mesh, matchName} の配列
 let csvRows = [];                // CSVの行(オブジェクトの配列)
 let csvColumns = [];             // 列名
 let originalMaterials = new Map(); // mesh.uuid -> 元マテリアル
-const APP_VERSION = "1.55.1";     // リリース時に更新する(CHANGELOG.mdと対応)
+const APP_VERSION = "1.55.2";     // リリース時に更新する(CHANGELOG.mdと対応)
 
 /* 安定版の公開先。**ここが決まるまでは空のままにする**。
 
@@ -3507,6 +3508,25 @@ function looksLikeContour(vertexCount, indices) {
   return true;
 }
 
+/* GLBに書いておいた原点の寄せ量を読む。純関数。3つとも有限の数でなければ null
+   (他のソフトで作ったGLBや、v1.55.1 以前に書き出したGLBには無い) */
+function worldOffsetFromGLTF(json) {
+  const v = json && json.asset && json.asset.extras && json.asset.extras.worldOffset;
+  if (!Array.isArray(v) || v.length !== 3) return null;
+  if (!v.every((x) => typeof x === "number" && isFinite(x))) return null;
+  return v.slice();
+}
+
+/* 頂点の平均(重心)。純関数。台帳CSVの X・Y・Z はこの値(原点を寄せる前の座標)なので、
+   メッシュの頂点の平均との差がそのまま寄せた量になる */
+function vertexMean(positions) {
+  const n = Math.floor((positions ? positions.length : 0) / 3);
+  if (n === 0) return null;
+  let x = 0, y = 0, z = 0;
+  for (let i = 0; i < n * 3; i += 3) { x += positions[i]; y += positions[i + 1]; z += positions[i + 2]; }
+  return [x / n, y / n, z / n];
+}
+
 function parseGLB(arrayBuffer) {
   const dv = new DataView(arrayBuffer);
   // ヘッダー(12バイト)に満たないファイルをそのまま読むと、DataViewが
@@ -3681,6 +3701,12 @@ function loadGLBBuffer(buffer, displayName) {
          DXFは自分で無条件に上書きするので、この問題が起きなかった */
       worldOffset.set = false;
       worldOffset.x = 0; worldOffset.y = 0; worldOffset.z = 0;
+      // このアプリが書いたGLBなら、寄せた量がそのまま入っている(v1.55.2〜)。推定より正しい
+      const savedOffset = worldOffsetFromGLTF(json);
+      if (savedOffset) {
+        worldOffset.set = true;
+        worldOffset.x = savedOffset[0]; worldOffset.y = savedOffset[1]; worldOffset.z = savedOffset[2];
+      }
 
       modelRoot = buildSceneFromGLTF(json, bin);
       scene.add(modelRoot);
@@ -4641,8 +4667,13 @@ function buildGLBBytes() {
   let off = 0;
   for (const b of jsonBuffers) { binChunk.set(b, off); off += b.byteLength; }
 
+  /* 原点を寄せた量を、そのまま書いておく(§6.9)。台紙GLBの座標は寄せた後の値なので、
+     これが無いと台帳CSVの X・Y・Z から推定し直すことになり、推定のずれのぶん
+     後から読んだ背景モデルがずれる(v1.55.1 までの不具合) */
+  const asset = { version: "2.0", generator: "CSV Attribute Colorizer Web" };
+  if (worldOffset.set) asset.extras = { worldOffset: [worldOffset.x, worldOffset.y, worldOffset.z] };
   const gltf = {
-    asset: { version: "2.0", generator: "CSV Attribute Colorizer Web" },
+    asset,
     scene: 0,
     scenes: [{ nodes: nodes.map((_, i) => i) }],
     nodes, meshes: gltfMeshes, accessors, bufferViews,
@@ -4826,6 +4857,14 @@ function buildExportSVG(items, view, opt) {
   const fillOpacity = bg ? overlayOpacity() : 1;
   const fillOpacityAttr = fillOpacity < 0.999 ? ` fill-opacity="${fillOpacity.toFixed(2)}"` : "";
 
+  /* 現在のビューは、画面に見えている範囲で切り取る(§8.4)。背景の写真はその範囲で
+     描いているので、石・線・ラベルだけが余白や凡例の場所へはみ出していた(v1.55.1 まで) */
+  const clip = view.clip || null;
+  if (clip) {
+    parts.push(`<defs><clipPath id="view-clip"><rect x="${clip.x.toFixed(1)}" y="${clip.y.toFixed(1)}" width="${clip.w.toFixed(1)}" height="${clip.h.toFixed(1)}"/></clipPath></defs>`);
+    parts.push(`<g clip-path="url(#view-clip)">`);
+  }
+
   // --- オブジェクトのポリゴン ---
   let outlinePx = Number.isFinite(opt.outlineMM) && opt.outlineMM > 0
     ? Math.max(0.2, (opt.outlineMM / 1000) * pxPerUnit) : 0;
@@ -4879,6 +4918,8 @@ function buildExportSVG(items, view, opt) {
       parts.push(`<text text-anchor="middle" font-size="${fs}" fill="#222222">${spans}</text>`);
     }
   }
+
+  if (clip) parts.push(`</g>`);
 
   // --- 凡例 ---
   if (opt.incLegend) parts.push(...buildLegendSVGParts(items, contentH, margin));
@@ -5686,6 +5727,17 @@ document.getElementById("batch-export-btn").addEventListener("click", () => {
    ・近クリップ面より手前(カメラの後ろ側)に頂点がある石・ラインは
      投影が破綻するため、クリッピングはせず丸ごと除外する
 ============================================================ */
+/* 投影した点(NDC。-1〜1が画面)の外接矩形が、画面に掛かるか。純関数 */
+function ndcBoxOverlapsView(pts) {
+  if (!pts || pts.length === 0) return false;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 >= -1 && x0 <= 1 && y1 >= -1 && y0 <= 1;
+}
+
 function exportCurrentViewSVG() {
   const viewMatrix = camera.matrixWorldInverse;
   const tmpV = new THREE.Vector3();
@@ -5709,6 +5761,8 @@ function exportCurrentViewSVG() {
       pts.push([ndc.x, ndc.y]);
     }
     if (behind) continue;
+    // 画面に少しも掛からない石は入れない(凡例の数も、見えている石だけにする)
+    if (!ndcBoxOverlapsView(pts)) continue;
     items.push({ mesh, matchName, pts, depth: depthSum / pos.count });
   }
 
@@ -5741,6 +5795,7 @@ function exportCurrentViewSVG() {
     toY: (ny) => margin + (1 - ny) / 2 * contentH,
     // 縮尺が一定とは限らない(透視)ため、どちらの投影でもスケールバーは描かない
     scalebarSpan: null,
+    clip: { x: margin, y: margin, w: contentW, h: contentH },   // 画面の範囲(背景の写真と同じ)
     projectLine: (rl) => {
       a3.set(rl.a[0], rl.a[1], rl.a[2]);
       b3.set(rl.b[0], rl.b[1], rl.b[2]);
@@ -8488,19 +8543,21 @@ function idShiftNotice(stats) {
 function restoreWorldOffsetFromCSV() {
   if (worldOffset.set) return null;                     // DXFから決まっているなら触らない
   if (!["X", "Y", "Z"].every((c) => csvColumns.includes(c))) return null;
-  const box = new THREE.Box3(), c = new THREE.Vector3();
+  /* CSVの X・Y・Z は輪郭の頂点の平均なので、**同じ頂点の平均**と比べる。
+     以前は外接箱の中心と比べていて、石の形のぶん(大きくいびつな石ほど大きく)ずれていた。
+     現在地(誤差数十m)には足りたが、背景モデルを重ねると図とずれる(v1.55.1 まで) */
   const cand = [];
+  const w = new THREE.Vector3();
   for (const { mesh } of meshes) {
     const row = attributesByMesh.get(mesh.uuid);
     if (!row) continue;
     const X = Number(row.X), Y = Number(row.Y), Z = Number(row.Z);
     if (!Number.isFinite(X) || !Number.isFinite(Y) || !Number.isFinite(Z)) continue;
-    let v = mesh.userData.centerV;
-    if (!v) {
-      box.setFromObject(mesh);
-      if (box.isEmpty()) continue;
-      v = new THREE.Vector3(); box.getCenter(v); mesh.userData.centerV = v;
-    }
+    const pos = mesh.geometry && mesh.geometry.getAttribute("position");
+    const m = pos ? vertexMean(pos.array) : null;
+    if (!m) continue;
+    mesh.updateMatrixWorld();
+    const v = w.set(m[0], m[1], m[2]).applyMatrix4(mesh.matrixWorld);
     cand.push([X - v.x, Y + v.z, Z - v.y]);
     if (cand.length >= 50) break;                       // 50個も見れば十分
   }
@@ -10078,7 +10135,7 @@ function geoUnavailableReason() {
   if (meshes.length === 0) return "先にモデルを読み込んでください。";
   if (!worldOffset.set) {
     return "このデータには実際の測量座標が入っていないため、現在地を重ねられません。" +
-           String.fromCharCode(10) + "平面直角座標系のDXFを読み込むと使えます。";
+           String.fromCharCode(10) + "日本の平面直角座標系のDXFを読み込むと使えます。";
   }
   return null;
 }
@@ -10134,7 +10191,8 @@ function onGeoOk(pos) {
         setStatus(
           "このデータの座標系を判定できませんでした。" + NL +
           zoneFailureDetail(latitude, longitude) + NL +
-          "別の場所のデータを開いている場合は、その場所で試してください。", true);
+          "別の場所のデータを開いている場合は、その場所で試してください。" + NL +
+          "現在地の表示は、日本の平面直角座標系(第1〜19系)のデータにだけ対応しています。", true);
       }
       return;
     }

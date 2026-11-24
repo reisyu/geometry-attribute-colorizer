@@ -43,7 +43,7 @@
 **`run_all.js` が冒頭で抽出を自動実行する**ので、通常はこれだけでよい。
 
 ```bash
-node tests/run_all.js       # 抽出 + 全テストを一括実行（34ファイル・2736件）
+node tests/run_all.js       # 抽出 + 全テストを一括実行（34ファイル・2753件）
 ```
 
 抽出の自動化は必ず維持すること。以前は手動だったため、`index.html` を壊しても
@@ -65,7 +65,7 @@ node tests/run_all.js       # 抽出 + 全テストを一括実行（34ファイ
 | `test_fitview.js` | 全体表示のフィット計算 | 22 |
 | `test_winding.js` | GLB法線の巻き順 | 7 |
 | `test_normal.js` | 壁の表向きの復元(面法線の足し込み) | 13 |
-| `test_contour.js` | 輪郭モデルの見分け・傾きラインの復元・座標の戻し | 41 |
+| `test_contour.js` | 輪郭モデルの見分け・傾きラインの復元・座標の戻し・原点の寄せ量(GLBに書いた値・頂点の平均)・現在のビューに入れる石 | 56 |
 | `test_adversarial.js` | 異常入力への耐性 | 12 |
 | `test_badinput.js` | 壊れた入力とエラーメッセージ | 36 |
 | `test_rhino_dxf.js` | Rhino形式DXFの読み込み | 9 |

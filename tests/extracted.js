@@ -1163,6 +1163,31 @@ function parseGLB(arrayBuffer) {
   return { json, bin };
 }
 
+function worldOffsetFromGLTF(json) {
+  const v = json && json.asset && json.asset.extras && json.asset.extras.worldOffset;
+  if (!Array.isArray(v) || v.length !== 3) return null;
+  if (!v.every((x) => typeof x === "number" && isFinite(x))) return null;
+  return v.slice();
+}
+
+function vertexMean(positions) {
+  const n = Math.floor((positions ? positions.length : 0) / 3);
+  if (n === 0) return null;
+  let x = 0, y = 0, z = 0;
+  for (let i = 0; i < n * 3; i += 3) { x += positions[i]; y += positions[i + 1]; z += positions[i + 2]; }
+  return [x / n, y / n, z / n];
+}
+
+function ndcBoxOverlapsView(pts) {
+  if (!pts || pts.length === 0) return false;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 >= -1 && x0 <= 1 && y1 >= -1 && y0 <= 1;
+}
+
 function looksLikeContour(vertexCount, indices) {
   if (!indices || vertexCount < 3) return false;
   if (indices.length !== (vertexCount - 2) * 3) return false;
@@ -1539,4 +1564,4 @@ function niceScaleLength(m) {
   return (r >= 5 ? 5 : r >= 2 ? 2 : 1) * p;
 }
 
-module.exports = { SHEET_STATES, PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, LEGACY_DATE_COL, LEGACY_WHO_COL, LEGACY_ITEM_SUFFIX, HIT_COL, OLD_HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, sheetTap, sheetStep, sheetSummary, sheetRevealShift, pivotedTarget, classChoices, recordHeaderColumns, isRecordColumns, renameLegacyRecordColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };
+module.exports = { SHEET_STATES, PALETTE, NOTE_COL, NOTE_LABEL_MAX, ATTR_INFO, JP_ZONES, GEO_ACCEPT_M, GEO_MARGIN, REF_PREFIX, HIST_PREFIX, NOTE_FLAG_COL, COMBO_COL, COMBO_PREV, COMBO_BOTH, COMBO_NOW, COMBO_NONE, SURVEYOR_NONE, FILENAME_NG, FILENAME_TRIM, RECTLINE_HIST_BINS, SURVEY_DATE_COL, SURVEYOR_COL, LEGACY_DATE_COL, LEGACY_WHO_COL, LEGACY_ITEM_SUFFIX, HIT_COL, OLD_HIT_COL, HIT_MULTI, HIT_NONE, OTHER_COLOR, LEGEND_HIST_BINS, NOTE_YES, TOUR_STEPS, COLUMN_TOUR_STEPS, SURVEY_TOUR_STEPS, normalizeId, ocsToWcs, parseDXF, newellNormal, convexHull2D, minAreaRect2D, computeContourAttributes, hsvToRgb, hexToRgb01, lerpColor, numericToColor, isNumericColumn, symmetricAngleColor, angleHistogram, legendModel, legendRowLabels, backgroundImageSize, approxMB, classChipWrite, sheetTap, sheetStep, sheetSummary, sheetRevealShift, pivotedTarget, classChoices, recordHeaderColumns, isRecordColumns, renameLegacyRecordColumns, ledgerColumns, surveyValueColumns, surveyVisualColumns, colorSideOf, hasSurveyEntry, isSurveyHit, surveyHitLabel, csvEscape, rowsToCSV, ledgerCSV, safeFileNamePart, recordFileName, openingAttribute, accumulateFaceNormals, comboState, prevEntryColumns, rowComboState, deriveInputColumns, surveyorLabel, isColorizableColumn, isDevHost, isLiveColorColumn, formatValue, labelText, categoryColorByIndex, solveFitDistance, solveFitOrtho, flipTriangleWinding, parseGLB, worldOffsetFromGLTF, vertexMean, ndcBoxOverlapsView, looksLikeContour, unpackRectLine, contourVertsFromPositions, crc32, deflateRaw, buildZip, inflateRaw, readZipEntries, unzip, contourToSegments, thickLineAttributes, distToSegmentSq, pointInPolygon, polygonArea, normalizeClassValue, isReservedColumn, columnRole, prevBaseRole, isDerivedColumn, refIsCarried, latLonToJPRect, nearestJPZone, estimateJPZone, toMapXY, niceScaleLength };

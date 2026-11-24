@@ -133,6 +133,32 @@ ok(contourVertsFromPositions([1,2,3, 4,5]).length === 1, "端数があっても�
   ok(v.length === 1 && v[0][0] === 1, "Float32Arrayでも扱える");
 }
 
+/* ---------- 原点の寄せ量(背景モデルとの位置合わせ。v1.55.2) ---------- */
+{
+  const X = require("./extracted.js");
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  const o = X.worldOffsetFromGLTF({ asset: { extras: { worldOffset: [-36513.7965, -148202.306, 63.2579] } } });
+  ok(o && near(o[0], -36513.7965) && near(o[1], -148202.306) && near(o[2], 63.2579), "GLBに書いた寄せ量をそのまま読む");
+  ok(X.worldOffsetFromGLTF({ asset: { version: "2.0" } }) === null, "書いていないGLB(古い版・他のソフト)は null");
+  ok(X.worldOffsetFromGLTF({ asset: { extras: { worldOffset: [1, "2", 3] } } }) === null, "数でない値があれば null");
+  ok(X.worldOffsetFromGLTF({ asset: { extras: { worldOffset: [1, NaN, 3] } } }) === null, "NaN なら null");
+  ok(X.worldOffsetFromGLTF({ asset: { extras: { worldOffset: [1, 2] } } }) === null, "3つ揃っていなければ null");
+  ok(X.worldOffsetFromGLTF(null) === null, "null でも落ちない");
+  const m = X.vertexMean(new Float32Array([0, 0, 0, 4, 0, 0, 4, 2, 0, 0, 2, 0, 1, 1, 0]));
+  ok(m && near(m[0], 1.8) && near(m[1], 1) && near(m[2], 0), "頂点の平均(外接箱の中心とは違う値になる形で)");
+  ok(X.vertexMean(new Float32Array(0)) === null && X.vertexMean(null) === null, "頂点が無ければ null");
+
+  /* 現在のビューに入れる石(§8.4)。画面(NDC -1〜1)に少しでも掛かれば入れる */
+  const V = X.ndcBoxOverlapsView;
+  ok(V([[0, 0], [0.2, 0.1], [0.1, 0.3]]), "画面の中の石は入れる");
+  ok(V([[0.9, 0], [1.4, 0.1], [1.2, 0.3]]), "画面の端に掛かる石は入れる(はみ出す部分は切り取る)");
+  ok(V([[-2, -2], [2, -2], [2, 2], [-2, 2]]), "画面より大きく、画面を覆う石も入れる");
+  ok(!V([[1.1, 0], [1.6, 0.1], [1.3, 0.3]]), "右の外の石は入れない");
+  ok(!V([[-3, 0], [-1.2, 0.1], [-2, 0.3]]), "左の外の石は入れない");
+  ok(!V([[0, 1.05], [0.2, 1.4], [0.1, 1.2]]), "上の外の石は入れない");
+  ok(!V([]) && !V(null), "点が無ければ入れない");
+}
+
 console.log("");
 console.log("===== " + pass + "成功 / " + fail + "失敗 =====");
 process.exit(fail ? 1 : 0);

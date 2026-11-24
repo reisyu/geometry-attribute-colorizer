@@ -65,7 +65,7 @@ const FUNCS = [
   "solveFitDistance",
   "solveFitOrtho",
   "flipTriangleWinding",
-  "parseGLB",
+  "parseGLB", "worldOffsetFromGLTF", "vertexMean", "ndcBoxOverlapsView",
   "looksLikeContour",
   "unpackRectLine",
   "contourVertsFromPositions",
